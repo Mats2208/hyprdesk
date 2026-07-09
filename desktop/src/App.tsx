@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
+import { Sidebar } from "./Sidebar";
+import { CommandPalette, type Command } from "./CommandPalette";
 
 const HOSTS = ["dev@worker", "build@worker", "test@worker"];
 const MAX_TILES = 9;
@@ -61,6 +63,8 @@ function App() {
   const [stats, setStats] = useState<SysStats | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const termsRef = useRef(terms);
   termsRef.current = terms;
@@ -245,6 +249,8 @@ function App() {
       const k = e.key.toLowerCase();
       if (k === "t") { e.preventDefault(); e.stopPropagation(); addTerminal(); }
       else if (k === "w") { e.preventDefault(); e.stopPropagation(); if (activeId) closeTerminal(activeId); }
+      else if (k === "k") { e.preventDefault(); e.stopPropagation(); setPaletteOpen((o) => !o); }
+      else if (k === "b") { e.preventDefault(); e.stopPropagation(); setSidebarOpen((o) => !o); }
       else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); focusDelta(1); }
       else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); focusDelta(-1); }
     };
@@ -325,60 +331,92 @@ function App() {
     );
   }
 
-  // ---- pantalla: workspace ----
+  // ---- pantalla: workspace (shell tipo IDE) ----
+  const agents = terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine }));
+  const commands: Command[] = [
+    { id: "new-term", label: "Nueva terminal manual", hint: "⌘T", run: addTerminal },
+    { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (activeId) closeTerminal(activeId); } },
+    { id: "max", label: "Maximizar / restaurar activo", run: () => { if (activeId) toggleMax(activeId); } },
+    { id: "focus-router", label: "Ir al router", run: () => { if (routerId) setActiveId(routerId); } },
+    { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
+    { id: "workspaces", label: "Volver a workspaces", run: backToWorkspaces },
+  ];
+
   return (
-    <div className="shell">
-      <div className="topbar">
-        <div className="topbar__left">
-          <button className="wsbtn" onClick={backToWorkspaces} title="Volver a workspaces">⌂</button>
+    <div className="ide">
+      <div className="titlebar">
+        <div className="titlebar__side">
           <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
           <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
         </div>
-        <div className="topbar__center">HyprDesk · {workspace?.name}</div>
-        <div className="topbar__right">
-          <span className="stat stat--live"><span className="dot" /> {terms.length} sesión{terms.length > 1 ? "es" : ""}</span>
+        <div className="titlebar__title">HyprDesk<span className="titlebar__sep">·</span><span className="titlebar__ws">{workspace?.name}</span></div>
+        <div className="titlebar__side titlebar__side--right">
+          <button className="titlebar__cmd" onClick={() => setPaletteOpen(true)}>Comandos <kbd>⌘K</kbd></button>
+          <span className="stat stat--live"><span className="dot" /> {terms.length}</span>
         </div>
       </div>
 
-      <div className={`workspace ${dragging ? "workspace--dragging" : ""}`} ref={wsRef}>
-        {terms.map((t) => (
-          <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
-            <TerminalTile
-              id={t.id}
-              title={t.title}
-              active={activeId === t.id}
-              isRouter={t.role === "router"}
-              canClose={t.role === "worker"}
-              maximized={maxId === t.id}
-              argv={t.argv}
-              cwd={t.cwd}
-              env={t.env}
-              injectTask={t.injectTask}
-              captureEngine={t.captureEngine}
-              hasActivity={activity.includes(t.id)}
-              onFocus={setActiveId}
-              onClose={closeTerminal}
-              onToggleMax={toggleMax}
-            />
-          </div>
-        ))}
+      <div className="ide__body">
+        <div className="activitybar">
+          <button className="act" title="Workspaces" onClick={backToWorkspaces}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 8l7-5 7 5v8a1 1 0 01-1 1h-4v-5H8v5H4a1 1 0 01-1-1V8z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+          </button>
+          <button className={`act ${sidebarOpen ? "act--on" : ""}`} title="Agentes (⌘B)" onClick={() => setSidebarOpen((o) => !o)}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          </button>
+          <button className="act" title="Comandos (⌘K)" onClick={() => setPaletteOpen(true)}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" /><path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          </button>
+        </div>
 
-        {hasWorkers && maxId == null && (
-          <div className="divider" style={{ left: `${routerWidth}%` }} onMouseDown={startDrag} title="Arrastrá para ajustar el router" />
+        {sidebarOpen && (
+          <Sidebar agents={agents} activeId={activeId} activity={activity} onFocus={setActiveId} onNewTerminal={addTerminal} />
         )}
 
-        <button className="fab" title="Terminal manual (⌘T)" onClick={addTerminal}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="main">
+          <div className={`workspace ${dragging ? "workspace--dragging" : ""}`} ref={wsRef}>
+            {terms.map((t) => (
+              <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
+                <TerminalTile
+                  id={t.id}
+                  title={t.title}
+                  active={activeId === t.id}
+                  isRouter={t.role === "router"}
+                  canClose={t.role === "worker"}
+                  maximized={maxId === t.id}
+                  argv={t.argv}
+                  cwd={t.cwd}
+                  env={t.env}
+                  injectTask={t.injectTask}
+                  captureEngine={t.captureEngine}
+                  hasActivity={activity.includes(t.id)}
+                  onFocus={setActiveId}
+                  onClose={closeTerminal}
+                  onToggleMax={toggleMax}
+                />
+              </div>
+            ))}
+
+            {hasWorkers && maxId == null && (
+              <div className="divider" style={{ left: `${routerWidth}%` }} onMouseDown={startDrag} title="Arrastrá para ajustar el router" />
+            )}
+
+            <button className="fab" title="Terminal manual (⌘T)" onClick={addTerminal}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="statusbar">
-        <span className="statusbar__role"><span className="dot dot--router" /> router · {workers.length} worker{workers.length !== 1 ? "s" : ""}</span>
-        <span className="statusbar__keys"><kbd>⌘T</kbd> terminal · <kbd>⌘W</kbd> cerrar · <kbd>⌘←→</kbd> foco · doble-click maximiza</span>
-        <span className="statusbar__hint">Pedile al router (izquierda) que haga algo — él delega workers</span>
+        <span className="statusbar__role"><span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""}</span>
+        <span className="statusbar__keys"><kbd>⌘K</kbd> comandos · <kbd>⌘B</kbd> panel · <kbd>⌘T</kbd> terminal · <kbd>⌘←→</kbd> foco</span>
+        <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>
       </div>
+
+      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
     </div>
   );
 }
