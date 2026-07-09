@@ -2,14 +2,34 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Mous
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
+import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 
-const HOSTS = ["dev@worker", "codex@worker", "build@worker", "review@worker"];
+const HOSTS = ["dev@worker", "build@worker", "test@worker"];
 const MAX_TILES = 9;
 
 type Role = "router" | "worker";
-type Term = { id: string; title: string; role: Role; argv?: string[]; cwd?: string };
+type Term = {
+  id: string; title: string; role: Role; engine?: string; sessionId?: string;
+  argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
+};
+type AgentLaunch = {
+  agentId: string; engine: string; argv: string[]; env: [string, string][];
+  injectTask: string | null; capture: boolean; sessionId: string | null; cwd: string;
+};
 type Rect = { x: number; y: number; w: number; h: number };
 type SysStats = { cpu: number; mem_used: number; mem_total: number };
+type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string };
+
+// Convierte un AgentLaunch (del backend) en los campos de un tile.
+function tileFromLaunch(l: AgentLaunch, role: Role, title: string): Term {
+  return {
+    id: l.agentId, title, role, engine: l.engine,
+    sessionId: l.sessionId ?? undefined, argv: l.argv, cwd: l.cwd, env: l.env,
+    injectTask: l.injectTask ?? undefined, captureEngine: l.capture ? l.engine : undefined,
+  };
+}
+type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[] };
+type Stage = "workspaces" | "selector" | "workspace";
 
 function computeLayout(n: number): Rect[] {
   if (n <= 0) return [];
@@ -26,11 +46,11 @@ function computeLayout(n: number): Rect[] {
   return rects;
 }
 
-function gib(bytes: number): string {
-  return (bytes / 1024 ** 3).toFixed(1);
-}
+const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
 function App() {
+  const [stage, setStage] = useState<Stage>("workspaces");
+  const [workspace, setWorkspace] = useState<WorkspaceMeta | null>(null);
   const [terms, setTerms] = useState<Term[]>([]);
   const [routerId, setRouterId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string>("");
@@ -45,21 +65,7 @@ function App() {
   termsRef.current = terms;
   const wsRef = useRef<HTMLDivElement>(null);
 
-  const selecting = routerId === null;
-
-  // ---- lanzar el agente-router elegido (claude interactivo + MCP hyprdesk) ----
-  const startRouter = async (engine: string) => {
-    try {
-      const { agentId, argv, cwd } = await invoke<{ agentId: string; argv: string[]; cwd: string }>("router_launch", { engine });
-      setTerms([{ id: agentId, title: `router · ${engine}`, role: "router", argv, cwd }]);
-      setRouterId(agentId);
-      setActiveId(agentId);
-    } catch (e) {
-      setLaunchError(String(e));
-    }
-  };
-
-  // ---- stats reales del sistema ----
+  // ---- stats reales ----
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -70,20 +76,112 @@ function App() {
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  // ---- el router pidió spawnear un worker: abrir un tile con un agente VIVO e interactivo ----
+  // ---- el router pidió spawnear un worker (agente vivo, del motor elegido) ----
   useEffect(() => {
     let un: (() => void) | undefined;
+    let un2: (() => void) | undefined;
     (async () => {
-      un = await listen<{ agentId: string; title: string; argv: string[]; cwd: string }>("spawn-agent", (e) => {
-        const { agentId, title, argv, cwd } = e.payload;
-        setTerms((prev) => (prev.length >= MAX_TILES ? prev : [...prev, { id: agentId, title, role: "worker", argv, cwd }]));
-        setActiveId(agentId);
+      un = await listen<AgentLaunch & { title: string }>("spawn-agent", (e) => {
+        const t = tileFromLaunch(e.payload, "worker", e.payload.title);
+        setTerms((prev) => (prev.length >= MAX_TILES ? prev : [...prev, t]));
+        setActiveId(t.id);
         setMaxId(null);
       });
+      // session-id capturado de codex/opencode → completar el tile (para persistir)
+      un2 = await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {
+        setTerms((prev) => prev.map((t) => (t.id === e.payload.agentId ? { ...t, sessionId: e.payload.sessionId } : t)));
+      });
     })();
-    return () => { un?.(); };
+    return () => { un?.(); un2?.(); };
   }, []);
 
+  // ---- auto-guardar el estado del workspace (debounce) ----
+  useEffect(() => {
+    if (stage !== "workspace" || !workspace) return;
+    const t = setTimeout(() => {
+      const state: SavedState = {
+        id: workspace.id,
+        name: workspace.name,
+        routerWidth,
+        tiles: termsRef.current
+          .filter((x) => x.sessionId) // solo agentes (no terminales manuales)
+          .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
+      };
+      invoke("save_workspace", { folder: workspace.folder, state: JSON.stringify(state) }).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  }, [terms, routerWidth, stage, workspace]);
+
+  // ---- abrir un workspace (nuevo → selector; con estado → restaurar) ----
+  const openWorkspace = async (meta: WorkspaceMeta) => {
+    setWorkspace(meta);
+    setLaunchError(null);
+    await invoke("set_active_workspace", { folder: meta.folder });
+    invoke("touch_workspace", { id: meta.id }).catch(() => {});
+    let saved: SavedState | null = null;
+    try {
+      const s = await invoke<string | null>("load_workspace", { folder: meta.folder });
+      saved = s ? JSON.parse(s) : null;
+    } catch { /* sin estado */ }
+    if (saved && saved.tiles?.length) {
+      await restoreWorkspace(meta, saved);
+    } else {
+      setStage("selector");
+    }
+  };
+
+  // ---- restaurar tiles + revivir agentes con --resume ----
+  const restoreWorkspace = async (meta: WorkspaceMeta, saved: SavedState) => {
+    const next: Term[] = [];
+    let rId: string | null = null;
+    const routerTile = saved.tiles.find((t) => t.role === "router");
+    if (routerTile) {
+      try {
+        const r = await invoke<AgentLaunch>("router_launch", {
+          engine: routerTile.engine || "claude", cwd: meta.folder, resumeSession: routerTile.sessionId,
+        });
+        next.push(tileFromLaunch(r, "router", routerTile.title || `router · ${routerTile.engine}`));
+        rId = r.agentId;
+      } catch (e) { setLaunchError(String(e)); }
+    }
+    for (const t of saved.tiles.filter((x) => x.role === "worker")) {
+      try {
+        const w = await invoke<AgentLaunch>("worker_launch", {
+          engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder,
+        });
+        next.push(tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`));
+      } catch { /* worker que no resume, lo salteamos */ }
+    }
+    setTerms(next);
+    setRouterId(rId);
+    setActiveId(rId || next[0]?.id || "");
+    setRouterWidth(saved.routerWidth || 50);
+    setStage("workspace");
+  };
+
+  // ---- crear el router de un workspace nuevo ----
+  const startRouter = async (engine: string) => {
+    if (!workspace) return;
+    try {
+      const r = await invoke<AgentLaunch>("router_launch", { engine, cwd: workspace.folder, resumeSession: null });
+      setTerms([tileFromLaunch(r, "router", `router · ${engine}`)]);
+      setRouterId(r.agentId);
+      setActiveId(r.agentId);
+      setStage("workspace");
+    } catch (e) {
+      setLaunchError(String(e));
+    }
+  };
+
+  const backToWorkspaces = () => {
+    setTerms([]); // desmonta tiles → mata PTYs (ya persistidos)
+    setRouterId(null);
+    setWorkspace(null);
+    setMaxId(null);
+    setStage("workspaces");
+  };
+
+  // ---- terminal manual (⌘T): shell, no es agente, no se persiste ----
   const addTerminal = useCallback(() => {
     const t: Term = { id: crypto.randomUUID(), title: HOSTS[Math.floor(Math.random() * HOSTS.length)], role: "worker" };
     setTerms((prev) => (prev.length >= MAX_TILES ? prev : [...prev, t]));
@@ -94,7 +192,7 @@ function App() {
   const closeTerminal = useCallback((id: string) => {
     const list = termsRef.current;
     const t = list.find((x) => x.id === id);
-    if (!t || t.role === "router") return; // el router no se cierra
+    if (!t || t.role === "router") return;
     setActiveId((cur) => {
       if (cur !== id) return cur;
       const idx = list.findIndex((x) => x.id === id);
@@ -118,8 +216,8 @@ function App() {
   }, [closing]);
 
   useEffect(() => {
-    if (routerId && !terms.find((t) => t.id === activeId)) setActiveId(routerId);
-  }, [terms, activeId, routerId]);
+    if (stage === "workspace" && routerId && !terms.find((t) => t.id === activeId)) setActiveId(routerId);
+  }, [terms, activeId, routerId, stage]);
 
   const focusDelta = (d: number) => {
     const list = termsRef.current;
@@ -130,6 +228,7 @@ function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (stage !== "workspace") return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -141,7 +240,7 @@ function App() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, addTerminal, closeTerminal]);
+  }, [activeId, addTerminal, closeTerminal, stage]);
 
   const startDrag = (e: ReactMouseEvent) => {
     e.preventDefault();
@@ -176,21 +275,21 @@ function App() {
     const wi = workers.findIndex((w) => w.id === t.id);
     const r = workerRects[wi] ?? { x: 0, y: 0, w: 100, h: 100 };
     const rw = 100 - routerWidth;
-    return {
-      left: `${routerWidth + (r.x * rw) / 100}%`,
-      top: `${r.y}%`,
-      width: `${(r.w * rw) / 100}%`,
-      height: `${r.h}%`,
-    };
+    return { left: `${routerWidth + (r.x * rw) / 100}%`, top: `${r.y}%`, width: `${(r.w * rw) / 100}%`, height: `${r.h}%` };
   };
 
-  // ---- pantalla de selección de agente ----
-  if (selecting) {
+  // ---- pantalla: gestor de workspaces ----
+  if (stage === "workspaces") {
+    return <WorkspaceManager onOpen={openWorkspace} />;
+  }
+
+  // ---- pantalla: selector de agente (workspace nuevo) ----
+  if (stage === "selector") {
     return (
       <div className="shell">
         <div className="selector">
           <div className="selector__card">
-            <div className="selector__brand">HyprDesk</div>
+            <div className="selector__brand">🧭 {workspace?.name}</div>
             <div className="selector__title">Elegí tu agente router</div>
             <div className="selector__sub">Vas a hablar con él; delega workers reales por vos.</div>
             <div className="selector__agents">
@@ -198,15 +297,16 @@ function App() {
                 <span className="agent-btn__name">Claude Code</span>
                 <span className="agent-btn__go">Iniciar →</span>
               </button>
-              <button className="agent-btn agent-btn--soon" disabled>
+              <button className="agent-btn" onClick={() => startRouter("codex")}>
                 <span className="agent-btn__name">Codex</span>
-                <span className="agent-btn__soon">próximamente</span>
+                <span className="agent-btn__go">Iniciar →</span>
               </button>
-              <button className="agent-btn agent-btn--soon" disabled>
+              <button className="agent-btn" onClick={() => startRouter("opencode")}>
                 <span className="agent-btn__name">OpenCode</span>
-                <span className="agent-btn__soon">próximamente</span>
+                <span className="agent-btn__go">Iniciar →</span>
               </button>
             </div>
+            <button className="selector__back" onClick={backToWorkspaces}>← volver a workspaces</button>
             {launchError && <div className="selector__error">{launchError}</div>}
           </div>
         </div>
@@ -214,14 +314,16 @@ function App() {
     );
   }
 
+  // ---- pantalla: workspace ----
   return (
     <div className="shell">
       <div className="topbar">
         <div className="topbar__left">
+          <button className="wsbtn" onClick={backToWorkspaces} title="Volver a workspaces">⌂</button>
           <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
           <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
         </div>
-        <div className="topbar__center">HyprDesk</div>
+        <div className="topbar__center">HyprDesk · {workspace?.name}</div>
         <div className="topbar__right">
           <span className="stat stat--live"><span className="dot" /> {terms.length} sesión{terms.length > 1 ? "es" : ""}</span>
         </div>
@@ -239,6 +341,9 @@ function App() {
               maximized={maxId === t.id}
               argv={t.argv}
               cwd={t.cwd}
+              env={t.env}
+              injectTask={t.injectTask}
+              captureEngine={t.captureEngine}
               onFocus={setActiveId}
               onClose={closeTerminal}
               onToggleMax={toggleMax}

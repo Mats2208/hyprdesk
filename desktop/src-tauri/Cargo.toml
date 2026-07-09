@@ -26,4 +26,5 @@ portable-pty = "0.9"
 base64 = "0.22"
 sysinfo = "0.33"
 tiny_http = "0.12"
+uuid = { version = "1", features = ["v4"] }
 

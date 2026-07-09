@@ -24,13 +24,16 @@ type Props = {
   maximized: boolean;
   argv?: string[]; // si viene, el PTY corre este comando en vez del shell
   cwd?: string; // directorio de trabajo del PTY
+  env?: [string, string][]; // env extra del motor (ej. OPENCODE_CONFIG)
+  injectTask?: string; // tarea a inyectar tras arrancar (opencode)
+  captureEngine?: string; // motor cuyo session-id hay que capturar (codex/opencode)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, onFocus, onClose, onToggleMax,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, onFocus, onClose, onToggleMax,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -82,6 +85,7 @@ export function TerminalTile({
       unlisten = () => { u1(); u2(); };
       await invoke("pty_spawn", {
         id, cols: term.cols, rows: term.rows, cwd: cwd ?? null, program: null, argv: argv ?? null,
+        env: env ?? null, injectTask: injectTask ?? null, captureEngine: captureEngine ?? null,
       });
       term.focus();
     })();

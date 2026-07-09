@@ -198,6 +198,57 @@ body {
 .agent-btn--soon { opacity: 0.5; cursor: not-allowed; }
 .agent-btn__soon { font: 11px ui-monospace, monospace; color: var(--faint); }
 .selector__error { margin-top: 14px; font: 11px ui-monospace, monospace; color: #f87171; white-space: pre-wrap; }
+.selector__back {
+  margin-top: 16px; background: none; border: none; color: var(--muted);
+  font-size: 12px; cursor: pointer; padding: 4px;
+}
+.selector__back:hover { color: var(--text); }
+
+/* ---------- gestor de workspaces ---------- */
+.wm { height: 100%; display: grid; place-items: center; }
+.wm__card {
+  width: 460px; max-width: 90vw;
+  border: 1px solid var(--hairline); border-radius: 16px;
+  background: var(--surface); padding: 28px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+.wm__brand { font-size: 13px; font-weight: 700; color: var(--router); }
+.wm__title { margin-top: 14px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.wm__sub { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.wm__new { margin-top: 20px; display: flex; gap: 8px; }
+.wm__new input {
+  flex: 1; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--hairline); border-radius: 9px; padding: 10px 12px;
+  font-size: 13px; outline: none; transition: border-color 0.15s;
+}
+.wm__new input:focus { border-color: rgba(52, 211, 153, 0.5); }
+.wm__create {
+  padding: 0 16px; border-radius: 9px; border: 1px solid rgba(52, 211, 153, 0.35);
+  background: var(--router-soft); color: var(--router); font-weight: 600; font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.wm__create:hover:not(:disabled) { background: rgba(52, 211, 153, 0.2); }
+.wm__create:disabled { opacity: 0.35; cursor: not-allowed; }
+.wm__list { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+.wm__item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--hairline); background: var(--surface-2);
+  color: var(--text); cursor: pointer; transition: all 0.15s ease; text-align: left;
+}
+.wm__item:hover { border-color: rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.05); }
+.wm__item-name { font-size: 14px; font-weight: 600; }
+.wm__item-meta { font: 11px ui-monospace, monospace; color: var(--faint); }
+.wm__empty { margin-top: 18px; font-size: 12px; color: var(--faint); text-align: center; }
+.wm__error { margin-top: 14px; font: 11px ui-monospace, monospace; color: #f87171; white-space: pre-wrap; }
+
+/* botón volver a workspaces en el topbar */
+.wsbtn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; border: 1px solid var(--hairline); background: var(--surface-2);
+  color: var(--muted); cursor: pointer; font-size: 15px; transition: all 0.15s;
+}
+.wsbtn:hover { color: var(--router); border-color: rgba(52, 211, 153, 0.4); }
 
 /* ---------- consola del router (orquestador) ---------- */
 .console__busy {

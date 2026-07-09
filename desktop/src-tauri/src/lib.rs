@@ -10,6 +10,8 @@ use std::io::{Read, Write};
 use std::sync::Mutex;
 
 mod control;
+mod engines;
+mod workspace;
 
 use base64::Engine;
 use control::ControlState;
@@ -62,15 +64,18 @@ fn pty_spawn(
     cwd: Option<String>,
     program: Option<String>,
     argv: Option<Vec<String>>,
+    env: Option<Vec<(String, String)>>,
+    inject_task: Option<String>,
+    capture_engine: Option<String>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
         .map_err(|e| e.to_string())?;
 
-    // Si viene `argv`, corremos ESE comando directo (ej. un agente headless que
-    // termina solo => dispara pty-exit). Si no, el login shell interactivo.
-    let mut cmd = match argv {
+    // `argv` presente => es un AGENTE (claude). Si no, el login shell interactivo.
+    let is_agent = argv.as_ref().map_or(false, |v| !v.is_empty());
+    let mut cmd = match &argv {
         Some(av) if !av.is_empty() => {
             let mut c = CommandBuilder::new(&av[0]);
             for a in av.iter().skip(1) {
@@ -86,14 +91,40 @@ fn pty_spawn(
             c
         }
     };
+    let cwd_str = cwd
+        .clone()
+        .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
-    cmd.env("TERM", "xterm-256color");
-    // Propagar PATH del proceso padre para que un `argv` como ["claude", ...]
-    // encuentre el binario aunque no pase por un login shell.
-    if let Ok(path) = std::env::var("PATH") {
-        cmd.env("PATH", path);
+
+    if is_agent {
+        // CLAVE: los claude-agente se lanzan con un entorno SANEADO (whitelist).
+        // Heredar el entorno completo (contaminado por vars de una sesión claude
+        // padre, u otras) hace que claude NO persista su transcript en disco →
+        // rompe el --resume. Con este whitelist, la sesión se guarda y se puede resumir.
+        cmd.env_clear();
+        for k in [
+            "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE",
+            "LC_MESSAGES", "TMPDIR", "SSH_AUTH_SOCK", "COLORTERM",
+        ] {
+            if let Ok(v) = std::env::var(k) {
+                cmd.env(k, v);
+            }
+        }
+        cmd.env("PWD", &cwd_str);
+        cmd.env("TERM", "xterm-256color");
+        // env extra del motor (ej. OPENCODE_CONFIG)
+        if let Some(extra) = &env {
+            for (k, v) in extra {
+                cmd.env(k, v);
+            }
+        }
+    } else {
+        cmd.env("TERM", "xterm-256color");
+        if let Ok(path) = std::env::var("PATH") {
+            cmd.env("PATH", path);
+        }
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
@@ -121,6 +152,25 @@ fn pty_spawn(
         }
         let _ = app2.emit("pty-exit", id2.clone());
     });
+
+    // Inyectar la tarea inicial tras el arranque del TUI (motores sin prompt posicional, ej. opencode).
+    if let Some(task) = inject_task {
+        let app3 = app.clone();
+        let id3 = id.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(6));
+            let clean = task.replace('\n', " ").replace('\r', " ");
+            let mgr = app3.state::<PtyManager>();
+            mgr.write(&id3, &clean);
+            std::thread::sleep(std::time::Duration::from_millis(450));
+            mgr.write(&id3, "\r");
+        });
+    }
+
+    // Capturar el session-id generado (codex/opencode) para poder resumir luego.
+    if let Some(engine) = capture_engine {
+        engines::spawn_capture(app.clone(), engine, id.clone(), cwd_str.clone());
+    }
 
     Ok(())
 }
@@ -178,24 +228,96 @@ fn system_stats(sys: State<'_, Mutex<System>>) -> SysStats {
 }
 
 #[derive(Serialize)]
-struct RouterLaunch {
+struct AgentLaunch {
     #[serde(rename = "agentId")]
     agent_id: String,
+    engine: String,
     argv: Vec<String>,
+    env: Vec<(String, String)>,
+    #[serde(rename = "injectTask")]
+    inject_task: Option<String>,
+    capture: bool,
+    #[serde(rename = "sessionId")]
+    session_id: Option<String>,
     cwd: String,
 }
 
-// Lanza el agente-router (v1: claude) interactivo con el MCP hyprdesk (rol router).
-// Registra su id en el hub para poder rutearle mensajes de los workers.
+// Lanza el agente-router (claude/codex/opencode) interactivo con el MCP hyprdesk, en la
+// carpeta del workspace `cwd`. Sesión nueva o `resume_session`.
 #[tauri::command]
-fn router_launch(state: State<'_, ControlState>, engine: String) -> Result<RouterLaunch, String> {
-    if engine != "claude" {
-        return Err(format!("'{engine}' aún no está soportado como router (v1: solo claude)"));
-    }
+fn router_launch(
+    state: State<'_, ControlState>,
+    engine: String,
+    cwd: String,
+    resume_session: Option<String>,
+) -> Result<AgentLaunch, String> {
     let agent_id = "router".to_string();
-    let (argv, cwd) = control::build_agent(state.port, &agent_id, "router", None)?;
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, resume_session, None)?;
     *state.router_id.lock().unwrap() = Some(agent_id.clone());
-    Ok(RouterLaunch { agent_id, argv, cwd })
+    Ok(AgentLaunch {
+        agent_id,
+        engine,
+        argv: spec.argv,
+        env: spec.env,
+        inject_task: spec.inject_task,
+        capture: spec.capture,
+        session_id: spec.session_id,
+        cwd,
+    })
+}
+
+// Relanza un worker existente con --resume (al reabrir un workspace).
+#[tauri::command]
+fn worker_launch(
+    state: State<'_, ControlState>,
+    engine: String,
+    agent_id: String,
+    session_id: String,
+    cwd: String,
+) -> Result<AgentLaunch, String> {
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(session_id), None)?;
+    Ok(AgentLaunch {
+        agent_id,
+        engine,
+        argv: spec.argv,
+        env: spec.env,
+        inject_task: spec.inject_task,
+        capture: spec.capture,
+        session_id: spec.session_id,
+        cwd,
+    })
+}
+
+// ---- workspaces ----
+#[tauri::command]
+fn list_workspaces() -> Vec<workspace::WorkspaceMeta> {
+    workspace::list_workspaces()
+}
+
+#[tauri::command]
+fn create_workspace(name: String) -> Result<workspace::WorkspaceMeta, String> {
+    workspace::create_workspace(&name)
+}
+
+#[tauri::command]
+fn load_workspace(folder: String) -> Option<String> {
+    workspace::load_state(&folder)
+}
+
+#[tauri::command]
+fn save_workspace(folder: String, state: String) -> Result<(), String> {
+    workspace::save_state(&folder, &state)
+}
+
+#[tauri::command]
+fn touch_workspace(id: String) {
+    workspace::touch_workspace(&id);
+}
+
+// Setea la carpeta del workspace activo (el hub la usa como cwd de los workers).
+#[tauri::command]
+fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
+    *state.active_cwd.lock().unwrap() = Some(folder);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,12 +327,16 @@ pub fn run() {
         .manage(PtyManager::default())
         .manage(Mutex::new(System::new_all()))
         .setup(|app| {
+            workspace::ensure_root();
             let state = control::start(app.handle().clone());
             app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            pty_spawn, pty_write, pty_resize, pty_kill, system_stats, router_launch
+            pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
+            router_launch, worker_launch,
+            list_workspaces, create_workspace, load_workspace, save_workspace,
+            touch_workspace, set_active_workspace
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -38,12 +38,16 @@ if (ROLE === "router") {
         "(recibirás un mensaje suyo). No bloquea.",
       inputSchema: {
         task: z.string().describe("Instrucción autocontenida y completa para el worker (rutas, requisitos, contexto)."),
+        engine: z
+          .enum(["claude", "codex", "opencode"])
+          .optional()
+          .describe("Motor del worker: 'claude' (default), 'codex' u 'opencode'. Elegí según la tarea si querés."),
       },
     },
-    async ({ task }) => {
+    async ({ task, engine }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task });
-        return ok(`Worker creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
+        const j = await post("/spawn_worker", { prompt: task, engine });
+        return ok(`Worker (${engine || "claude"}) creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
       }
