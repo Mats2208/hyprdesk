@@ -37,6 +37,8 @@ type Stage = "workspaces" | "selector" | "workspace";
 function computeLayout(n: number): Rect[] {
   if (n <= 0) return [];
   if (n === 1) return [{ x: 0, y: 0, w: 100, h: 100 }];
+  // 2 workers: apilados en UNA columna (router | worker/worker), no 3 columnas.
+  if (n === 2) return [{ x: 0, y: 0, w: 100, h: 50 }, { x: 0, y: 50, w: 100, h: 50 }];
   const cols = Math.ceil(Math.sqrt(n));
   const rows = Math.ceil(n / cols);
   const rects: Rect[] = [];
