@@ -1,0 +1,15 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+**/target/
+
+# Tauri generado
+desktop/src-tauri/gen/
+
+# Sistema / editor
+.DS_Store
+*.log
+.idea/

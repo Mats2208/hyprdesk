@@ -1,0 +1,11 @@
+{
+  "name": "hyprdesk-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server que le da al agente-router de HyprDesk la herramienta delegate_task",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  }
+}
