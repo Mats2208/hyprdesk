@@ -20,6 +20,28 @@ use serde::Serialize;
 use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+// PATH real del usuario (resuelto vía login shell). Necesario porque una app lanzada
+// desde Finder/Applications hereda un PATH mínimo (sin nvm) y no encontraría claude/codex/node.
+static USER_PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn user_path() -> &'static str {
+    USER_PATH.get_or_init(|| {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+        let out = std::process::Command::new(&shell)
+            .args(["-lic", "printf '__P__%s__E__' \"$PATH\""])
+            .output();
+        if let Ok(o) = out {
+            let s = String::from_utf8_lossy(&o.stdout);
+            if let (Some(a), Some(b)) = (s.find("__P__"), s.find("__E__")) {
+                if b > a + 5 {
+                    return s[a + 5..b].to_string();
+                }
+            }
+        }
+        std::env::var("PATH").unwrap_or_default()
+    })
+}
+
 // Una sesión de terminal viva.
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
@@ -112,6 +134,7 @@ fn pty_spawn(
                 cmd.env(k, v);
             }
         }
+        cmd.env("PATH", user_path()); // PATH real (para encontrar claude/codex/node desde Finder)
         cmd.env("PWD", &cwd_str);
         cmd.env("TERM", "xterm-256color");
         // env extra del motor (ej. OPENCODE_CONFIG)
@@ -122,9 +145,7 @@ fn pty_spawn(
         }
     } else {
         cmd.env("TERM", "xterm-256color");
-        if let Ok(path) = std::env::var("PATH") {
-            cmd.env("PATH", path);
-        }
+        cmd.env("PATH", user_path());
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
