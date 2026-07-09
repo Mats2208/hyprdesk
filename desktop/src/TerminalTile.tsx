@@ -99,34 +99,27 @@ export function TerminalTile({
     });
     ro.observe(host);
 
-    // Pegar IMÁGENES: si el portapapeles tiene una imagen, la guardamos en temp e inyectamos
-    // su RUTA (los agentes leen rutas de imágenes). El texto lo maneja xterm normalmente.
-    const onPaste = async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const it of Array.from(items)) {
-        if (it.type.startsWith("image/")) {
-          e.preventDefault();
-          e.stopPropagation();
-          const file = it.getAsFile();
-          if (!file) return;
-          const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-          const ext = it.type.split("/")[1] || "png";
+    // Cmd/Ctrl+V: leemos el portapapeles del SO vía Rust. Si hay IMAGEN, inyectamos su RUTA
+    // (los agentes leen rutas de imágenes); si hay texto, lo inyectamos. (El webview no entrega
+    // imágenes por el evento paste del DOM, por eso lo hacemos así.)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type === "keydown" && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "v") {
+        (async () => {
           try {
-            const path = await invoke<string>("save_image", { bytes, ext });
-            await invoke("pty_write", { id, data: path + " " });
+            const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
+            if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
+            else if (text) await invoke("pty_write", { id, data: text });
           } catch { /* ignore */ }
-          return;
-        }
+        })();
+        return false; // que xterm no procese el paste nativo
       }
-    };
-    host.addEventListener("paste", onPaste, true);
+      return true;
+    });
 
     return () => {
       ro.disconnect();
       onData.dispose();
       unlisten?.();
-      host.removeEventListener("paste", onPaste, true);
       invoke("pty_kill", { id });
       term.dispose();
       termRef.current = null;

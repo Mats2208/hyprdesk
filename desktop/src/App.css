@@ -257,8 +257,10 @@ body {
   border: 1px solid rgba(52, 211, 153, 0.5); border-radius: 7px; padding: 8px 10px;
   font-size: 14px; font-weight: 600; outline: none;
 }
-.wm__item-actions { display: flex; gap: 2px; padding-right: 8px; opacity: 0; transition: opacity 0.15s; }
+.wm__item-actions { display: flex; align-items: center; gap: 2px; padding-right: 8px; opacity: 0; transition: opacity 0.15s; }
 .wm__item:hover .wm__item-actions { opacity: 1; }
+.wm__item-actions--show { opacity: 1; }
+.wm__confirm-txt { font: 11px ui-monospace, monospace; color: #f87171; margin-right: 4px; }
 .wm__act {
   width: 26px; height: 26px; display: grid; place-items: center;
   border-radius: 6px; border: 1px solid transparent; background: transparent;

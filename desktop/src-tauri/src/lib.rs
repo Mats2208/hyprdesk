@@ -345,15 +345,22 @@ fn delete_workspace(id: String) -> Result<(), String> {
     workspace::delete_workspace(&id)
 }
 
-// Guarda una imagen pegada (desde el portapapeles) en temp y devuelve su ruta,
-// para inyectarla a un agente (los agentes leen rutas de imágenes).
+// Lee el portapapeles del SO (Cmd+V en un tile). Si hay una IMAGEN, la guarda como PNG en
+// temp y devuelve su ruta (los agentes leen rutas de imágenes). Si no, devuelve el texto.
+// Devuelve (ruta_imagen?, texto?). Necesario porque el webview no entrega imágenes por el
+// evento paste del DOM.
 #[tauri::command]
-fn save_image(bytes: Vec<u8>, ext: String) -> Result<String, String> {
-    let safe_ext: String = ext.chars().filter(|c| c.is_alphanumeric()).take(5).collect();
-    let name = format!("hyprdesk-paste-{}.{}", uuid::Uuid::new_v4(), if safe_ext.is_empty() { "png".into() } else { safe_ext });
-    let path = std::env::temp_dir().join(name);
-    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().to_string())
+fn paste_clipboard() -> Result<(Option<String>, Option<String>), String> {
+    let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    if let Ok(img) = cb.get_image() {
+        let (w, h) = (img.width as u32, img.height as u32);
+        if let Some(buf) = image::RgbaImage::from_raw(w, h, img.bytes.into_owned()) {
+            let path = std::env::temp_dir().join(format!("hyprdesk-paste-{}.png", uuid::Uuid::new_v4()));
+            buf.save(&path).map_err(|e| e.to_string())?;
+            return Ok((Some(path.to_string_lossy().to_string()), None));
+        }
+    }
+    Ok((None, cb.get_text().ok()))
 }
 
 // Setea la carpeta del workspace activo (el hub la usa como cwd de los workers).
@@ -378,7 +385,7 @@ pub fn run() {
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch,
             list_workspaces, create_workspace, load_workspace, save_workspace,
-            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, save_image
+            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

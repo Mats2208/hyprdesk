@@ -19,6 +19,7 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     invoke<WorkspaceMeta[]>("list_workspaces")
@@ -49,9 +50,9 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
     reload();
   };
 
-  const remove = async (w: WorkspaceMeta) => {
-    if (!confirm(`¿Eliminar el workspace "${w.name}"? Se borra su carpeta y todo su contenido.`)) return;
-    try { await invoke("delete_workspace", { id: w.id }); } catch (e) { setError(String(e)); }
+  const remove = async (id: string) => {
+    setConfirmId(null);
+    try { await invoke("delete_workspace", { id }); } catch (e) { setError(String(e)); }
     reload();
   };
 
@@ -98,12 +99,30 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
                       <span className="wm__item-meta">{ago(w.lastOpened)}</span>
                     </button>
                   )}
-                  <span className="wm__item-actions">
-                    <button className="wm__act" title="Renombrar"
-                      onClick={(e) => { e.stopPropagation(); setEditingId(w.id); setEditName(w.name); }}>✎</button>
-                    <button className="wm__act wm__act--del" title="Eliminar"
-                      onClick={(e) => { e.stopPropagation(); remove(w); }}>🗑</button>
-                  </span>
+                  {confirmId === w.id ? (
+                    <span className="wm__item-actions wm__item-actions--show">
+                      <span className="wm__confirm-txt">¿Borrar?</span>
+                      <button className="wm__act wm__act--del" title="Confirmar"
+                        onClick={(e) => { e.stopPropagation(); remove(w.id); }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                      <button className="wm__act" title="Cancelar"
+                        onClick={(e) => { e.stopPropagation(); setConfirmId(null); }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="wm__item-actions">
+                      <button className="wm__act" title="Renombrar"
+                        onClick={(e) => { e.stopPropagation(); setEditingId(w.id); setEditName(w.name); }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                      </button>
+                      <button className="wm__act wm__act--del" title="Eliminar"
+                        onClick={(e) => { e.stopPropagation(); setConfirmId(w.id); }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
