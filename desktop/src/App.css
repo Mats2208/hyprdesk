@@ -248,6 +248,40 @@ body {
 }
 .sidebar__new:hover { color: var(--text); border-color: var(--hairline-2); }
 
+/* filas de workspaces en la sidebar */
+.wsrow {
+  display: flex; align-items: center; gap: 4px; border-radius: 8px;
+  transition: background 0.12s; overflow: hidden;
+}
+.wsrow:hover { background: rgba(255, 255, 255, 0.04); }
+.wsrow--active { background: rgba(52, 211, 153, 0.10); }
+.wsrow--active .wsrow__name { color: var(--router); }
+.wsrow__open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border: none; background: transparent; color: var(--text); cursor: pointer; text-align: left;
+}
+.wsrow__open svg { flex: 0 0 auto; color: var(--muted); }
+.wsrow--active .wsrow__open svg { color: var(--router); }
+.wsrow__name { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsrow__rename {
+  flex: 1; margin: 5px 6px; background: var(--bg); color: var(--text);
+  border: 1px solid rgba(52, 211, 153, 0.5); border-radius: 6px; padding: 6px 8px; font-size: 13px; outline: none;
+}
+.wsrow__actions { display: flex; gap: 1px; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
+.wsrow:hover .wsrow__actions { opacity: 1; }
+.wsrow__actions--show { opacity: 1; }
+.sidebar__newws { flex: 0 0 auto; display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--hairline); }
+.sidebar__newws input {
+  flex: 1; min-width: 0; background: var(--surface-2); color: var(--text); border: 1px solid var(--hairline);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; outline: none;
+}
+.sidebar__newws input:focus { border-color: rgba(52, 211, 153, 0.5); }
+.sidebar__newws button {
+  flex: 0 0 auto; width: 34px; display: grid; place-items: center; border-radius: 8px;
+  border: 1px solid rgba(52, 211, 153, 0.35); background: var(--router-soft); color: var(--router); cursor: pointer;
+}
+.sidebar__newws button:disabled { opacity: 0.35; cursor: not-allowed; }
+
 .main { flex: 1; min-height: 0; min-width: 0; display: flex; padding: 8px; }
 .main .workspace { flex: 1; }
 

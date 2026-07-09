@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
+import { WorkspacesPanel } from "./WorkspacesPanel";
 import { CommandPalette, type Command } from "./CommandPalette";
 
 const HOSTS = ["dev@worker", "build@worker", "test@worker"];
@@ -65,6 +66,7 @@ function App() {
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo)
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [panel, setPanel] = useState<"agents" | "workspaces">("agents");
 
   const termsRef = useRef(terms);
   termsRef.current = terms;
@@ -186,6 +188,27 @@ function App() {
     } catch (e) {
       setLaunchError(String(e));
     }
+  };
+
+  // Guarda el estado del workspace actual (para poder switchear sin perder sesiones).
+  const saveCurrent = async () => {
+    if (!workspace) return;
+    const state: SavedState = {
+      id: workspace.id, name: workspace.name, routerWidth,
+      tiles: termsRef.current
+        .filter((x) => x.sessionId)
+        .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
+    };
+    try { await invoke("save_workspace", { folder: workspace.folder, state: JSON.stringify(state) }); } catch { /**/ }
+  };
+
+  // Cambiar de workspace desde la sidebar (sin volver al gestor full-screen).
+  const switchWorkspace = async (meta: WorkspaceMeta) => {
+    if (workspace && meta.id === workspace.id) return;
+    await saveCurrent();
+    setTerms([]);
+    setRouterId(null);
+    await openWorkspace(meta);
   };
 
   const backToWorkspaces = () => {
@@ -358,10 +381,10 @@ function App() {
 
       <div className="ide__body">
         <div className="activitybar">
-          <button className="act" title="Workspaces" onClick={backToWorkspaces}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 8l7-5 7 5v8a1 1 0 01-1 1h-4v-5H8v5H4a1 1 0 01-1-1V8z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+          <button className={`act ${sidebarOpen && panel === "workspaces" ? "act--on" : ""}`} title="Workspaces" onClick={() => { setPanel("workspaces"); setSidebarOpen(true); }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 6.5A1.5 1.5 0 014.5 5H8l1.8 1.8H15.5A1.5 1.5 0 0117 8.3v6.2A1.5 1.5 0 0115.5 16h-11A1.5 1.5 0 013 14.5v-8z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
           </button>
-          <button className={`act ${sidebarOpen ? "act--on" : ""}`} title="Agentes (⌘B)" onClick={() => setSidebarOpen((o) => !o)}>
+          <button className={`act ${sidebarOpen && panel === "agents" ? "act--on" : ""}`} title="Agentes (⌘B)" onClick={() => { setPanel("agents"); setSidebarOpen(true); }}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
           </button>
           <button className="act" title="Comandos (⌘K)" onClick={() => setPaletteOpen(true)}>
@@ -369,8 +392,9 @@ function App() {
           </button>
         </div>
 
-        {sidebarOpen && (
-          <Sidebar agents={agents} activeId={activeId} activity={activity} onFocus={setActiveId} onNewTerminal={addTerminal} />
+        {sidebarOpen && (panel === "workspaces"
+          ? <WorkspacesPanel activeId={workspace?.id} onSwitch={switchWorkspace} />
+          : <Sidebar agents={agents} activeId={activeId} activity={activity} onFocus={setActiveId} onNewTerminal={addTerminal} />
         )}
 
         <div className="main">
