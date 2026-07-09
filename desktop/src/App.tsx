@@ -60,6 +60,7 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [stats, setStats] = useState<SysStats | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo)
 
   const termsRef = useRef(terms);
   termsRef.current = terms;
@@ -80,6 +81,7 @@ function App() {
   useEffect(() => {
     let un: (() => void) | undefined;
     let un2: (() => void) | undefined;
+    let un3: (() => void) | undefined;
     (async () => {
       un = await listen<AgentLaunch & { title: string }>("spawn-agent", (e) => {
         const t = tileFromLaunch(e.payload, "worker", e.payload.title);
@@ -91,9 +93,18 @@ function App() {
       un2 = await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {
         setTerms((prev) => prev.map((t) => (t.id === e.payload.agentId ? { ...t, sessionId: e.payload.sessionId } : t)));
       });
+      // un agente recibió un mensaje del túnel → marcar su tile con actividad (parpadeo)
+      un3 = await listen<string>("tile-activity", (e) => {
+        setActivity((a) => (a.includes(e.payload) ? a : [...a, e.payload]));
+      });
     })();
-    return () => { un?.(); un2?.(); };
+    return () => { un?.(); un2?.(); un3?.(); };
   }, []);
+
+  // Limpiar la actividad del tile que se enfoca.
+  useEffect(() => {
+    if (activeId) setActivity((a) => (a.includes(activeId) ? a.filter((x) => x !== activeId) : a));
+  }, [activeId]);
 
   // ---- auto-guardar el estado del workspace (debounce) ----
   useEffect(() => {
@@ -344,6 +355,7 @@ function App() {
               env={t.env}
               injectTask={t.injectTask}
               captureEngine={t.captureEngine}
+              hasActivity={activity.includes(t.id)}
               onFocus={setActiveId}
               onClose={closeTerminal}
               onToggleMax={toggleMax}

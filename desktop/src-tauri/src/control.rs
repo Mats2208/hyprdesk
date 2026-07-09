@@ -150,6 +150,8 @@ fn handle_request(
                     let mgr = app.state::<crate::PtyManager>();
                     mgr.write(&target, &payload);
                 }
+                // avisar al frontend para que el tile destino "parpadee" (notificación)
+                let _ = app.emit("tile-activity", target.clone());
                 // El Enter va como keystroke SEPARADO tras un delay: si va pegado, claude
                 // trata todo como un "paste" y no lo envía. Separado = submit real.
                 let app2 = app.clone();

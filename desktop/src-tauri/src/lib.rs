@@ -324,6 +324,17 @@ fn delete_workspace(id: String) -> Result<(), String> {
     workspace::delete_workspace(&id)
 }
 
+// Guarda una imagen pegada (desde el portapapeles) en temp y devuelve su ruta,
+// para inyectarla a un agente (los agentes leen rutas de imágenes).
+#[tauri::command]
+fn save_image(bytes: Vec<u8>, ext: String) -> Result<String, String> {
+    let safe_ext: String = ext.chars().filter(|c| c.is_alphanumeric()).take(5).collect();
+    let name = format!("hyprdesk-paste-{}.{}", uuid::Uuid::new_v4(), if safe_ext.is_empty() { "png".into() } else { safe_ext });
+    let path = std::env::temp_dir().join(name);
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 // Setea la carpeta del workspace activo (el hub la usa como cwd de los workers).
 #[tauri::command]
 fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
@@ -346,7 +357,7 @@ pub fn run() {
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch,
             list_workspaces, create_workspace, load_workspace, save_workspace,
-            touch_workspace, set_active_workspace, rename_workspace, delete_workspace
+            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, save_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

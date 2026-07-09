@@ -136,6 +136,15 @@ body {
   box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.16), 0 12px 36px rgba(0, 0, 0, 0.55);
 }
 .tile--exited { opacity: 0.6; }
+/* parpadeo cuando un agente recibe un mensaje del túnel y no está enfocado */
+.tile--activity {
+  border-color: rgba(52, 211, 153, 0.6);
+  animation: tile-pulse 1.1s ease-in-out infinite;
+}
+@keyframes tile-pulse {
+  0%, 100% { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); }
+  50% { box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.4), 0 0 22px rgba(52, 211, 153, 0.4), 0 8px 30px rgba(0, 0, 0, 0.45); }
+}
 
 .tile__header {
   display: flex; align-items: center; gap: 9px;

@@ -27,13 +27,14 @@ type Props = {
   env?: [string, string][]; // env extra del motor (ej. OPENCODE_CONFIG)
   injectTask?: string; // tarea a inyectar tras arrancar (opencode)
   captureEngine?: string; // motor cuyo session-id hay que capturar (codex/opencode)
+  hasActivity?: boolean; // recibió un mensaje del túnel y no está enfocado (parpadeo)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, onFocus, onClose, onToggleMax,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, onFocus, onClose, onToggleMax,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -98,10 +99,34 @@ export function TerminalTile({
     });
     ro.observe(host);
 
+    // Pegar IMÁGENES: si el portapapeles tiene una imagen, la guardamos en temp e inyectamos
+    // su RUTA (los agentes leen rutas de imágenes). El texto lo maneja xterm normalmente.
+    const onPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith("image/")) {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = it.getAsFile();
+          if (!file) return;
+          const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+          const ext = it.type.split("/")[1] || "png";
+          try {
+            const path = await invoke<string>("save_image", { bytes, ext });
+            await invoke("pty_write", { id, data: path + " " });
+          } catch { /* ignore */ }
+          return;
+        }
+      }
+    };
+    host.addEventListener("paste", onPaste, true);
+
     return () => {
       ro.disconnect();
       onData.dispose();
       unlisten?.();
+      host.removeEventListener("paste", onPaste, true);
       invoke("pty_kill", { id });
       term.dispose();
       termRef.current = null;
@@ -116,6 +141,7 @@ export function TerminalTile({
     active ? "tile--active" : "",
     isRouter ? "tile--router" : "",
     exited ? "tile--exited" : "",
+    hasActivity && !active ? "tile--activity" : "",
   ].join(" ").trim();
 
   return (
