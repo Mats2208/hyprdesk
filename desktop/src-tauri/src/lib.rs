@@ -314,6 +314,16 @@ fn touch_workspace(id: String) {
     workspace::touch_workspace(&id);
 }
 
+#[tauri::command]
+fn rename_workspace(id: String, name: String) -> Result<(), String> {
+    workspace::rename_workspace(&id, &name)
+}
+
+#[tauri::command]
+fn delete_workspace(id: String) -> Result<(), String> {
+    workspace::delete_workspace(&id)
+}
+
 // Setea la carpeta del workspace activo (el hub la usa como cwd de los workers).
 #[tauri::command]
 fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
@@ -336,7 +346,7 @@ pub fn run() {
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch,
             list_workspaces, create_workspace, load_workspace, save_workspace,
-            touch_workspace, set_active_workspace
+            touch_workspace, set_active_workspace, rename_workspace, delete_workspace
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

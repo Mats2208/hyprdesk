@@ -231,14 +231,32 @@ body {
 .wm__create:disabled { opacity: 0.35; cursor: not-allowed; }
 .wm__list { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
 .wm__item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; border-radius: 10px;
-  border: 1px solid var(--hairline); background: var(--surface-2);
-  color: var(--text); cursor: pointer; transition: all 0.15s ease; text-align: left;
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 10px; border: 1px solid var(--hairline); background: var(--surface-2);
+  transition: all 0.15s ease; overflow: hidden;
 }
 .wm__item:hover { border-color: rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.05); }
+.wm__item-open {
+  flex: 1; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: none; border: none; color: var(--text);
+  cursor: pointer; text-align: left;
+}
 .wm__item-name { font-size: 14px; font-weight: 600; }
 .wm__item-meta { font: 11px ui-monospace, monospace; color: var(--faint); }
+.wm__rename {
+  flex: 1; margin: 6px 8px; background: var(--bg); color: var(--text);
+  border: 1px solid rgba(52, 211, 153, 0.5); border-radius: 7px; padding: 8px 10px;
+  font-size: 14px; font-weight: 600; outline: none;
+}
+.wm__item-actions { display: flex; gap: 2px; padding-right: 8px; opacity: 0; transition: opacity 0.15s; }
+.wm__item:hover .wm__item-actions { opacity: 1; }
+.wm__act {
+  width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 6px; border: 1px solid transparent; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 13px; transition: all 0.15s;
+}
+.wm__act:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.wm__act--del:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
 .wm__empty { margin-top: 18px; font-size: 12px; color: var(--faint); text-align: center; }
 .wm__error { margin-top: 14px; font: 11px ui-monospace, monospace; color: #f87171; white-space: pre-wrap; }
 

@@ -193,6 +193,29 @@ fn role_prompt(role_txt: &str, task: Option<&str>) -> String {
     }
 }
 
+// ¿Existe realmente el transcript/sesión para poder resumir? (si no, arrancamos fresco).
+fn session_exists(engine: &str, cwd: &str, id: &str) -> bool {
+    match engine {
+        "claude" => {
+            let escaped = cwd.replace('/', "-");
+            home()
+                .join(".claude/projects")
+                .join(&escaped)
+                .join(format!("{id}.jsonl"))
+                .exists()
+        }
+        "codex" => file_with_id_exists(&home().join(".codex/sessions"), id),
+        "opencode" => file_with_id_exists(&home().join(".local/share/opencode/storage"), id),
+        _ => false,
+    }
+}
+
+fn file_with_id_exists(root: &PathBuf, id: &str) -> bool {
+    walk_files(root)
+        .iter()
+        .any(|p| p.file_name().map_or(false, |n| n.to_string_lossy().contains(id)))
+}
+
 pub fn build_agent(
     engine: &str,
     port: u16,
@@ -202,6 +225,11 @@ pub fn build_agent(
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
+    // Fallback: si nos piden resumir una sesión que ya no existe, arrancamos fresca.
+    let resume_id = match resume_id {
+        Some(id) if session_exists(engine, cwd, &id) => Some(id),
+        _ => None,
+    };
     match engine {
         "claude" => build_claude(port, agent_id, role, resume_id, task),
         "codex" => build_codex(port, agent_id, role, cwd, resume_id, task),

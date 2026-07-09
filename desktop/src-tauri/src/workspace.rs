@@ -90,6 +90,33 @@ pub fn create_workspace(name: &str) -> Result<WorkspaceMeta, String> {
     Ok(meta)
 }
 
+// Renombra solo el NOMBRE visible (la carpeta se mantiene, para no romper las sesiones
+// de los agentes que están indexadas por su ruta/cwd).
+pub fn rename_workspace(id: &str, new_name: &str) -> Result<(), String> {
+    let mut list = list_workspaces();
+    let mut found = false;
+    for w in list.iter_mut() {
+        if w.id == id {
+            w.name = new_name.trim().to_string();
+            found = true;
+        }
+    }
+    if !found {
+        return Err("workspace no encontrado".into());
+    }
+    write_index(&list)
+}
+
+// Elimina el workspace: borra su carpeta y su entrada del índice.
+pub fn delete_workspace(id: &str) -> Result<(), String> {
+    let list = list_workspaces();
+    if let Some(w) = list.iter().find(|w| w.id == id) {
+        let _ = fs::remove_dir_all(&w.folder); // best-effort
+    }
+    let kept: Vec<WorkspaceMeta> = list.into_iter().filter(|w| w.id != id).collect();
+    write_index(&kept)
+}
+
 pub fn touch_workspace(id: &str) {
     let mut list = list_workspaces();
     for w in list.iter_mut() {
