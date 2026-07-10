@@ -137,6 +137,22 @@ pub fn git_diff(cwd: String, path: String) -> GitDiff {
     GitDiff { old, new }
 }
 
+// Diff UNIFICADO (patch) de un archivo — para verlo en UN solo panel read-only, sin superponer
+// original y modificado. vs HEAD si está trackeado; si es nuevo/untracked, todo agregado.
+#[tauri::command]
+pub fn git_diff_text(cwd: String, path: String) -> String {
+    if let Some(t) = git(&cwd, &["diff", "HEAD", "--", &path]) {
+        if !t.trim().is_empty() {
+            return t;
+        }
+    }
+    // git diff --no-index sale con código 1 cuando hay diferencias → el patch viene en el "error".
+    match git_run(&cwd, &["diff", "--no-index", "--", "/dev/null", &path]) {
+        Ok(s) => s,
+        Err(e) => e,
+    }
+}
+
 // ---- Source Control (acciones git) ----
 
 // Como git() pero devuelve el ERROR (stderr) en fallo — para reportarlo en la UI.

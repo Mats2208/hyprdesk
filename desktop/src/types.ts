@@ -7,7 +7,7 @@ export type TileKind = "terminal" | "file" | "diff" | "browser";
 export type Term = {
   id: string; title: string; role: Role; engine?: string; sessionId?: string;
   argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
-  kind?: TileKind; filePath?: string; url?: string; diff?: { old: string; new: string }; // tiles no-terminal
+  kind?: TileKind; filePath?: string; url?: string; diff?: { patch: string }; // tiles no-terminal
   name?: string; color?: string; // agente de un perfil (nombre + color propios)
   branch?: string; // rama del worktree (repos git)
 };

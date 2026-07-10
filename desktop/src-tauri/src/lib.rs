@@ -633,7 +633,7 @@ pub fn run() {
             fsops::read_file, fsops::write_file, fsops::list_dir,
             changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff, changes::git_branch,
             changes::git_commit, changes::git_push, changes::git_pull, changes::git_branches, changes::git_checkout,
-            changes::git_merge_branch, changes::git_sync_state,
+            changes::git_merge_branch, changes::git_sync_state, changes::git_diff_text,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,
             browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close

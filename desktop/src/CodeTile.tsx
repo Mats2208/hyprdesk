@@ -6,7 +6,6 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { indentOnInput, bracketMatching, foldGutter, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { MergeView } from "@codemirror/merge";
 import { editorTokens } from "./theme/tokens";
 import { useThemeStore } from "./theme/theme";
 import { javascript } from "@codemirror/lang-javascript";
@@ -73,8 +72,8 @@ type Props = {
   active: boolean;
   canClose: boolean;
   maximized: boolean;
-  filePath?: string;                    // modo view/edit
-  diff?: { old: string; new: string };  // modo merge (diff)
+  filePath?: string;              // modo view/edit
+  diff?: { patch: string };       // modo diff (patch unificado, read-only)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
@@ -87,26 +86,14 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ---- montar: MergeView (diff) o EditorView (archivo) ----
+  // ---- montar el editor (solo modo archivo). El diff se pinta plano en el body (sin CodeMirror). ----
   useEffect(() => {
+    if (diff) return; // el diff no usa CodeMirror
     const host = bodyRef.current;
     if (!host) return;
     let disposed = false;
-    let merge: MergeView | null = null;
     let themeUnsub: (() => void) | undefined;
     const themeComp = new Compartment();
-
-    if (diff) {
-      merge = new MergeView({
-        a: { doc: diff.old, extensions: [...baseExtensions(filePath ?? title), ...themeExtensions(), EditorView.editable.of(false)] },
-        b: { doc: diff.new, extensions: [...baseExtensions(filePath ?? title), ...themeExtensions(), EditorView.editable.of(false)] },
-        parent: host,
-      });
-      // re-medir al tamaño final (evita el texto encimado al abrir mientras el tile se acomoda).
-      const m = merge;
-      requestAnimationFrame(() => { m.a.requestMeasure(); m.b.requestMeasure(); });
-      return () => { merge?.destroy(); };
-    }
 
     // modo archivo: leer del disco y montar editor
     const save = (view: EditorView) => {
@@ -189,7 +176,28 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
           </button>
         </span>
       </div>
-      <div className="tile__body tile__body--code" ref={bodyRef} />
+      {diff
+        ? <div className="tile__body tile__body--diff"><DiffView patch={diff.patch} /></div>
+        : <div className="tile__body tile__body--code" ref={bodyRef} />}
+    </div>
+  );
+}
+
+// Diff unificado (patch) pintado plano: nada de CodeMirror → no se superpone ni laguea.
+function DiffView({ patch }: { patch: string }) {
+  const lineCls = (l: string) => {
+    if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ")
+      || l.startsWith("new file") || l.startsWith("deleted") || l.startsWith("similarity") || l.startsWith("rename")) return "dl dl--meta";
+    if (l.startsWith("@@")) return "dl dl--hunk";
+    if (l.startsWith("+")) return "dl dl--add";
+    if (l.startsWith("-")) return "dl dl--del";
+    return "dl";
+  };
+  const lines = patch.length ? patch.replace(/\n$/, "").split("\n") : [];
+  return (
+    <div className="diffview">
+      {lines.length === 0 && <div className="dl dl--meta">(sin diferencias)</div>}
+      {lines.map((l, i) => <div key={i} className={lineCls(l)}>{l || " "}</div>)}
     </div>
   );
 }

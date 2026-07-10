@@ -702,8 +702,15 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .tile__body--code { padding: 0; overflow: hidden; }
 .tile__body--code .cm-editor { height: 100%; }
 .tile__body--code .cm-scroller { overflow: auto; }
-.tile__body--code .cm-mergeView { height: 100%; }
-.tile__body--code .cm-mergeView .cm-editor { height: 100%; }
+
+/* diff unificado plano (read-only) — sin CodeMirror */
+.tile__body--diff { padding: 0; overflow: hidden; }
+.diffview { height: 100%; overflow: auto; padding: 6px 0; font: 12.5px/1.55 var(--font-mono); background: var(--tile-bg); }
+.dl { padding: 0 12px; white-space: pre; color: var(--text); }
+.dl--add { background: rgba(80, 200, 120, 0.13); color: #4bab63; }
+.dl--del { background: rgba(220, 90, 90, 0.13); color: #c85757; }
+.dl--hunk { color: var(--accent); }
+.dl--meta { color: var(--muted); }
 
 /* ==================== PANEL DE ARCHIVOS (mini-árbol) ==================== */
 .sidebar__reload {

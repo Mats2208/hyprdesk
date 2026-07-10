@@ -179,11 +179,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const cur = get().current();
     if (!cur) return;
     try {
-      const d = await invoke<{ old: string; new: string }>("git_diff", { cwd: cur.meta.folder, path: relPath });
+      const patch = await invoke<string>("git_diff_text", { cwd: cur.meta.folder, path: relPath });
       const name = relPath.split("/").pop() || relPath;
       get().updateCurrent((s) => {
         if (s.terms.length >= MAX_TILES) return s;
-        const t: Term = { id: crypto.randomUUID(), title: `Δ ${name}`, role: "worker", kind: "diff", filePath: `${cur.meta.folder}/${relPath}`, diff: d };
+        const t: Term = { id: crypto.randomUUID(), title: `Δ ${name}`, role: "worker", kind: "diff", filePath: `${cur.meta.folder}/${relPath}`, diff: { patch } };
         return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
       });
     } catch { /* sin diff */ }
