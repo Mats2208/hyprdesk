@@ -8,6 +8,7 @@ import { BrowserTile } from "./BrowserTile";
 import { FilesPanel } from "./FilesPanel";
 import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
 import { SettingsModal } from "./SettingsModal";
+import { CreateAgentModal } from "./CreateAgentModal";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -22,6 +23,12 @@ type Term = {
   id: string; title: string; role: Role; engine?: string; sessionId?: string;
   argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
   kind?: TileKind; filePath?: string; url?: string; diff?: { old: string; new: string }; // tiles no-terminal
+  name?: string; color?: string; // agente de un perfil (nombre + color propios)
+};
+// Perfil de agente (por-workspace): describís → un meta-agente lo genera → lo lanzás.
+export type Profile = {
+  id: string; name: string; engine: string; model?: string; effort?: string;
+  persona: string; color: string; rules?: { canMerge?: "always" | "ask" | "never" };
 };
 type AgentLaunch = {
   agentId: string; engine: string; argv: string[]; env: [string, string][];
@@ -29,8 +36,8 @@ type AgentLaunch = {
 };
 type Rect = { x: number; y: number; w: number; h: number };
 type SysStats = { cpu: number; mem_used: number; mem_total: number };
-type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string };
-type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[] };
+type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string; name?: string; color?: string };
+type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[]; profiles?: Profile[] };
 type Stage = "workspaces" | "ide";
 
 // Una sesión = un workspace ABIERTO. Con keep-alive tenemos varias vivas a la vez; todas sus
@@ -44,6 +51,7 @@ type WsSession = {
   maxId: string | null;
   needsRouter: boolean; // workspace nuevo sin router → mostramos el selector en el panel principal
   launchError: string | null;
+  profiles: Profile[]; // perfiles de agentes de este workspace
 };
 
 // Convierte un AgentLaunch (del backend) en los campos de un tile.
@@ -63,8 +71,9 @@ function savedStateOf(s: WsSession): SavedState {
       .filter((x) => x.sessionId || x.kind === "file" || x.kind === "browser")
       .map((x) => ({
         id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId ?? "", title: x.title,
-        kind: x.kind, filePath: x.filePath, url: x.url,
+        kind: x.kind, filePath: x.filePath, url: x.url, name: x.name, color: x.color,
       })),
+    profiles: s.profiles,
   };
 }
 
@@ -98,6 +107,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
   const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
   const gitTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -236,7 +246,9 @@ function App() {
         const w = await invoke<AgentLaunch>("worker_launch", {
           engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder, routerId: rId || "router",
         });
-        next.push(tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`));
+        const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
+        wt.name = t.name; wt.color = t.color; // conservar nombre/color del perfil
+        next.push(wt);
       } catch { /* worker que no resume, lo salteamos */ }
     }
     // tiles de archivo/navegador: recrear sin lanzar procesos
@@ -246,6 +258,7 @@ function App() {
     return {
       meta, terms: next, routerId: rId, activeId: rId || next[0]?.id || "",
       routerWidth: saved.routerWidth || 50, maxId: null, needsRouter: !routerTile, launchError: err,
+      profiles: saved.profiles ?? [],
     };
   };
 
@@ -264,7 +277,7 @@ function App() {
     } catch { /* sin estado */ }
     const session: WsSession = (saved && saved.tiles?.length)
       ? await buildRestoredSession(meta, saved)
-      : { meta, terms: [], routerId: null, activeId: "", routerWidth: 50, maxId: null, needsRouter: true, launchError: null };
+      : { meta, terms: [], routerId: null, activeId: "", routerWidth: 50, maxId: null, needsRouter: true, launchError: null, profiles: saved?.profiles ?? [] };
     setSessions((prev) => [...prev.filter((s) => s.meta.id !== meta.id), session]);
     setCurrentId(meta.id);
     setStage("ide");
@@ -359,6 +372,34 @@ function App() {
       const t: Term = { id: crypto.randomUUID(), title, role: "worker", kind: "browser", url };
       return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
     });
+  }, [updateCurrent]);
+
+  // ---- perfiles de agentes (por-workspace) ----
+  const saveProfile = useCallback((profile: Profile) => {
+    updateCurrent((s) => {
+      const exists = s.profiles.some((p) => p.id === profile.id);
+      const profiles = exists ? s.profiles.map((p) => (p.id === profile.id ? profile : p)) : [...s.profiles, profile];
+      return { ...s, profiles };
+    });
+  }, [updateCurrent]);
+
+  const deleteProfile = useCallback((id: string) => {
+    updateCurrent((s) => ({ ...s, profiles: s.profiles.filter((p) => p.id !== id) }));
+  }, [updateCurrent]);
+
+  // Lanza un worker desde un perfil (reporta al router actual del workspace).
+  const launchProfile = useCallback(async (profile: Profile, task?: string) => {
+    const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
+    if (!cur || !cur.routerId) return;
+    try {
+      const l = await invoke<AgentLaunch>("spawn_profile_worker", {
+        engine: profile.engine, cwd: cur.meta.folder, routerId: cur.routerId,
+        model: profile.model || null, effort: profile.effort || null, persona: profile.persona || null, task: task || null,
+      });
+      const t = tileFromLaunch(l, "worker", profile.name);
+      t.name = profile.name; t.color = profile.color;
+      updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
+    } catch { /* error de lanzamiento */ }
   }, [updateCurrent]);
 
   // Registra una URL localhost detectada en la salida de un tile (dedupe, por workspace).
@@ -550,6 +591,7 @@ function App() {
                 injectTask={t.injectTask}
                 captureEngine={t.captureEngine}
                 hasActivity={activity.includes(t.id)}
+                color={t.color}
                 onFocus={setActive}
                 onClose={closeTerminal}
                 onToggleMax={toggleMax}
@@ -601,7 +643,7 @@ function App() {
 
   // ---- pantalla: IDE (shell) ----
   const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
-  const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine })) : [];
+  const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine, color: t.color })) : [];
   const curChanges = current ? changesByWs[current.meta.folder] : undefined;
   const changeCount = curChanges ? (curChanges.git.length || curChanges.watched.length) : 0;
   const curPreviews = current ? previewsByWs[current.meta.folder] ?? [] : [];
@@ -676,7 +718,14 @@ function App() {
               ? <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} onPreview={(p) => openBrowser("file://" + p)} />
               : panel === "changes"
                 ? <ChangesPanel changes={curChanges} root={current?.meta.folder ?? null} onOpenDiff={openDiff} onOpenFile={openFile} />
-                : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
+                : <Sidebar
+                    agents={agents} activeId={currentActiveId} activity={activity}
+                    profiles={current?.profiles ?? []}
+                    onFocus={setActive} onNewTerminal={addTerminal}
+                    onLaunchProfile={(p) => launchProfile(p)}
+                    onCreateAgent={() => setCreateAgentOpen(true)}
+                    onDeleteProfile={deleteProfile}
+                  />
         )}
 
         <div className="main">
@@ -712,6 +761,14 @@ function App() {
 
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {createAgentOpen && (
+        <CreateAgentModal
+          canLaunch={!!current?.routerId}
+          onClose={() => setCreateAgentOpen(false)}
+          onSave={(p) => saveProfile(p)}
+          onSaveAndLaunch={(p) => { saveProfile(p); launchProfile(p); }}
+        />
+      )}
     </div>
   );
 }

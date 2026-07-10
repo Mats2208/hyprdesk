@@ -28,6 +28,7 @@ type Props = {
   injectTask?: string; // tarea a inyectar tras arrancar (opencode)
   captureEngine?: string; // motor cuyo session-id hay que capturar (codex/opencode)
   hasActivity?: boolean; // recibió un mensaje del túnel y no está enfocado (parpadeo)
+  color?: string; // color propio del agente (de un perfil)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
@@ -35,7 +36,7 @@ type Props = {
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, onFocus, onClose, onToggleMax, onDetectUrl,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, onFocus, onClose, onToggleMax, onDetectUrl,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -153,11 +154,17 @@ export function TerminalTile({
     hasActivity && !active ? "tile--activity" : "",
   ].join(" ").trim();
 
+  const accent = color && !isRouter
+    ? (active
+        ? { borderColor: color, boxShadow: `0 0 0 1px ${color}55, 0 12px 36px rgba(0,0,0,0.55)` }
+        : { borderColor: `${color}55` })
+    : undefined;
+
   return (
-    <div className={cls} onMouseDown={() => onFocus(id)}>
+    <div className={cls} style={accent} onMouseDown={() => onFocus(id)}>
       <div className="tile__header" onDoubleClick={() => onToggleMax(id)}>
         <span className="tile__dots">
-          <i /><i /><i />
+          <i style={color && !isRouter ? { background: color } : undefined} /><i /><i />
         </span>
         {isRouter && <span className="tile__badge">PRINCIPAL</span>}
         <span className="tile__title">{title}</span>

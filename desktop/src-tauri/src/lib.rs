@@ -316,6 +316,40 @@ fn worker_launch(
     })
 }
 
+// Lanza un worker NUEVO desde un perfil (motor + modelo + effort + persona). Se conecta al hub
+// con router_id = el router actual del workspace, así reporta a ese router.
+#[tauri::command]
+fn spawn_profile_worker(
+    state: State<'_, ControlState>,
+    engine: String,
+    cwd: String,
+    router_id: String,
+    model: Option<String>,
+    effort: Option<String>,
+    persona: Option<String>,
+    task: Option<String>,
+) -> Result<AgentLaunch, String> {
+    let agent_id = uuid::Uuid::new_v4().to_string();
+    let opts = engines::AgentOpts {
+        model: model.as_deref(),
+        effort: effort.as_deref(),
+        persona: persona.as_deref(),
+    };
+    let spec = engines::build_agent(
+        &engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), None, task.as_deref(), &opts,
+    )?;
+    Ok(AgentLaunch {
+        agent_id,
+        engine,
+        argv: spec.argv,
+        env: spec.env,
+        inject_task: spec.inject_task,
+        capture: spec.capture,
+        session_id: spec.session_id,
+        cwd,
+    })
+}
+
 // ---- workspaces ----
 #[tauri::command]
 fn list_workspaces() -> Vec<workspace::WorkspaceMeta> {
@@ -483,7 +517,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
-            router_launch, worker_launch,
+            router_launch, worker_launch, spawn_profile_worker,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
