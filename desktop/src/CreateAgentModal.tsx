@@ -1,26 +1,35 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Profile } from "./App";
 
 const COLORS = ["#34d399", "#60a5fa", "#c084fc", "#fbbf24", "#f87171", "#22d3ee", "#f472b6", "#a3e635"];
 
-const CATALOG = `Motores y modelos disponibles:
-- claude (Claude Code): modelos "opus" (más potente), "sonnet" (balanceado), "haiku" (rápido). Sin "effort". Muy fuerte en razonamiento, arquitectura y salida estructurada.
-- codex (OpenAI Codex): modelos "gpt-5.6-terra" (potente/preciso), "gpt-5.6-sol" (más rápido); "effort" = "low" | "medium" | "high". Muy bueno implementando código preciso.
-- opencode: formato "provider/model" (ej. "anthropic/claude-sonnet-4-6"). Flexible.`;
+type Catalog = { claude: string[]; codex: string[]; opencode: string[] };
 
-function buildPrompt(desc: string): string {
+function catalogText(c: Catalog | null): string {
+  const oc = c?.opencode?.length ? c.opencode.join(", ") : "(no disponible — no elijas opencode)";
+  const cx = c?.codex?.length ? c.codex.join(", ") : "gpt-5.6-terra, gpt-5.6-sol";
+  const cl = c?.claude?.length ? c.claude.join(", ") : "opus, sonnet, haiku";
+  return `Motores y modelos VÁLIDOS (usá EXACTAMENTE uno de estos strings como "model", no inventes):
+- claude (Claude Code): ${cl}. Sin "effort" (null). Fuerte en razonamiento/arquitectura.
+- codex (OpenAI Codex): ${cx}. "effort" = "low"|"medium"|"high". Bueno implementando código preciso.
+- opencode (open source, permite modelos de terceros): ${oc}. El "model" DEBE ser exactamente uno de
+  esa lista (formato "provider/model"). opencode NO usa "effort" → effort=null.`;
+}
+
+function buildPrompt(desc: string, cat: Catalog | null): string {
   return `Sos un configurador de agentes de IA para HyprDesk (un orquestador de agentes de código).
 Dada la descripción de abajo, devolvé SOLO un objeto JSON válido (sin markdown, sin \`\`\`, sin texto extra) con EXACTAMENTE este shape:
 {"name": string corto (2-4 palabras), "engine": "claude"|"codex"|"opencode", "model": string|null, "effort": "low"|"medium"|"high"|null, "persona": string (instrucciones detalladas en 2da persona: rol, arquitectura, endpoints/reglas específicas, criterios de calidad), "color": string hex "#rrggbb", "rules": {"canMerge": "always"|"ask"|"never"}}
 
-${CATALOG}
+${catalogText(cat)}
 
 Reglas:
-- Elegí motor+modelo+effort acordes ("preciso pero no el más pesado" ≈ codex gpt-5.6-terra/high o gpt-5.6-sol/high; "razonamiento/arquitectura" ≈ claude sonnet/opus).
+- El "model" TIENE que ser uno de los strings válidos de arriba para el motor elegido. Si el usuario pide
+  un modelo que no está en la lista, elegí el más parecido de la lista (NO inventes strings).
+- "effort" solo aplica a codex; para claude y opencode usá null.
 - La "persona" debe ser detallada y accionable, no genérica.
 - Si el usuario menciona merge/push a git, reflejalo en rules.canMerge Y explícitamente en la persona.
-- "effort" solo aplica a codex; para claude/opencode usá null.
 
 Descripción del usuario:
 """${desc}"""
@@ -55,12 +64,15 @@ export function CreateAgentModal({
   const [gen, setGen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [p, setP] = useState<Profile | null>(null);
+  const [cat, setCat] = useState<Catalog | null>(null);
+
+  useEffect(() => { invoke<Catalog>("list_models").then(setCat).catch(() => {}); }, []);
 
   const generate = async () => {
     if (!desc.trim() || gen) return;
     setGen(true); setError(null);
     try {
-      const raw = await invoke<string>("run_assistant", { prompt: buildPrompt(desc) });
+      const raw = await invoke<string>("run_assistant", { prompt: buildPrompt(desc, cat) });
       const o = parseProfile(raw);
       setP({
         id: crypto.randomUUID(),

@@ -582,7 +582,7 @@ pub fn run() {
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff, changes::git_branch,
-            settings::load_settings, settings::save_settings, settings::run_assistant,
+            settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models,
             usage::usage_today,
             browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close
         ])

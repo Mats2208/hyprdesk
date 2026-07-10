@@ -49,6 +49,41 @@ pub fn save_settings(settings: Settings) -> Result<(), String> {
     std::fs::write(settings_path(), body).map_err(|e| e.to_string())
 }
 
+// Catálogo de modelos REALES por motor (para que el meta-agente no invente modelos inválidos).
+// opencode: los que el usuario tiene autenticados (`opencode models`). claude/codex: los conocidos.
+#[derive(Serialize, Default)]
+pub struct ModelCatalog {
+    pub claude: Vec<String>,
+    pub codex: Vec<String>,
+    pub opencode: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn list_models() -> ModelCatalog {
+    tauri::async_runtime::spawn_blocking(|| {
+        let opencode = std::process::Command::new("opencode")
+            .arg("models")
+            .env("PATH", crate::user_path())
+            .output()
+            .ok()
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty() && s.contains('/'))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        ModelCatalog {
+            claude: vec!["opus".into(), "sonnet".into(), "haiku".into()],
+            codex: vec!["gpt-5.6-terra".into(), "gpt-5.6-sol".into(), "gpt-5.6".into(), "gpt-5.6-pro".into()],
+            opencode,
+        }
+    })
+    .await
+    .unwrap_or_default()
+}
+
 // Corre el CLI asistente en headless y devuelve el texto de respuesta. Bloqueante (llamada a un
 // LLM ~segundos) → va en spawn_blocking para no congelar la UI.
 #[tauri::command]
