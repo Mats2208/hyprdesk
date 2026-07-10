@@ -4,6 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
+import { monoFont, xtermTheme } from "./theme/tokens";
+import { useThemeStore } from "./theme/theme";
 
 // base64 (bytes crudos del PTY) -> Uint8Array para xterm.write sin corromper UTF-8.
 function b64ToBytes(b64: string): Uint8Array {
@@ -58,35 +60,26 @@ export function TerminalTile({
     if (!host) return;
 
     const term = new Terminal({
-      fontFamily: 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace',
-      fontSize: 12.5,
+      fontFamily: monoFont(),
+      fontSize: useThemeStore.getState().termFontSize,
       lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: {
-        background: "#0e0e10",
-        foreground: "#e4e4e7",
-        cursor: isRouter ? "#34d399" : "#a1a1aa",
-        cursorAccent: "#0e0e10",
-        selectionBackground: "rgba(255,255,255,0.14)",
-        black: "#18181b",
-        brightBlack: "#52525b",
-        green: "#34d399",
-        brightGreen: "#6ee7b7",
-        blue: "#60a5fa",
-        cyan: "#22d3ee",
-        yellow: "#fbbf24",
-        red: "#f87171",
-        magenta: "#c084fc",
-        white: "#d4d4d8",
-        brightWhite: "#fafafa",
-      },
+      theme: xtermTheme(isRouter),
     });
     termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
+
+    // Reaccionar a cambios de tema/fuente: re-aplicar tema, tamaño y familia, y re-ajustar.
+    const themeUnsub = useThemeStore.subscribe(() => {
+      term.options.theme = xtermTheme(isRouter);
+      term.options.fontFamily = monoFont();
+      term.options.fontSize = useThemeStore.getState().termFontSize;
+      try { fit.fit(); } catch { /* host aún no medible */ }
+    });
 
     let unlisten: (() => void) | undefined;
     (async () => {
@@ -163,6 +156,7 @@ export function TerminalTile({
 
     return () => {
       ro.disconnect();
+      themeUnsub();
       onData.dispose();
       unlisten?.();
       clearTimeout(idleTimerRef.current);

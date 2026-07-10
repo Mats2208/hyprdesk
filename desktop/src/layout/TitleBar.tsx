@@ -2,7 +2,7 @@
 import type { GlmUsage, SysStats } from "../types";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
-import { THEME_LABEL, useTheme } from "../theme/theme";
+import { THEME_LABEL, useThemeStore } from "../theme/theme";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
@@ -16,7 +16,8 @@ const THEME_ICON = {
 export function TitleBar({ stats, glm, branch }: { stats: SysStats | null; glm: GlmUsage | null; branch: string | null }) {
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
   const togglePalette = useUiStore((s) => s.togglePalette);
-  const { theme, cycle } = useTheme();
+  const theme = useThemeStore((s) => s.theme);
+  const cycle = useThemeStore((s) => s.cycleTheme);
 
   return (
     <div className="titlebar">

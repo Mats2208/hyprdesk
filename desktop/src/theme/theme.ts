@@ -1,29 +1,51 @@
-// Tema de la app: aplica data-theme en el root y lo persiste. Los tokens viven en App.css.
-import { useState } from "react";
+// Tema + tipografía de la app (una sola fuente de verdad, reactiva). Aplica a los tokens CSS del root
+// y persiste en localStorage. La terminal (xterm) y el editor (CodeMirror) se suscriben para reaccionar.
+import { create } from "zustand";
 
 export type ThemeName = "dark" | "light" | "hc";
 export const THEMES: ThemeName[] = ["dark", "light", "hc"];
 export const THEME_LABEL: Record<ThemeName, string> = { dark: "Oscuro", light: "Claro", hc: "Alto contraste" };
 
-const KEY = "hd-theme";
+const K = { theme: "hd-theme", ui: "hd-font-ui", mono: "hd-font-mono", term: "hd-fs-term", editor: "hd-fs-editor" };
+const num = (v: string | null, d: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
+const isTheme = (v: string | null): v is ThemeName => v === "light" || v === "hc" || v === "dark";
 
-export function getTheme(): ThemeName {
-  const t = localStorage.getItem(KEY);
-  return t === "light" || t === "hc" ? t : "dark";
+// Aplica al DOM. Fuente vacía → se quita el override y manda el default del CSS.
+function applyToDom(s: { theme: ThemeName; uiFont: string; monoFont: string }) {
+  const root = document.documentElement;
+  root.setAttribute("data-theme", s.theme);
+  if (s.uiFont.trim()) root.style.setProperty("--font-ui", s.uiFont); else root.style.removeProperty("--font-ui");
+  if (s.monoFont.trim()) root.style.setProperty("--font-mono", s.monoFont); else root.style.removeProperty("--font-mono");
 }
 
-export function applyTheme(t: ThemeName) {
-  document.documentElement.setAttribute("data-theme", t);
-  localStorage.setItem(KEY, t);
-}
+type ThemeState = {
+  theme: ThemeName;
+  uiFont: string;   // "" = default del CSS
+  monoFont: string; // "" = default del CSS
+  termFontSize: number;
+  editorFontSize: number;
+  setTheme: (t: ThemeName) => void;
+  cycleTheme: () => void;
+  setUiFont: (f: string) => void;
+  setMonoFont: (f: string) => void;
+  setTermFontSize: (n: number) => void;
+  setEditorFontSize: (n: number) => void;
+};
 
-// Aplicar antes del primer render (en main.tsx) para evitar el flash de tema.
-export function initTheme() { applyTheme(getTheme()); }
+export const useThemeStore = create<ThemeState>((set, get) => ({
+  theme: (isTheme(localStorage.getItem(K.theme)) ? (localStorage.getItem(K.theme) as ThemeName) : "dark"),
+  uiFont: localStorage.getItem(K.ui) ?? "",
+  monoFont: localStorage.getItem(K.mono) ?? "",
+  termFontSize: num(localStorage.getItem(K.term), 12.5),
+  editorFontSize: num(localStorage.getItem(K.editor), 12.5),
 
-// Hook para el toggle: tema actual + setter + ciclo dark → light → hc.
-export function useTheme() {
-  const [theme, setThemeState] = useState<ThemeName>(getTheme);
-  const setTheme = (t: ThemeName) => { applyTheme(t); setThemeState(t); };
-  const cycle = () => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
-  return { theme, setTheme, cycle };
-}
+  setTheme: (theme) => { localStorage.setItem(K.theme, theme); set({ theme }); applyToDom({ ...get(), theme }); },
+  cycleTheme: () => get().setTheme(THEMES[(THEMES.indexOf(get().theme) + 1) % THEMES.length]),
+  setUiFont: (uiFont) => { localStorage.setItem(K.ui, uiFont); set({ uiFont }); applyToDom({ ...get(), uiFont }); },
+  setMonoFont: (monoFont) => { localStorage.setItem(K.mono, monoFont); set({ monoFont }); applyToDom({ ...get(), monoFont }); },
+  setTermFontSize: (termFontSize) => { localStorage.setItem(K.term, String(termFontSize)); set({ termFontSize }); },
+  setEditorFontSize: (editorFontSize) => { localStorage.setItem(K.editor, String(editorFontSize)); set({ editorFontSize }); },
+}));
+
+// Aplicar antes del primer render (main.tsx) para evitar el flash de tema/fuente.
+export function initTheme() { applyToDom(useThemeStore.getState()); }

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { indentOnInput, bracketMatching, foldGutter } from "@codemirror/language";
+import { indentOnInput, bracketMatching, foldGutter, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { MergeView } from "@codemirror/merge";
+import { editorTokens } from "./theme/tokens";
+import { useThemeStore } from "./theme/theme";
 import { javascript } from "@codemirror/lang-javascript";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
@@ -32,22 +34,36 @@ function langFor(path: string): Extension[] {
   }
 }
 
-// Tema que funde CodeMirror con el fondo del tile (--tile-bg) en vez del bg propio de oneDark.
-const blendTheme = EditorView.theme({
-  "&": { backgroundColor: "transparent", height: "100%", fontSize: "12.5px" },
-  ".cm-scroller": { fontFamily: 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace', lineHeight: "1.5" },
-  ".cm-gutters": { backgroundColor: "transparent", border: "none" },
-  ".cm-activeLineGutter": { backgroundColor: "rgba(255,255,255,0.03)" },
-  ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.03)" },
-  "&.cm-focused": { outline: "none" },
-});
+// Tema que funde CodeMirror con el fondo del tile (--tile-bg) y respeta los tokens de tema/fuente.
+function makeBlendTheme(): Extension {
+  const t = editorTokens();
+  const fs = useThemeStore.getState().editorFontSize;
+  const line = t.light ? "rgba(0,0,0,0.035)" : "rgba(255,255,255,0.03)";
+  return EditorView.theme({
+    "&": { backgroundColor: "transparent", height: "100%", fontSize: `${fs}px`, color: t.text },
+    ".cm-scroller": { fontFamily: t.mono, lineHeight: "1.5" },
+    ".cm-gutters": { backgroundColor: "transparent", border: "none", color: t.faint },
+    ".cm-activeLineGutter": { backgroundColor: line },
+    ".cm-activeLine": { backgroundColor: line },
+    ".cm-cursor": { borderLeftColor: t.accent },
+    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: t.selection },
+    "&.cm-focused": { outline: "none" },
+  }, { dark: !t.light });
+}
+
+// Extensiones de tema según el tema actual: oscuro/HC usan oneDark; claro usa el highlight por defecto.
+function themeExtensions(): Extension[] {
+  return editorTokens().light
+    ? [makeBlendTheme(), syntaxHighlighting(defaultHighlightStyle)]
+    : [oneDark, makeBlendTheme()];
+}
 
 function baseExtensions(path: string): Extension[] {
   return [
     lineNumbers(), foldGutter(), highlightActiveLine(), highlightActiveLineGutter(),
     history(), indentOnInput(), bracketMatching(), highlightSelectionMatches(),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
-    oneDark, blendTheme, ...langFor(path),
+    ...langFor(path),
   ];
 }
 
@@ -77,11 +93,13 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
     if (!host) return;
     let disposed = false;
     let merge: MergeView | null = null;
+    let themeUnsub: (() => void) | undefined;
+    const themeComp = new Compartment();
 
     if (diff) {
       merge = new MergeView({
-        a: { doc: diff.old, extensions: [...baseExtensions(filePath ?? title), EditorView.editable.of(false)] },
-        b: { doc: diff.new, extensions: [...baseExtensions(filePath ?? title), EditorView.editable.of(false)] },
+        a: { doc: diff.old, extensions: [...baseExtensions(filePath ?? title), ...themeExtensions(), EditorView.editable.of(false)] },
+        b: { doc: diff.new, extensions: [...baseExtensions(filePath ?? title), ...themeExtensions(), EditorView.editable.of(false)] },
         parent: host,
       });
       return () => { merge?.destroy(); };
@@ -111,6 +129,7 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
           doc,
           extensions: [
             ...baseExtensions(filePath ?? title),
+            themeComp.of(themeExtensions()),
             keymap.of([{ key: "Mod-s", preventDefault: true, run: save }]),
             EditorView.updateListener.of((u) => {
               if (u.docChanged) setDirty(u.state.doc.toString() !== savedRef.current);
@@ -120,9 +139,11 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
       });
       viewRef.current = view;
       if (active) view.focus();
+      // reaccionar a cambios de tema/fuente sin perder ediciones (reconfigurar el compartment).
+      themeUnsub = useThemeStore.subscribe(() => view.dispatch({ effects: themeComp.reconfigure(themeExtensions()) }));
     })();
 
-    return () => { disposed = true; viewRef.current?.destroy(); viewRef.current = null; };
+    return () => { disposed = true; themeUnsub?.(); viewRef.current?.destroy(); viewRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, diff]);
 
