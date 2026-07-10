@@ -60,10 +60,12 @@ if (ROLE === "router") {
     "send_to_worker",
     {
       title: "Mandarle un mensaje/corrección a un worker",
-      description: "Envía un follow-up o corrección a un worker existente (por su worker_id).",
+      description:
+        "Envía un follow-up, corrección o NUEVA TAREA a un worker EXISTENTE (por su worker_id). " +
+        "Preferí esto antes que crear otro worker: el worker conserva todo su contexto/memoria.",
       inputSchema: {
-        worker_id: z.string().describe("El id del worker devuelto por spawn_worker."),
-        message: z.string().describe("El mensaje/corrección para el worker."),
+        worker_id: z.string().describe("El id del worker (de spawn_worker o list_workers)."),
+        message: z.string().describe("El mensaje/corrección/tarea nueva para el worker."),
       },
     },
     async ({ worker_id, message }) => {
@@ -72,6 +74,27 @@ if (ROLE === "router") {
         return ok(`Mensaje enviado a ${worker_id}.`);
       } catch (e) {
         return err(`Error enviando al worker: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_workers",
+    {
+      title: "Listar tus workers vivos",
+      description:
+        "Devuelve los workers que están VIVOS ahora (id, motor, nombre). Consultalo ANTES de crear uno " +
+        "nuevo: si ya tenés un worker adecuado, reutilizalo con send_to_worker en vez de spawnear otro.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const list = await post("/list_workers", { router: AGENT_ID });
+        if (!Array.isArray(list) || list.length === 0) return ok("No tenés workers vivos ahora mismo.");
+        const lines = list.map((w) => `- ${w.id} · ${w.name || w.engine} (${w.engine})`).join("\n");
+        return ok(`Workers vivos (${list.length}):\n${lines}`);
+      } catch (e) {
+        return err(`Error listando workers: ${e.message}`);
       }
     }
   );

@@ -168,6 +168,7 @@ function App() {
     let un2: (() => void) | undefined;
     let un3: (() => void) | undefined;
     let un4: (() => void) | undefined;
+    let un5: (() => void) | undefined;
     (async () => {
       // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
       un = await listen<AgentLaunch & { title: string; router: string }>("spawn-agent", (e) => {
@@ -178,6 +179,8 @@ function App() {
           if (s.terms.length >= MAX_TILES) return s;
           return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
         }));
+        // registrar en el roster del hub (para list_workers)
+        invoke("register_worker", { id: t.id, engine: e.payload.engine, name: e.payload.title, routerId: routerAgentId, cwd: e.payload.cwd }).catch(() => {});
       });
       // session-id capturado de codex/opencode → completar el tile (para persistir), en cualquier sesión.
       un2 = await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {
@@ -206,8 +209,12 @@ function App() {
           } catch { /* no repo */ }
         }, 400);
       });
+      // un PTY murió → sacar ese worker del roster (list_workers refleja solo vivos).
+      un5 = await listen<string>("pty-exit", (e) => {
+        invoke("unregister_worker", { id: e.payload }).catch(() => {});
+      });
     })();
-    return () => { un?.(); un2?.(); un3?.(); un4?.(); };
+    return () => { un?.(); un2?.(); un3?.(); un4?.(); un5?.(); };
   }, []);
 
   // Limpiar la actividad del tile que se enfoca (en la sesión actual).
@@ -268,6 +275,7 @@ function App() {
         const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
         wt.name = t.name; wt.color = t.color; // conservar nombre/color del perfil
         next.push(wt);
+        invoke("register_worker", { id: w.agentId, engine: t.engine || "claude", name: t.name || t.title, routerId: rId || "router", cwd: meta.folder }).catch(() => {});
       } catch { /* worker que no resume, lo salteamos */ }
     }
     // tiles de archivo/navegador: recrear sin lanzar procesos
@@ -418,6 +426,7 @@ function App() {
       const t = tileFromLaunch(l, "worker", profile.name);
       t.name = profile.name; t.color = profile.color;
       updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
+      invoke("register_worker", { id: l.agentId, engine: profile.engine, name: profile.name, routerId: cur.routerId, cwd: cur.meta.folder }).catch(() => {});
     } catch { /* error de lanzamiento */ }
   }, [updateCurrent]);
 
@@ -435,6 +444,7 @@ function App() {
     if (!cur) return;
     const t = cur.terms.find((x) => x.id === id);
     if (!t || t.role === "router") return;
+    if (t.sessionId || t.name) invoke("unregister_worker", { id }).catch(() => {}); // sacar del roster si era agente
     updateCurrent((s) => {
       if (s.activeId !== id) return s;
       const idx = s.terms.findIndex((x) => x.id === id);

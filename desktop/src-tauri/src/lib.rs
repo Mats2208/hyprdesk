@@ -351,6 +351,20 @@ fn spawn_profile_worker(
     })
 }
 
+// ---- roster de workers (para list_workers: el router ve a quién puede reutilizar) ----
+#[tauri::command]
+fn register_worker(state: State<'_, ControlState>, id: String, engine: String, name: String, router_id: String, cwd: String) {
+    state.workers.lock().unwrap().insert(
+        id.clone(),
+        control::WorkerInfo { id, engine, name, router_id, cwd },
+    );
+}
+
+#[tauri::command]
+fn unregister_worker(state: State<'_, ControlState>, id: String) {
+    state.workers.lock().unwrap().remove(&id);
+}
+
 // ---- workspaces ----
 #[tauri::command]
 fn list_workspaces() -> Vec<workspace::WorkspaceMeta> {
@@ -518,7 +532,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
-            router_launch, worker_launch, spawn_profile_worker,
+            router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,

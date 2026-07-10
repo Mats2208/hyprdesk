@@ -2,6 +2,7 @@
 //   POST /spawn_worker {prompt}  → crea un worker-tile vivo (emite "spawn-agent"), devuelve {workerId}
 //   POST /message {to, from, text} → rutea el mensaje inyectándolo en el PTY del destino (pty_write)
 // Cada agente (router / worker) corre un claude interactivo con este MCP conectado.
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -10,11 +11,23 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 use tiny_http::{Header, Method, Response, Server};
 
+// Info de un worker vivo (roster que el router consulta con list_workers para reutilizar en vez de crear).
+#[derive(Clone, Serialize)]
+pub struct WorkerInfo {
+    pub id: String,
+    pub engine: String,
+    pub name: String,
+    #[serde(rename = "routerId")]
+    pub router_id: String,
+    pub cwd: String,
+}
+
 #[derive(Clone)]
 pub struct ControlState {
     pub port: u16,
     pub router_id: Arc<Mutex<Option<String>>>,
     pub active_cwd: Arc<Mutex<Option<String>>>, // carpeta del workspace abierto
+    pub workers: Arc<Mutex<HashMap<String, WorkerInfo>>>, // workers vivos (para list_workers)
 }
 
 #[derive(Serialize, Clone)]
@@ -61,19 +74,22 @@ pub fn start(app: AppHandle) -> ControlState {
         .expect("el control server no expuso puerto IP");
     let router_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let active_cwd: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let workers: Arc<Mutex<HashMap<String, WorkerInfo>>> = Arc::new(Mutex::new(HashMap::new()));
 
     let router_id_srv = router_id.clone();
     let active_cwd_srv = active_cwd.clone();
+    let workers_srv = workers.clone();
     thread::spawn(move || {
         for req in server.incoming_requests() {
             let app = app.clone();
             let router_id = router_id_srv.clone();
             let active_cwd = active_cwd_srv.clone();
-            thread::spawn(move || handle_request(req, app, port, router_id, active_cwd));
+            let workers = workers_srv.clone();
+            thread::spawn(move || handle_request(req, app, port, router_id, active_cwd, workers));
         }
     });
 
-    ControlState { port, router_id, active_cwd }
+    ControlState { port, router_id, active_cwd, workers }
 }
 
 fn read_body(req: &mut tiny_http::Request) -> String {
@@ -93,6 +109,7 @@ fn handle_request(
     port: u16,
     router_id: Arc<Mutex<Option<String>>>,
     active_cwd: Arc<Mutex<Option<String>>>,
+    workers: Arc<Mutex<HashMap<String, WorkerInfo>>>,
 ) {
     let url = req.url().to_string();
     if req.method() != &Method::Post {
@@ -101,6 +118,21 @@ fn handle_request(
     }
 
     match url.as_str() {
+        "/list_workers" => {
+            let body = read_body(&mut req);
+            let router = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("router").and_then(|r| r.as_str()).map(String::from))
+                .unwrap_or_default();
+            let list: Vec<WorkerInfo> = workers
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|w| router.is_empty() || w.router_id == router)
+                .cloned()
+                .collect();
+            let _ = req.respond(json_response(serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())));
+        }
         "/spawn_worker" => {
             let body = read_body(&mut req);
             let parsed = match serde_json::from_str::<SpawnBody>(&body) {
