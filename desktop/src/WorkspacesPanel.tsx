@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { WorkspaceMeta } from "./WorkspaceManager";
 
 // Panel de workspaces en la sidebar: lista switcheable + crear/renombrar/eliminar inline.
@@ -46,6 +47,16 @@ export function WorkspacesPanel({
     reload();
   };
 
+  const openFolder = async () => {
+    try {
+      const picked = await open({ directory: true, multiple: false, title: "Abrir carpeta como workspace" });
+      if (!picked || typeof picked !== "string") return;
+      const m = await invoke<WorkspaceMeta>("link_workspace", { folder: picked });
+      reload();
+      onSwitch(m);
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar__head">Workspaces · {list.length}</div>
@@ -63,6 +74,7 @@ export function WorkspacesPanel({
               <button className="wsrow__open" onClick={() => onSwitch(w)}>
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
                 <span className="wsrow__name">{w.name}</span>
+                {w.managed === false && <span className="wsrow__ext" title={w.folder}>↗</span>}
               </button>
             )}
             {confirmId === w.id ? (
@@ -94,8 +106,11 @@ export function WorkspacesPanel({
           onKeyDown={(e) => { if (e.key === "Enter") create(); }}
           placeholder="Nuevo workspace…"
         />
-        <button onClick={create} disabled={!newName.trim()}>
+        <button onClick={create} disabled={!newName.trim()} title="Crear workspace">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+        </button>
+        <button onClick={openFolder} title="Abrir carpeta existente…">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
         </button>
       </div>
     </div>

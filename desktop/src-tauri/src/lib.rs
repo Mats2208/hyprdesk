@@ -325,6 +325,12 @@ fn create_workspace(name: String) -> Result<workspace::WorkspaceMeta, String> {
     workspace::create_workspace(&name)
 }
 
+// Enlaza una carpeta externa existente (proyecto real) como workspace, sin copiarla ni borrarla.
+#[tauri::command]
+fn link_workspace(folder: String, name: Option<String>) -> Result<workspace::WorkspaceMeta, String> {
+    workspace::link_workspace(&folder, name.as_deref())
+}
+
 #[tauri::command]
 fn load_workspace(folder: String) -> Option<String> {
     workspace::load_state(&folder)
@@ -378,6 +384,7 @@ fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::default())
         .manage(changes::WatchState::default())
         .manage(Mutex::new(System::new_all()))
@@ -390,7 +397,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch,
-            list_workspaces, create_workspace, load_workspace, save_workspace,
+            list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff

@@ -648,3 +648,17 @@ body {
 }
 .statusbar__preview:hover { background: rgba(192, 132, 252, 0.16); }
 .statusbar__preview-dot { width: 6px; height: 6px; border-radius: 50%; background: #c084fc; }
+
+/* ==================== ABRIR CARPETA EXTERNA (workspaces enlazados) ==================== */
+.wm__openfolder {
+  width: 100%; margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px; border-radius: 10px; border: 1px dashed var(--hairline-2); background: transparent;
+  color: var(--muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.wm__openfolder:hover { color: var(--text); border-color: var(--router); background: var(--router-soft); }
+.wm__ext {
+  margin-left: 8px; font: 600 9px/1 ui-monospace, monospace; letter-spacing: 0.04em;
+  color: #c084fc; background: rgba(192, 132, 252, 0.12); border: 1px solid rgba(192, 132, 252, 0.3);
+  padding: 2px 5px; border-radius: 4px; vertical-align: middle;
+}
+.wsrow__ext { flex: 0 0 auto; margin-left: 4px; font-size: 11px; color: #c084fc; }

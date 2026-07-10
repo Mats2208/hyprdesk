@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
-export type WorkspaceMeta = { id: string; name: string; folder: string; lastOpened: number };
+export type WorkspaceMeta = { id: string; name: string; folder: string; lastOpened: number; managed?: boolean };
 
 function ago(ms: number): string {
   if (!ms) return "";
@@ -42,6 +43,16 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
     }
   };
 
+  // Abre una carpeta EXTERNA existente (proyecto real) como workspace enlazado.
+  const openFolder = async () => {
+    try {
+      const picked = await open({ directory: true, multiple: false, title: "Abrir carpeta como workspace" });
+      if (!picked || typeof picked !== "string") return;
+      const meta = await invoke<WorkspaceMeta>("link_workspace", { folder: picked });
+      onOpen(meta);
+    } catch (e) { setError(String(e)); }
+  };
+
   const saveRename = async (id: string) => {
     const n = editName.trim();
     setEditingId(null);
@@ -77,6 +88,11 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
             </button>
           </div>
 
+          <button className="wm__openfolder" onClick={openFolder}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+            Abrir una carpeta existente…
+          </button>
+
           {list.length > 0 && (
             <div className="wm__list">
               {list.map((w) => (
@@ -95,7 +111,7 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
                     />
                   ) : (
                     <button className="wm__item-open" onClick={() => onOpen(w)}>
-                      <span className="wm__item-name">{w.name}</span>
+                      <span className="wm__item-name">{w.name}{w.managed === false && <span className="wm__ext" title={w.folder}>↗ externo</span>}</span>
                       <span className="wm__item-meta">{ago(w.lastOpened)}</span>
                     </button>
                   )}
