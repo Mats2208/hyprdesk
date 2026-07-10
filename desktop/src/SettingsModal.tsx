@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type Assistant = { engine: string; model?: string | null; effort?: string | null };
-type Settings = { assistant: Assistant; permissionMode?: string };
+type Settings = { assistant: Assistant; permissionMode?: string; zaiApiKey?: string | null };
 
 const ENGINES = [
   { id: "claude", label: "Claude Code" },
@@ -17,6 +17,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
   const [permission, setPermission] = useState("auto");
+  const [zaiKey, setZaiKey] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         setModel(s.assistant?.model ?? "");
         setEffort(s.assistant?.effort ?? "");
         setPermission(s.permissionMode === "ask" ? "ask" : "auto");
+        setZaiKey(s.zaiApiKey ?? "");
       })
       .catch(() => {});
   }, []);
@@ -40,6 +42,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     const settings: Settings = {
       assistant: { engine, model: model.trim() || null, effort: effort.trim() || null },
       permissionMode: permission,
+      zaiApiKey: zaiKey.trim() || null,
     };
     try {
       await invoke("save_settings", { settings });
@@ -100,6 +103,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               ? "Autónomo (bypass): los agentes editan y corren comandos sin pedir aprobación. Más rápido; ideal si confiás y querés que fluya solo."
               : "Preguntar: cada agente pide tu aprobación antes de editar o correr comandos. Más lento, pero podés revisar todo (claude: prompts · codex: on-request · opencode: ask)."}
           </div>
+        </div>
+
+        <div className="modal__section" style={{ borderTop: "1px solid var(--hairline)" }}>
+          <div className="modal__label">Cuota de GLM (z.ai)</div>
+          <div className="modal__hint">Pegá tu API key de z.ai para ver tu cuota (5h y semanal) en el header. Es el único proveedor que expone límites reales. Se guarda local en ~/HyprDesk/settings.json.</div>
+          <label className="modal__field">
+            <span>z.ai API key</span>
+            <input type="password" value={zaiKey} onChange={(e) => setZaiKey(e.target.value)} placeholder="dejá vacío para no mostrar" />
+          </label>
         </div>
         <div className="modal__foot">
           <button className="modal__save" onClick={save}>{saved ? "Guardado ✓" : "Guardar"}</button>

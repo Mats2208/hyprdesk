@@ -35,6 +35,9 @@ pub struct Settings {
     // "auto" (bypass, autónomo) | "ask" (los agentes piden aprobación antes de editar/correr comandos)
     #[serde(default = "default_permission", rename = "permissionMode")]
     pub permission_mode: String,
+    // API key de z.ai (GLM) para mostrar la cuota (5h/semanal) en el header. Opcional.
+    #[serde(default, rename = "zaiApiKey")]
+    pub zai_api_key: Option<String>,
 }
 
 // Helper para engines: ¿los agentes deben PEDIR aprobación? (modo "ask")
@@ -59,6 +62,63 @@ pub fn save_settings(settings: Settings) -> Result<(), String> {
     crate::workspace::ensure_root();
     let body = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     std::fs::write(settings_path(), body).map_err(|e| e.to_string())
+}
+
+// Cuota de GLM (z.ai): % usado del ciclo de 5h y de la semana. Vía el endpoint interno de z.ai
+// (Authorization sin "Bearer"). None si no hay API key o falla. Usamos curl (sin sumar deps).
+#[derive(Serialize, Default)]
+pub struct GlmUsage {
+    pub session: Option<f64>, // % del ciclo de 5h
+    pub weekly: Option<f64>,  // % de la semana
+}
+
+#[tauri::command]
+pub async fn glm_usage() -> Option<GlmUsage> {
+    let key = load_settings().zai_api_key?;
+    if key.trim().is_empty() {
+        return None;
+    }
+    tauri::async_runtime::spawn_blocking(move || fetch_glm(&key)).await.ok().flatten()
+}
+
+fn fetch_glm(key: &str) -> Option<GlmUsage> {
+    let out = std::process::Command::new("curl")
+        .args([
+            "-s", "--max-time", "8",
+            "-H", &format!("Authorization: {key}"),
+            "-H", "Accept-Language: en-US,en",
+            "-H", "Content-Type: application/json",
+            "https://api.z.ai/api/monitor/usage/quota/limit",
+        ])
+        .env("PATH", crate::user_path())
+        .output()
+        .ok()?;
+    let body = String::from_utf8_lossy(&out.stdout);
+    let v: Value = serde_json::from_str(&body).ok()?;
+    // `limits` puede estar en la raíz o bajo `data`.
+    let limits = v
+        .get("limits")
+        .or_else(|| v.get("data").and_then(|d| d.get("limits")))?
+        .as_array()?;
+    let mut u = GlmUsage::default();
+    for l in limits {
+        if l.get("type").and_then(|t| t.as_str()) != Some("TOKENS_LIMIT") {
+            continue;
+        }
+        let unit = l.get("unit").and_then(|x| x.as_f64());
+        let number = l.get("number").and_then(|x| x.as_f64());
+        let pct = l.get("percentage").and_then(|x| x.as_f64());
+        if unit == Some(3.0) && number == Some(5.0) {
+            u.session = pct; // 5 horas
+        } else if unit == Some(6.0) && number == Some(1.0) {
+            u.weekly = pct; // semanal
+        }
+    }
+    if u.session.is_none() && u.weekly.is_none() {
+        None
+    } else {
+        Some(u)
+    }
 }
 
 // Catálogo de modelos REALES por motor (para que el meta-agente no invente modelos inválidos).

@@ -106,6 +106,7 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [stats, setStats] = useState<SysStats | null>(null);
   const [branch, setBranch] = useState<string | null>(null);
+  const [glm, setGlm] = useState<{ session?: number | null; weekly?: number | null } | null>(null);
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -145,6 +146,15 @@ function App() {
     };
     tick();
     const iv = setInterval(tick, 2000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+
+  // ---- cuota de GLM/z.ai (si hay API key en Settings). Liviano: HTTP off-thread cada 3 min. ----
+  useEffect(() => {
+    let alive = true;
+    const tick = () => invoke<{ session?: number | null; weekly?: number | null } | null>("glm_usage").then((g) => { if (alive) setGlm(g); }).catch(() => {});
+    tick();
+    const iv = setInterval(tick, 180000);
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
@@ -713,6 +723,12 @@ function App() {
         <div className="titlebar__side">
           <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
           <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
+          {glm && (glm.session != null || glm.weekly != null) && (
+            <span className="stat stat--usage" title="Cuota de GLM (z.ai) — 5 horas / semanal">
+              <span className="stat__k">GLM</span>
+              <span className="stat__v">{glm.session != null ? `5h ${Math.round(glm.session)}%` : ""}{glm.session != null && glm.weekly != null ? " · " : ""}{glm.weekly != null ? `sem ${Math.round(glm.weekly)}%` : ""}</span>
+            </span>
+          )}
         </div>
         <div className="titlebar__title">
           <span className="titlebar__app">HyprDesk</span>
