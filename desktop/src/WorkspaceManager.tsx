@@ -68,38 +68,56 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
   };
 
   return (
-    <div className="shell">
-      <div className="wm">
-        <div className="wm__card">
-          <div className="wm__brand">HyprDesk</div>
-          <div className="wm__title">Workspaces</div>
-          <div className="wm__sub">Cada workspace es su propia carpeta con su router y sus workers.</div>
-
-          <div className="wm__new">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") create(); }}
-              placeholder="Nombre del nuevo workspace…"
-              disabled={creating}
-            />
-            <button className="wm__create" onClick={create} disabled={creating || !name.trim()}>
-              {creating ? "…" : "Crear"}
-            </button>
+    <div className="welcome">
+      <div className="welcome__inner">
+        <header className="welcome__hero">
+          <div className="welcome__logo">
+            <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+              <path d="M16 16L7 8M16 16L26 9M16 16L15 27" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+              <circle cx="16" cy="16" r="4.4" fill="currentColor" />
+              <circle cx="7" cy="8" r="2.6" fill="currentColor" />
+              <circle cx="26" cy="9" r="2.6" fill="currentColor" />
+              <circle cx="15" cy="27" r="2.6" fill="currentColor" />
+            </svg>
           </div>
+          <div>
+            <h1 className="welcome__name">HyprDesk</h1>
+            <p className="welcome__tag">Orquestá un equipo de agentes de IA de código, en tu escritorio.</p>
+          </div>
+        </header>
 
-          <button className="wm__openfolder" onClick={openFolder}>
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-            Abrir una carpeta existente…
-          </button>
+        <div className="welcome__cols">
+          <section className="welcome__col">
+            <h2 className="welcome__h">Empezar</h2>
+            <div className="welcome__new">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+                placeholder="Nombre del nuevo workspace…"
+                disabled={creating}
+              />
+              <button className="welcome__create" onClick={create} disabled={creating || !name.trim()}>
+                {creating ? "…" : "Crear"}
+              </button>
+            </div>
+            <button className="welcome__action" onClick={openFolder}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+              <span>Abrir una carpeta existente…</span>
+            </button>
+            <p className="welcome__note">Cada workspace es su propia carpeta con su router y sus workers.</p>
+            {error && <div className="welcome__error">{error}</div>}
+          </section>
 
-          {list.length > 0 && (
-            <div className="wm__list">
+          <section className="welcome__col">
+            <h2 className="welcome__h">Reciente</h2>
+            {list.length === 0 && <div className="welcome__empty">Todavía no tenés workspaces. Creá o abrí uno a la izquierda.</div>}
+            <div className="welcome__list">
               {list.map((w) => (
-                <div key={w.id} className="wm__item">
+                <div key={w.id} className="welcome__item">
                   {editingId === w.id ? (
                     <input
-                      className="wm__rename"
+                      className="welcome__rename"
                       autoFocus
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
@@ -110,30 +128,34 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
                       onBlur={() => saveRename(w.id)}
                     />
                   ) : (
-                    <button className="wm__item-open" onClick={() => onOpen(w)}>
-                      <span className="wm__item-name">{w.name}{w.managed === false && <span className="wm__ext" title={w.folder}>↗ externo</span>}</span>
-                      <span className="wm__item-meta">{ago(w.lastOpened)}</span>
+                    <button className="welcome__item-open" onClick={() => onOpen(w)} title={w.folder}>
+                      <span className="welcome__item-icon">
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4H6l1.5 1.5H12.5A1.5 1.5 0 0114 7v4.5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+                      </span>
+                      <span className="welcome__item-name">{w.name}</span>
+                      {w.managed === false && <span className="welcome__ext" title={w.folder}>externo</span>}
+                      <span className="welcome__item-meta">{ago(w.lastOpened)}</span>
                     </button>
                   )}
                   {confirmId === w.id ? (
-                    <span className="wm__item-actions wm__item-actions--show">
-                      <span className="wm__confirm-txt">¿Borrar?</span>
-                      <button className="wm__act wm__act--del" title="Confirmar"
+                    <span className="welcome__item-actions welcome__item-actions--show">
+                      <span className="welcome__confirm-txt">¿Borrar?</span>
+                      <button className="welcome__act welcome__act--del" title="Confirmar"
                         onClick={(e) => { e.stopPropagation(); remove(w.id); }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </button>
-                      <button className="wm__act" title="Cancelar"
+                      <button className="welcome__act" title="Cancelar"
                         onClick={(e) => { e.stopPropagation(); setConfirmId(null); }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                       </button>
                     </span>
                   ) : (
-                    <span className="wm__item-actions">
-                      <button className="wm__act" title="Renombrar"
+                    <span className="welcome__item-actions">
+                      <button className="welcome__act" title="Renombrar"
                         onClick={(e) => { e.stopPropagation(); setEditingId(w.id); setEditName(w.name); }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
                       </button>
-                      <button className="wm__act wm__act--del" title="Eliminar"
+                      <button className="welcome__act welcome__act--del" title="Eliminar"
                         onClick={(e) => { e.stopPropagation(); setConfirmId(w.id); }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </button>
@@ -142,9 +164,7 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
                 </div>
               ))}
             </div>
-          )}
-          {list.length === 0 && <div className="wm__empty">Todavía no tenés workspaces. Creá el primero ↑</div>}
-          {error && <div className="wm__error">{error}</div>}
+          </section>
         </div>
       </div>
     </div>
