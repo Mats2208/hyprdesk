@@ -136,3 +136,74 @@ pub fn git_diff(cwd: String, path: String) -> GitDiff {
     let old = git(&cwd, &["show", &format!("HEAD:{path}")]).unwrap_or_default();
     GitDiff { old, new }
 }
+
+// ---- Source Control (acciones git) ----
+
+// Como git() pero devuelve el ERROR (stderr) en fallo — para reportarlo en la UI.
+fn git_run(cwd: &str, args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .env("PATH", crate::user_path())
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    if out.status.success() {
+        Ok(if stdout.trim().is_empty() { stderr } else { stdout })
+    } else {
+        Err(if stderr.trim().is_empty() { stdout } else { stderr })
+    }
+}
+
+// Stage de TODO + commit con el mensaje dado.
+#[tauri::command]
+pub fn git_commit(cwd: String, message: String) -> Result<String, String> {
+    git_run(&cwd, &["add", "-A"])?;
+    git_run(&cwd, &["commit", "-m", &message]).map_err(|e| {
+        if e.contains("nothing to commit") { "No hay cambios para commitear.".into() } else { e }
+    })
+}
+
+#[tauri::command]
+pub fn git_push(cwd: String) -> Result<String, String> { git_run(&cwd, &["push"]) }
+
+#[tauri::command]
+pub fn git_pull(cwd: String) -> Result<String, String> { git_run(&cwd, &["pull", "--no-edit"]) }
+
+// Ramas locales del repo.
+#[tauri::command]
+pub fn git_branches(cwd: String) -> Vec<String> {
+    git(&cwd, &["branch", "--format=%(refname:short)"])
+        .map(|s| s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn git_checkout(cwd: String, branch: String) -> Result<String, String> {
+    git_run(&cwd, &["checkout", &branch])
+}
+
+// Mergea `branch` en la rama actual (no-ff, sin editor).
+#[tauri::command]
+pub fn git_merge_branch(cwd: String, branch: String) -> Result<String, String> {
+    git_run(&cwd, &["merge", "--no-edit", "--no-ff", &branch])
+}
+
+#[derive(serde::Serialize)]
+pub struct SyncState { pub branch: Option<String>, pub ahead: u32, pub behind: u32, pub upstream: bool }
+
+// Rama actual + commits ahead/behind respecto del upstream (para los badges de push/pull).
+#[tauri::command]
+pub fn git_sync_state(cwd: String) -> SyncState {
+    let branch = git_branch(cwd.clone());
+    match git(&cwd, &["rev-list", "--left-right", "--count", "@{u}...HEAD"]) {
+        Some(s) => {
+            let mut it = s.split_whitespace();
+            let behind = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+            let ahead = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+            SyncState { branch, ahead, behind, upstream: true }
+        }
+        None => SyncState { branch, ahead: 0, behind: 0, upstream: false },
+    }
+}
