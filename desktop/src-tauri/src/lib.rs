@@ -164,17 +164,49 @@ fn pty_spawn(
         PtySession { master: pair.master, writer, child },
     );
 
-    // Hilo lector: bloquea leyendo del PTY y emite cada chunk al frontend.
-    let app2 = app.clone();
-    let id2 = id.clone();
+    // Lector → canal → flusher. El lector bloquea leyendo del PTY y manda los chunks por un canal;
+    // el flusher los JUNTA en una ventana de ~25ms (o al llegar a 32KB) y emite un solo "pty-output".
+    // Con varios agentes streaming a la vez esto baja muchísimo la cantidad de eventos IPC (evita
+    // saturar el main thread del webview → sin cuelgues).
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
             match reader.read(&mut buf) {
-                Ok(0) | Err(_) => break, // EOF o error => el proceso terminó
+                Ok(0) | Err(_) => break, // EOF o error => el proceso terminó (se cierra el canal)
                 Ok(n) => {
-                    let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                    let _ = app2.emit("pty-output", OutputPayload { id: id2.clone(), data });
+                    if tx.send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    let app2 = app.clone();
+    let id2 = id.clone();
+    std::thread::spawn(move || {
+        use std::sync::mpsc::RecvTimeoutError;
+        let mut acc: Vec<u8> = Vec::new();
+        let flush = |acc: &mut Vec<u8>| {
+            if acc.is_empty() {
+                return;
+            }
+            let data = base64::engine::general_purpose::STANDARD.encode(&acc);
+            let _ = app2.emit("pty-output", OutputPayload { id: id2.clone(), data });
+            acc.clear();
+        };
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(25)) {
+                Ok(chunk) => {
+                    acc.extend_from_slice(&chunk);
+                    if acc.len() >= 32 * 1024 {
+                        flush(&mut acc);
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => flush(&mut acc),
+                Err(RecvTimeoutError::Disconnected) => {
+                    flush(&mut acc);
+                    break;
                 }
             }
         }
