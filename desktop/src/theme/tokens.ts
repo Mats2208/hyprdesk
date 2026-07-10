@@ -7,14 +7,15 @@ const isLight = () => document.documentElement.getAttribute("data-theme") === "l
 
 // Paletas ANSI: en claro los tonos son más oscuros para leerse sobre fondo claro.
 const DARK_ANSI = {
-  black: "#18181b", brightBlack: "#52525b", green: "#34d399", brightGreen: "#6ee7b7",
-  blue: "#60a5fa", cyan: "#22d3ee", yellow: "#fbbf24", red: "#f87171",
-  magenta: "#c084fc", white: "#d4d4d8", brightWhite: "#fafafa",
+  // Paleta del terminal integrado de VS Code (Dark Modern) — sobria, no neón.
+  black: "#000000", brightBlack: "#666666", green: "#0dbc79", brightGreen: "#23d18b",
+  blue: "#2472c8", cyan: "#11a8cd", yellow: "#e5e510", red: "#cd3131",
+  magenta: "#bc3fbc", white: "#e5e5e5", brightWhite: "#ffffff",
 };
 const LIGHT_ANSI = {
-  black: "#1c1c1f", brightBlack: "#6b6b73", green: "#0ea56f", brightGreen: "#0b8a5c",
-  blue: "#2563eb", cyan: "#0891b2", yellow: "#b45309", red: "#dc2626",
-  magenta: "#9333ea", white: "#3f3f46", brightWhite: "#18181b",
+  black: "#000000", brightBlack: "#666666", green: "#00bc00", brightGreen: "#14ce14",
+  blue: "#0451a5", cyan: "#0598bc", yellow: "#949800", red: "#cd3131",
+  magenta: "#bc05bc", white: "#555555", brightWhite: "#a5a5a5",
 };
 
 export const monoFont = () => cssVar("--font-mono", 'ui-monospace, "SF Mono", monospace');
