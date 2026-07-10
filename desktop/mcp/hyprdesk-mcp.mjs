@@ -79,6 +79,31 @@ if (ROLE === "router") {
   );
 
   server.registerTool(
+    "merge_worker",
+    {
+      title: "Mergear la rama de un worker a la principal",
+      description:
+        "Si el workspace es un repo git, cada worker trabaja en su propia rama/worktree aislada. Cuando " +
+        "un worker terminó y su trabajo está bien, llamá a esta tool para INTEGRAR su rama a la rama " +
+        "principal del workspace. Devuelve si mergeó o si hubo conflictos (con la lista de archivos). " +
+        "Avisale al usuario qué mergeaste.",
+      inputSchema: {
+        worker_id: z.string().describe("El id del worker cuya rama querés integrar."),
+      },
+    },
+    async ({ worker_id }) => {
+      try {
+        const r = await post("/merge_worker", { worker_id });
+        if (r.ok) return ok(`Rama ${r.branch} mergeada a la principal. ✅`);
+        if (r.conflicts) return ok(`Conflicto al mergear ${r.branch}. Archivos: ${r.conflicts.join(", ")}. El merge se abortó; hay que resolverlo a mano.`);
+        return err(r.error || "no se pudo mergear");
+      } catch (e) {
+        return err(`Error mergeando: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
     "list_workers",
     {
       title: "Listar tus workers vivos",

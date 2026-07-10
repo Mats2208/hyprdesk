@@ -768,3 +768,43 @@ body {
 }
 .modal__ghost:hover { color: var(--text); border-color: var(--hairline-2); }
 .modal__save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ==================== WORKTREES (aislamiento por ramas) ==================== */
+.tile__branch {
+  display: inline-flex; align-items: center; gap: 4px; font: 500 10px ui-monospace, "SF Mono", monospace;
+  color: #c084fc; background: rgba(192, 132, 252, 0.1); border: 1px solid rgba(192, 132, 252, 0.28);
+  padding: 2px 6px; border-radius: 5px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tctl--merge:hover { color: #c084fc; background: rgba(192, 132, 252, 0.14); }
+
+/* aviso de onboarding de worktrees */
+.wtnotice {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: rgba(192, 132, 252, 0.08); border-bottom: 1px solid rgba(192, 132, 252, 0.22);
+  color: var(--muted); font-size: 12px; line-height: 1.4;
+}
+.wtnotice > svg { flex: 0 0 auto; color: #c084fc; }
+.wtnotice span { flex: 1; }
+.wtnotice b { color: var(--text); font-weight: 600; }
+.wtnotice code { font-family: ui-monospace, monospace; color: #c084fc; }
+.wtnotice button {
+  flex: 0 0 auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
+  border: none; background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+}
+.wtnotice button:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+
+/* chip de ramas en la statusbar */
+.statusbar__branches {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; padding: 2px 8px;
+  border: 1px solid rgba(192, 132, 252, 0.3); border-radius: 20px; background: rgba(192, 132, 252, 0.08);
+  color: #c084fc; font-size: 11px;
+}
+
+/* toast (merge, avisos) */
+.toast {
+  position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%); z-index: 300; max-width: 70vw;
+  padding: 10px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--hairline-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); color: var(--text); font-size: 12.5px; cursor: pointer;
+  animation: toast-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }

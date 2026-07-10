@@ -29,14 +29,16 @@ type Props = {
   captureEngine?: string; // motor cuyo session-id hay que capturar (codex/opencode)
   hasActivity?: boolean; // recibió un mensaje del túnel y no está enfocado (parpadeo)
   color?: string; // color propio del agente (de un perfil)
+  branch?: string; // rama del worktree (repos git)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
+  onMerge?: (id: string) => void; // mergear la rama del worker a la principal
   onDetectUrl?: (url: string) => void; // detecta localhost:PORT en la salida → preview
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, onFocus, onClose, onToggleMax, onDetectUrl,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, branch, onFocus, onClose, onToggleMax, onMerge, onDetectUrl,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -175,9 +177,19 @@ export function TerminalTile({
         </span>
         {isRouter && <span className="tile__badge">PRINCIPAL</span>}
         <span className="tile__title">{title}</span>
-        <span className="tile__path">~/PROYECTOS/a2a</span>
+        {branch && (
+          <span className="tile__branch" title={`rama aislada · ${branch}`}>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.5v5M5.5 4h3a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+            {branch.replace(/^hyprdesk\//, "")}
+          </span>
+        )}
         {exited && <span className="tile__exited">exited</span>}
         <span className="tile__controls">
+          {branch && onMerge && (
+            <button className="tctl tctl--merge" title={`Merge ${branch} → rama principal`} onClick={(e) => { e.stopPropagation(); onMerge(id); }}>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="12" r="1.6" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.6v.4a4 4 0 004 4h2.4M4 10.4V5.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+            </button>
+          )}
           <button
             className="tctl"
             title={maximized ? "Restaurar" : "Maximizar"}

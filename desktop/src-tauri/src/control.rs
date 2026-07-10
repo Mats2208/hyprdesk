@@ -19,7 +19,10 @@ pub struct WorkerInfo {
     pub name: String,
     #[serde(rename = "routerId")]
     pub router_id: String,
-    pub cwd: String,
+    pub cwd: String, // cwd del agente (el worktree si aplica)
+    #[serde(rename = "wsRoot")]
+    pub ws_root: String, // carpeta del workspace (para el merge)
+    pub branch: Option<String>, // rama del worktree, si el ws es git
 }
 
 #[derive(Clone)]
@@ -45,6 +48,7 @@ struct SpawnAgentEvent {
     capture: bool,
     #[serde(rename = "sessionId")]
     session_id: Option<String>,
+    branch: Option<String>, // rama del worktree (para el badge)
 }
 
 #[derive(Deserialize)]
@@ -133,6 +137,26 @@ fn handle_request(
                 .collect();
             let _ = req.respond(json_response(serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())));
         }
+        "/merge_worker" => {
+            let body = read_body(&mut req);
+            let wid = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("worker_id").and_then(|r| r.as_str()).map(String::from))
+                .unwrap_or_default();
+            let info = workers.lock().unwrap().get(&wid).cloned();
+            let result = match info {
+                Some(w) if w.branch.is_some() => {
+                    let branch = w.branch.clone().unwrap();
+                    match crate::worktree::merge(&w.ws_root, &w.cwd, &branch) {
+                        Ok(_) => json!({ "ok": true, "branch": branch }),
+                        Err(conflicts) => json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
+                    }
+                }
+                _ => json!({ "ok": false, "error": "el worker no tiene worktree" }),
+            };
+            let _ = app.emit("merge-result", result.clone());
+            let _ = req.respond(json_response(result.to_string()));
+        }
         "/spawn_worker" => {
             let body = read_body(&mut req);
             let parsed = match serde_json::from_str::<SpawnBody>(&body) {
@@ -147,19 +171,29 @@ fn handle_request(
             let router = parsed.router.clone().unwrap_or_else(|| {
                 router_id.lock().unwrap().clone().unwrap_or_else(|| "router".into())
             });
-            let cwd = parsed
+            let ws_root = parsed
                 .cwd
                 .clone()
                 .filter(|c| !c.is_empty())
                 .or_else(|| active_cwd.lock().unwrap().clone())
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
+            // Si el ws es git → worker en su propio worktree/rama (aislamiento). Si no → comparte carpeta.
+            let (cwd, branch) = match crate::worktree::create(&ws_root, &worker_id) {
+                Some(wt) => (wt.path, Some(wt.branch)),
+                None => (ws_root.clone(), None),
+            };
+            let title = format!("worker · {engine}");
             match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &crate::engines::AgentOpts::default()) {
                 Ok(spec) => {
+                    workers.lock().unwrap().insert(worker_id.clone(), WorkerInfo {
+                        id: worker_id.clone(), engine: engine.clone(), name: title.clone(),
+                        router_id: router.clone(), cwd: cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
+                    });
                     let _ = app.emit(
                         "spawn-agent",
                         SpawnAgentEvent {
                             agent_id: worker_id.clone(),
-                            title: format!("worker · {engine}"),
+                            title,
                             engine,
                             router,
                             cwd,
@@ -168,6 +202,7 @@ fn handle_request(
                             inject_task: spec.inject_task,
                             capture: spec.capture,
                             session_id: spec.session_id,
+                            branch,
                         },
                     );
                     let _ = req.respond(json_response(json!({ "workerId": worker_id }).to_string()));

@@ -16,6 +16,7 @@ mod fsops;
 mod settings;
 mod usage;
 mod workspace;
+mod worktree;
 
 use base64::Engine;
 use control::ControlState;
@@ -266,6 +267,8 @@ struct AgentLaunch {
     #[serde(rename = "sessionId")]
     session_id: Option<String>,
     cwd: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    branch: Option<String>, // rama del worktree, si aplica
 }
 
 // Lanza el agente-router (claude/codex/opencode) interactivo con el MCP hyprdesk, en la
@@ -291,6 +294,7 @@ fn router_launch(
         capture: spec.capture,
         session_id: spec.session_id,
         cwd,
+        branch: None,
     })
 }
 
@@ -305,6 +309,11 @@ fn worker_launch(
     router_id: String,
 ) -> Result<AgentLaunch, String> {
     let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None, &engines::AgentOpts::default())?;
+    // registrar en el roster (restore = sin worktree nuevo; sigue en la carpeta del ws)
+    state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
+        id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
+        router_id: router_id.clone(), cwd: cwd.clone(), ws_root: cwd.clone(), branch: None,
+    });
     Ok(AgentLaunch {
         agent_id,
         engine,
@@ -314,6 +323,7 @@ fn worker_launch(
         capture: spec.capture,
         session_id: spec.session_id,
         cwd,
+        branch: None,
     })
 }
 
@@ -336,9 +346,19 @@ fn spawn_profile_worker(
         effort: effort.as_deref(),
         persona: persona.as_deref(),
     };
+    // ws git → worktree/rama aislada; si no → comparte la carpeta.
+    let ws_root = cwd.clone();
+    let (agent_cwd, branch) = match worktree::create(&ws_root, &agent_id) {
+        Some(wt) => (wt.path, Some(wt.branch)),
+        None => (ws_root.clone(), None),
+    };
     let spec = engines::build_agent(
-        &engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), None, task.as_deref(), &opts,
+        &engine, state.port, &agent_id, "worker", &agent_cwd, Some(&router_id), None, task.as_deref(), &opts,
     )?;
+    state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
+        id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
+        router_id: router_id.clone(), cwd: agent_cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
+    });
     Ok(AgentLaunch {
         agent_id,
         engine,
@@ -347,7 +367,8 @@ fn spawn_profile_worker(
         inject_task: spec.inject_task,
         capture: spec.capture,
         session_id: spec.session_id,
-        cwd,
+        cwd: agent_cwd,
+        branch,
     })
 }
 
@@ -356,13 +377,36 @@ fn spawn_profile_worker(
 fn register_worker(state: State<'_, ControlState>, id: String, engine: String, name: String, router_id: String, cwd: String) {
     state.workers.lock().unwrap().insert(
         id.clone(),
-        control::WorkerInfo { id, engine, name, router_id, cwd },
+        control::WorkerInfo { id, engine, name, router_id, cwd: cwd.clone(), ws_root: cwd, branch: None },
     );
 }
 
 #[tauri::command]
 fn unregister_worker(state: State<'_, ControlState>, id: String) {
-    state.workers.lock().unwrap().remove(&id);
+    let info = state.workers.lock().unwrap().remove(&id);
+    // si el worker tenía worktree, lo limpiamos (descarta lo no mergeado — el usuario fue avisado).
+    if let Some(w) = info {
+        if w.branch.is_some() {
+            worktree::remove(&w.ws_root, &w.cwd);
+        }
+    }
+}
+
+// Mergea la rama del worker (su worktree) a la rama principal del workspace. Lo llama el router
+// (vía MCP) o el usuario (botón). Devuelve {ok} o {ok:false, conflicts:[...]}.
+// (no emitimos "merge-result" acá: el front recibe el resultado por el return; el evento "merge-result"
+//  es solo para los merges disparados por el ROUTER vía el control server.)
+#[tauri::command]
+fn merge_worker(state: State<'_, ControlState>, id: String) -> serde_json::Value {
+    let info = state.workers.lock().unwrap().get(&id).cloned();
+    let (ws_root, wt, branch) = match info {
+        Some(w) if w.branch.is_some() => (w.ws_root, w.cwd, w.branch.unwrap()),
+        _ => return serde_json::json!({ "ok": false, "error": "el worker no tiene worktree (workspace no-git o restaurado)" }),
+    };
+    match worktree::merge(&ws_root, &wt, &branch) {
+        Ok(_) => serde_json::json!({ "ok": true, "branch": branch }),
+        Err(conflicts) => serde_json::json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
+    }
 }
 
 // ---- workspaces ----
@@ -532,7 +576,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
-            router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker,
+            router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,

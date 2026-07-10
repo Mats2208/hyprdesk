@@ -24,6 +24,7 @@ type Term = {
   argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
   kind?: TileKind; filePath?: string; url?: string; diff?: { old: string; new: string }; // tiles no-terminal
   name?: string; color?: string; // agente de un perfil (nombre + color propios)
+  branch?: string; // rama del worktree (repos git)
 };
 // Perfil de agente (por-workspace): describís → un meta-agente lo genera → lo lanzás.
 export type Profile = {
@@ -32,7 +33,7 @@ export type Profile = {
 };
 type AgentLaunch = {
   agentId: string; engine: string; argv: string[]; env: [string, string][];
-  injectTask: string | null; capture: boolean; sessionId: string | null; cwd: string;
+  injectTask: string | null; capture: boolean; sessionId: string | null; cwd: string; branch?: string | null;
 };
 type Rect = { x: number; y: number; w: number; h: number };
 type SysStats = { cpu: number; mem_used: number; mem_total: number };
@@ -60,6 +61,7 @@ function tileFromLaunch(l: AgentLaunch, role: Role, title: string): Term {
     id: l.agentId, title, role, engine: l.engine,
     sessionId: l.sessionId ?? undefined, argv: l.argv, cwd: l.cwd, env: l.env,
     injectTask: l.injectTask ?? undefined, captureEngine: l.capture ? l.engine : undefined,
+    branch: l.branch ?? undefined,
   };
 }
 
@@ -111,6 +113,8 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [wtNoticeDismissed, setWtNoticeDismissed] = useState(() => localStorage.getItem("hd-wt-notice") === "1");
   const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
   const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
   const gitTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -169,6 +173,7 @@ function App() {
     let un3: (() => void) | undefined;
     let un4: (() => void) | undefined;
     let un5: (() => void) | undefined;
+    let un6: (() => void) | undefined;
     (async () => {
       // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
       un = await listen<AgentLaunch & { title: string; router: string }>("spawn-agent", (e) => {
@@ -179,8 +184,6 @@ function App() {
           if (s.terms.length >= MAX_TILES) return s;
           return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
         }));
-        // registrar en el roster del hub (para list_workers)
-        invoke("register_worker", { id: t.id, engine: e.payload.engine, name: e.payload.title, routerId: routerAgentId, cwd: e.payload.cwd }).catch(() => {});
       });
       // session-id capturado de codex/opencode → completar el tile (para persistir), en cualquier sesión.
       un2 = await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {
@@ -213,9 +216,22 @@ function App() {
       un5 = await listen<string>("pty-exit", (e) => {
         invoke("unregister_worker", { id: e.payload }).catch(() => {});
       });
+      // el router mergeó una rama de worker → avisar por toast.
+      un6 = await listen<{ ok: boolean; branch?: string; conflicts?: string[] }>("merge-result", (e) => {
+        const r = e.payload;
+        if (r.ok) setToast(`✅ El router integró ${r.branch} a la rama principal`);
+        else if (r.conflicts?.length) setToast(`⚠️ Conflicto al mergear ${r.branch}: ${r.conflicts.join(", ")}`);
+      });
     })();
-    return () => { un?.(); un2?.(); un3?.(); un4?.(); un5?.(); };
+    return () => { un?.(); un2?.(); un3?.(); un4?.(); un5?.(); un6?.(); };
   }, []);
+
+  // auto-cerrar el toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Limpiar la actividad del tile que se enfoca (en la sesión actual).
   useEffect(() => {
@@ -275,7 +291,6 @@ function App() {
         const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
         wt.name = t.name; wt.color = t.color; // conservar nombre/color del perfil
         next.push(wt);
-        invoke("register_worker", { id: w.agentId, engine: t.engine || "claude", name: t.name || t.title, routerId: rId || "router", cwd: meta.folder }).catch(() => {});
       } catch { /* worker que no resume, lo salteamos */ }
     }
     // tiles de archivo/navegador: recrear sin lanzar procesos
@@ -414,6 +429,16 @@ function App() {
     updateCurrent((s) => ({ ...s, profiles: s.profiles.filter((p) => p.id !== id) }));
   }, [updateCurrent]);
 
+  // Mergea la rama (worktree) de un worker a la rama principal del workspace.
+  const mergeWorker = useCallback(async (id: string) => {
+    try {
+      const r = await invoke<{ ok: boolean; branch?: string; conflicts?: string[]; error?: string }>("merge_worker", { id });
+      if (r.ok) setToast(`✅ Rama ${r.branch} mergeada a la principal`);
+      else if (r.conflicts?.length) setToast(`⚠️ Conflicto al mergear ${r.branch}: ${r.conflicts.join(", ")} — se abortó, resolvé a mano`);
+      else setToast(r.error || "No se pudo mergear");
+    } catch (e) { setToast("Error mergeando: " + String(e)); }
+  }, []);
+
   // Lanza un worker desde un perfil (reporta al router actual del workspace).
   const launchProfile = useCallback(async (profile: Profile, task?: string) => {
     const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
@@ -426,7 +451,6 @@ function App() {
       const t = tileFromLaunch(l, "worker", profile.name);
       t.name = profile.name; t.color = profile.color;
       updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
-      invoke("register_worker", { id: l.agentId, engine: profile.engine, name: profile.name, routerId: cur.routerId, cwd: cur.meta.folder }).catch(() => {});
     } catch { /* error de lanzamiento */ }
   }, [updateCurrent]);
 
@@ -621,9 +645,11 @@ function App() {
                 captureEngine={t.captureEngine}
                 hasActivity={activity.includes(t.id)}
                 color={t.color}
+                branch={t.branch}
                 onFocus={setActive}
                 onClose={closeTerminal}
                 onToggleMax={toggleMax}
+                onMerge={mergeWorker}
                 onDetectUrl={(url) => addPreview(s.meta.folder, url)}
               />
             )}
@@ -676,6 +702,7 @@ function App() {
   const curChanges = current ? changesByWs[current.meta.folder] : undefined;
   const changeCount = curChanges ? (curChanges.git.length || curChanges.watched.length) : 0;
   const curPreviews = current ? previewsByWs[current.meta.folder] ?? [] : [];
+  const branchCount = current ? current.terms.filter((t) => t.branch).length : 0;
   const commands: Command[] = [
     { id: "new-term", label: "Nueva terminal manual", hint: "⌘T", run: addTerminal },
     { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (current?.activeId) closeTerminal(current.activeId); } },
@@ -726,6 +753,16 @@ function App() {
           </div>
         ))}
       </div>
+
+      {branchCount > 0 && !wtNoticeDismissed && (
+        <div className="wtnotice">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.6" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.6v4.8M5.6 4h3.2a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+          <span><b>Aislamiento por worktrees activado.</b> Cada worker trabaja en su propia rama <code>hyprdesk/…</code> para no pisarse. Sus cambios NO están en la rama principal hasta que el router (o vos, con el botón ⑂ del tile) los mergea. Mergeá antes de cerrar un worker o se descarta su trabajo.</span>
+          <button onClick={() => { localStorage.setItem("hd-wt-notice", "1"); setWtNoticeDismissed(true); }} title="Entendido">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+      )}
 
       <div className="ide__body">
         <div className="activitybar">
@@ -785,6 +822,12 @@ function App() {
               <span className="statusbar__changes-dot" /> {changeCount} cambio{changeCount !== 1 ? "s" : ""}
             </button>
           )}
+          {branchCount > 0 && (
+            <span className="statusbar__branches" title="workers en ramas aisladas (worktrees)">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.5v5M5.5 4h3a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+              {branchCount} rama{branchCount !== 1 ? "s" : ""}
+            </span>
+          )}
           {curPreviews.slice(0, 3).map((u) => {
             let port = ""; try { port = new URL(u).port || new URL(u).host; } catch { port = u; }
             return (
@@ -798,6 +841,7 @@ function App() {
         <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>
       </div>
 
+      {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {createAgentOpen && (
