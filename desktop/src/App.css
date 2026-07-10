@@ -1003,3 +1003,45 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 .providers__del:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
 .providers__add { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 7px 12px; border-radius: 8px; border: 1px dashed var(--hairline-2); background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; transition: all 0.15s; }
 .providers__add:hover { color: var(--router); border-color: var(--router); }
+
+/* ==================== ONBOARDING / BIENVENIDA ==================== */
+.wel__overlay { z-index: 250; }
+.wel {
+  width: 520px; max-width: calc(100vw - 40px); padding: 26px 30px 20px;
+  background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); animation: modal-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.wel__dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 18px; }
+.wel__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hairline-2); transition: all 0.2s; }
+.wel__dot--on { background: var(--router); width: 20px; border-radius: 3px; }
+.wel__title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); margin: 0 0 12px; text-align: center; }
+.wel__body { font-size: 13.5px; line-height: 1.55; color: var(--muted); min-height: 176px; }
+.wel__body p { margin: 0 0 12px; }
+.wel__body b { color: var(--text); font-weight: 600; }
+.wel__body code { font: 11.5px var(--font-mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+.wel__lead { font-size: 15px; color: var(--text); font-weight: 600; }
+.wel__flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
+.wel__node { font: 11px var(--font-mono); padding: 5px 10px; border-radius: 7px; border: 1px solid var(--hairline); color: var(--muted); }
+.wel__node--router { color: var(--router); border-color: var(--router-soft); background: var(--router-soft); }
+.wel__arrow { color: var(--faint); }
+.wel__engines { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+.wel__engine { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 9px; background: var(--surface-2); }
+.wel__engine-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.wel__engine-note { font: 11px var(--font-mono); color: var(--faint); }
+.wel__hint { font-size: 12px; color: var(--faint); }
+.wel__themes { display: flex; gap: 10px; margin-top: 16px; }
+.wel__theme { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px; border: 1px solid var(--hairline); border-radius: 11px; background: var(--surface-2); color: var(--muted); font-size: 12.5px; cursor: pointer; transition: all 0.15s; }
+.wel__theme:hover { color: var(--text); border-color: var(--hairline-2); }
+.wel__theme--on { color: var(--router); border-color: var(--router); background: var(--router-soft); }
+.wel__swatch { width: 100%; height: 32px; border-radius: 6px; border: 1px solid var(--hairline-2); }
+.wel__swatch--dark { background: linear-gradient(135deg, #0a0a0b 50%, #34d399 50%); }
+.wel__swatch--light { background: linear-gradient(135deg, #f7f7f8 50%, #0ea56f 50%); }
+.wel__swatch--hc { background: linear-gradient(135deg, #000000 50%, #4ade80 50%); }
+.wel__foot { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.wel__skip { border: none; background: transparent; color: var(--faint); font-size: 12.5px; cursor: pointer; }
+.wel__skip:hover { color: var(--muted); }
+.wel__nav { display: flex; gap: 8px; }
+.wel__back { padding: 9px 14px; border-radius: 9px; border: 1px solid var(--hairline); background: var(--surface-2); color: var(--muted); font-size: 13px; cursor: pointer; }
+.wel__back:hover { color: var(--text); }
+.wel__next { padding: 9px 20px; border-radius: 9px; border: 1px solid var(--router); background: var(--router-soft); color: var(--router); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.wel__next:hover { background: rgba(52, 211, 153, 0.2); }

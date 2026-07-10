@@ -2,6 +2,7 @@
 // El estado y la lógica viven en los stores (store/) y el layout en (layout/).
 import { WorkspaceManager } from "./WorkspaceManager";
 import { SettingsView } from "./settings/SettingsView";
+import { Welcome } from "./onboarding/Welcome";
 import { Shell } from "./layout/Shell";
 import "./commands/appCommands"; // registra los comandos (side-effect)
 import { useBackendEvents } from "./hooks/useBackendEvents";
@@ -21,12 +22,14 @@ function App() {
   const openWorkspace = useSessionStore((s) => s.openWorkspace);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const welcomeOpen = useUiStore((s) => s.welcomeOpen);
 
   if (stage === "workspaces") {
     return (
       <>
         <WorkspaceManager onOpen={openWorkspace} />
         {settingsOpen && <SettingsView onClose={() => setSettingsOpen(false)} />}
+        {welcomeOpen && <Welcome />}
       </>
     );
   }

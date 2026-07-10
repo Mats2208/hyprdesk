@@ -5,6 +5,7 @@ import { SettingsView } from "../settings/SettingsView";
 import { CreateAgentModal } from "../CreateAgentModal";
 import { AskUserModal } from "../AskUserModal";
 import { TeamModal } from "../TeamModal";
+import { Welcome } from "../onboarding/Welcome";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 
@@ -21,6 +22,7 @@ export function Modals() {
   const setTeamOpen = useUiStore((s) => s.setTeamOpen);
   const askUser = useUiStore((s) => s.askUser);
   const setAskUser = useUiStore((s) => s.setAskUser);
+  const welcomeOpen = useUiStore((s) => s.welcomeOpen);
 
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
   const { saveProfile, launchProfile, launchTeam } = useSessionStore.getState();
@@ -56,6 +58,7 @@ export function Modals() {
           onLaunch={launchTeam}
         />
       )}
+      {welcomeOpen && <Welcome />}
     </>
   );
 }

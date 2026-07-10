@@ -30,4 +30,5 @@ registerCommands([
   // — Workspace / config —
   { id: "settings", title: "Configuración", category: "Workspace", keybinding: "⌘,", run: () => us().setSettingsOpen(true) },
   { id: "close-ws", title: "Cerrar este workspace", category: "Workspace", run: () => { const id = ss().currentId; if (id) ss().closeWorkspace(id); } },
+  { id: "help", title: "Ayuda / bienvenida", category: "Workspace", run: () => us().setWelcomeOpen(true) },
 ]);

@@ -16,6 +16,7 @@ type UiState = {
   statusByTile: Record<string, TileStatus>;
   dragging: boolean;
   wtNoticeDismissed: boolean;
+  welcomeOpen: boolean; // onboarding / first-run
 
   setSidebarOpen: (v: boolean | ((o: boolean) => boolean)) => void;
   openPanel: (p: Panel) => void; // setPanel + abrir sidebar
@@ -32,6 +33,8 @@ type UiState = {
   setStatus: (id: string, st: TileStatus) => void;
   setDragging: (v: boolean) => void;
   dismissWtNotice: () => void;
+  setWelcomeOpen: (v: boolean) => void;
+  finishOnboarding: () => void; // marca visto + cierra
 };
 
 export const useUiStore = create<UiState>((set) => ({
@@ -47,6 +50,7 @@ export const useUiStore = create<UiState>((set) => ({
   statusByTile: {},
   dragging: false,
   wtNoticeDismissed: localStorage.getItem("hd-wt-notice") === "1",
+  welcomeOpen: localStorage.getItem("hd-onboarded") !== "1",
 
   setSidebarOpen: (v) => set((s) => ({ sidebarOpen: typeof v === "function" ? v(s.sidebarOpen) : v })),
   openPanel: (p) => set({ panel: p, sidebarOpen: true }),
@@ -63,4 +67,6 @@ export const useUiStore = create<UiState>((set) => ({
   setStatus: (id, st) => set((s) => (s.statusByTile[id] === st ? s : { statusByTile: { ...s.statusByTile, [id]: st } })),
   setDragging: (v) => set({ dragging: v }),
   dismissWtNotice: () => { localStorage.setItem("hd-wt-notice", "1"); set({ wtNoticeDismissed: true }); },
+  setWelcomeOpen: (v) => set({ welcomeOpen: v }),
+  finishOnboarding: () => { localStorage.setItem("hd-onboarded", "1"); set({ welcomeOpen: false }); },
 }));
