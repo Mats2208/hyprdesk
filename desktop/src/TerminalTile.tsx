@@ -88,12 +88,19 @@ export function TerminalTile({
         const bytes = b64ToBytes(e.payload.data);
         term.write(bytes);
         // autodetección de dev servers: buscar localhost:PUERTO en la salida (una vez por URL).
+        // Importante: hay que SACAR los escapes ANSI del terminal antes de matchear, si no se
+        // cuelan en la URL (colores/cursor codes pegados al texto → chips con basura).
         const fn = onDetectRef.current;
         if (fn) {
-          urlBufRef.current = (urlBufRef.current + new TextDecoder().decode(bytes)).slice(-4000);
-          for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]]*/gi)) {
+          const text = new TextDecoder().decode(bytes)
+            .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC
+            .replace(/\x1b[@-Z\\-_]/g, "")                     // esc de un char
+            .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")         // CSI (colores, mover cursor)
+            .replace(/[\x00-\x1f\x7f]/g, " ");                 // otros control chars → espacio
+          urlBufRef.current = (urlBufRef.current + text).slice(-4000);
+          for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]<>]*/gi)) {
             const u = m[0].replace(/[.,;:]+$/, "");
-            if (!seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
+            if (u && !seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
           }
         }
       });

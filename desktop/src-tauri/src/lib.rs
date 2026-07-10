@@ -14,6 +14,7 @@ mod control;
 mod engines;
 mod fsops;
 mod settings;
+mod usage;
 mod workspace;
 
 use base64::Engine;
@@ -521,8 +522,9 @@ pub fn run() {
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
-            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff,
-            settings::load_settings, settings::save_settings, settings::run_assistant
+            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff, changes::git_branch,
+            settings::load_settings, settings::save_settings, settings::run_assistant,
+            usage::usage_today
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

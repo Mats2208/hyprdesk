@@ -187,15 +187,29 @@ body {
 .ide { height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 
 .titlebar {
-  flex: 0 0 auto; height: 40px; display: flex; align-items: center; justify-content: space-between;
+  flex: 0 0 auto; height: 40px; position: relative; display: flex; align-items: center; justify-content: space-between;
   padding: 0 12px 0 82px; border-bottom: 1px solid var(--hairline); background: var(--surface);
   -webkit-app-region: drag; /* mover la ventana desde el titlebar (traffic lights overlay a la izq) */
 }
-.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 1; -webkit-app-region: no-drag; }
+.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 1; -webkit-app-region: no-drag; z-index: 1; }
 .titlebar__side--right { justify-content: flex-end; }
-.titlebar__title { font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 7px; align-items: baseline; }
+/* título REALMENTE centrado en la ventana (independiente del padding de los traffic lights) */
+.titlebar__title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 7px; align-items: center;
+  white-space: nowrap; pointer-events: none;
+}
+.titlebar__app { color: var(--muted); }
 .titlebar__ws { color: var(--text); }
 .titlebar__sep { color: var(--faint); }
+.titlebar__branch {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 7px; border-radius: 20px;
+  font: 500 11px ui-monospace, "SF Mono", monospace; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--hairline);
+}
+.stat--usage { color: #d9a06b; border-color: rgba(217, 160, 107, 0.28); }
+.stat--usage .stat__k { color: rgba(217, 160, 107, 0.75); }
+.stat--usage .stat__v { color: #e6b98a; }
 .titlebar__cmd {
   display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
   background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px 4px 10px;

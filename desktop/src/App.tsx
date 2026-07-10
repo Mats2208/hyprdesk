@@ -95,6 +95,7 @@ function computeLayout(n: number): Rect[] {
 }
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
+const fmtTok = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}K` : `${n}`);
 
 function App() {
   const [stage, setStage] = useState<Stage>("workspaces");
@@ -103,6 +104,8 @@ function App() {
   const [closing, setClosing] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [stats, setStats] = useState<SysStats | null>(null);
+  const [usage, setUsage] = useState<{ tokens: number; messages: number } | null>(null);
+  const [branch, setBranch] = useState<string | null>(null);
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -142,6 +145,22 @@ function App() {
     const iv = setInterval(tick, 2000);
     return () => { alive = false; clearInterval(iv); };
   }, []);
+
+  // ---- consumo de tokens de Claude HOY (refresca cada 60s) ----
+  useEffect(() => {
+    let alive = true;
+    const tick = () => invoke<{ tokens: number; messages: number }>("usage_today").then((u) => { if (alive) setUsage(u); }).catch(() => {});
+    tick();
+    const iv = setInterval(tick, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+
+  // ---- rama git del workspace actual (para el header) ----
+  useEffect(() => {
+    const folder = sessions.find((s) => s.meta.id === currentId)?.meta.folder;
+    if (!folder) { setBranch(null); return; }
+    invoke<string | null>("git_branch", { cwd: folder }).then((b) => setBranch(b)).catch(() => setBranch(null));
+  }, [currentId, changesByWs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- eventos del backend (spawn de workers, session-id capturado, actividad del túnel) ----
   useEffect(() => {
@@ -667,11 +686,21 @@ function App() {
         <div className="titlebar__side">
           <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
           <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
+          {usage && usage.tokens > 0 && (
+            <span className="stat stat--usage" title={`${usage.messages} mensajes de Claude hoy`}>
+              <span className="stat__k">Claude</span><span className="stat__v">{fmtTok(usage.tokens)} tok</span>
+            </span>
+          )}
         </div>
-        <div className="titlebar__title">HyprDesk<span className="titlebar__sep">·</span><span className="titlebar__ws">{current?.meta.name ?? ""}</span></div>
+        <div className="titlebar__title">
+          <span className="titlebar__app">HyprDesk</span>
+          <span className="titlebar__sep">·</span>
+          <span className="titlebar__ws">{current?.meta.name ?? ""}</span>
+          {branch && <span className="titlebar__branch" title="rama git"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.6" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.6v4.8M5.6 4h3.2a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>{branch}</span>}
+        </div>
         <div className="titlebar__side titlebar__side--right">
+          <span className="stat stat--live" title="agentes / tiles"><span className="dot" /> {current?.terms.length ?? 0}</span>
           <button className="titlebar__cmd" onClick={() => setPaletteOpen(true)}>Comandos <kbd>⌘K</kbd></button>
-          <span className="stat stat--live"><span className="dot" /> {current?.terms.length ?? 0}</span>
         </div>
       </div>
 

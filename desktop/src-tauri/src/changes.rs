@@ -97,6 +97,18 @@ fn git(cwd: &str, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
+// Rama git actual del workspace (para el header). None si no es repo.
+#[tauri::command]
+pub fn git_branch(cwd: String) -> Option<String> {
+    let b = git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let b = b.trim().to_string();
+    if b.is_empty() || b == "HEAD" {
+        None
+    } else {
+        Some(b)
+    }
+}
+
 // `git status --porcelain` parseado. Vec vacío si no es repo (el front cae al watcher).
 #[tauri::command]
 pub fn git_status(cwd: String) -> Vec<GitEntry> {
