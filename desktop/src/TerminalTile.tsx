@@ -104,9 +104,11 @@ export function TerminalTile({
               .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")         // CSI (colores, mover cursor)
               .replace(/[\x00-\x1f\x7f]/g, " ");                 // otros control chars → espacio
             urlBufRef.current = (urlBufRef.current + text).slice(-4000);
-            for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]<>]*/gi)) {
-              const u = m[0].replace(/[.,;:]+$/, "");
-              if (u && !seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
+            // el path DEBE empezar con "/" → así "…:5173en" no se come el "en" (bug de chips rotos).
+            for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/[^\s"'`)\]<>]*)?/gi)) {
+              let u: string;
+              try { u = new URL(m[0]).origin; } catch { continue; } // normalizar a origin (dedup + chip limpio)
+              if (!seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
             }
           }
         }

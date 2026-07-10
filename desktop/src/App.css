@@ -536,15 +536,36 @@ body {
 /* ---------- status bar ---------- */
 .statusbar {
   flex: 0 0 auto; height: 34px;
-  display: flex; align-items: center; gap: 16px;
-  padding: 0 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 10px;
   border: 1px solid var(--hairline);
   border-radius: 10px;
   background: var(--surface);
   font-size: 11px; color: var(--muted);
 }
-.statusbar__role { display: inline-flex; align-items: center; gap: 7px; color: var(--text); }
 .dot--router { background: var(--router); box-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
+
+/* ---- statusbar rediseñado: grupos + chips ---- */
+.statusbar__group { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.statusbar__group--center { flex: 1; justify-content: center; overflow: hidden; }
+.statusbar__group--right { flex: 0 0 auto; }
+.sb-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 20px;
+  font: 500 11px ui-monospace, "SF Mono", monospace; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--hairline); cursor: default; white-space: nowrap; transition: all 0.15s;
+}
+button.sb-chip { cursor: pointer; }
+button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
+.sb-chip__u { color: var(--faint); margin-left: 1px; }
+.sb-chip__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.sb-chip--role { color: var(--text); }
+.sb-chip--warn { color: #fbbf24; border-color: rgba(251, 191, 36, 0.28); background: rgba(251, 191, 36, 0.08); }
+.sb-chip--warn:hover { background: rgba(251, 191, 36, 0.16); }
+.sb-chip--purple { color: #c084fc; border-color: rgba(192, 132, 252, 0.28); background: rgba(192, 132, 252, 0.08); }
+.sb-chip--purple:hover { background: rgba(192, 132, 252, 0.16); }
+.sb-chip--preview { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.08); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.sb-chip--preview:hover { background: rgba(192, 132, 252, 0.18); }
+.sb-keys { display: inline-flex; align-items: center; gap: 3px; }
 .statusbar__keys { color: var(--muted); }
 .statusbar kbd {
   font: 10px ui-monospace, "SF Mono", monospace; color: var(--text);

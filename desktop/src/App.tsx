@@ -816,30 +816,41 @@ function App() {
       </div>
 
       <div className="statusbar">
-        <span className="statusbar__role">
-          <span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""} · {sessions.length} ws
+        <div className="statusbar__group">
+          <span className="sb-chip sb-chip--role" title="workers activos · workspaces abiertos">
+            <span className="dot dot--router" />
+            {workers.length}<span className="sb-chip__u">w</span> · {sessions.length}<span className="sb-chip__u">ws</span>
+          </span>
           {changeCount > 0 && (
-            <button className="statusbar__changes" title="Ver cambios" onClick={() => { setPanel("changes"); setSidebarOpen(true); }}>
-              <span className="statusbar__changes-dot" /> {changeCount} cambio{changeCount !== 1 ? "s" : ""}
+            <button className="sb-chip sb-chip--warn" title="Ver cambios" onClick={() => { setPanel("changes"); setSidebarOpen(true); }}>
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M7 1.5v11M1.5 7h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              {changeCount}
             </button>
           )}
           {branchCount > 0 && (
-            <span className="statusbar__branches" title="workers en ramas aisladas (worktrees)">
+            <button className="sb-chip sb-chip--purple" title="workers en ramas aisladas (worktrees)" onClick={() => { setPanel("agents"); setSidebarOpen(true); }}>
               <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.5v5M5.5 4h3a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-              {branchCount} rama{branchCount !== 1 ? "s" : ""}
-            </span>
+              {branchCount}
+            </button>
           )}
-          {curPreviews.slice(0, 3).map((u) => {
-            let port = ""; try { port = new URL(u).port || new URL(u).host; } catch { port = u; }
+        </div>
+
+        <div className="statusbar__group statusbar__group--center">
+          {curPreviews.slice(0, 4).map((u) => {
+            let port = ""; try { const url = new URL(u); port = url.port || url.host; } catch { port = u; }
             return (
-              <button key={u} className="statusbar__preview" title={`Abrir preview: ${u}`} onClick={() => openBrowser(u)}>
-                <span className="statusbar__preview-dot" /> :{port}
+              <button key={u} className="sb-chip sb-chip--preview" title={`Abrir preview: ${u}`} onClick={() => openBrowser(u)}>
+                <span className="sb-chip__dot" /> :{port}
               </button>
             );
           })}
-        </span>
-        <span className="statusbar__keys"><kbd>⌘K</kbd> comandos · <kbd>⌘B</kbd> panel · <kbd>⌘T</kbd> terminal · <kbd>⌘←→</kbd> foco</span>
-        <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>
+        </div>
+
+        <div className="statusbar__group statusbar__group--right">
+          <span className="sb-keys" title="⌘K comandos · ⌘B panel · ⌘T terminal · ⌘←→ foco">
+            <kbd>⌘K</kbd><kbd>⌘B</kbd><kbd>⌘T</kbd>
+          </span>
+        </div>
       </div>
 
       {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
