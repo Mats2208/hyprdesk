@@ -606,3 +606,45 @@ body {
 }
 .statusbar__changes:hover { background: rgba(251, 191, 36, 0.16); }
 .statusbar__changes-dot { width: 6px; height: 6px; border-radius: 50%; background: #fbbf24; }
+
+/* ==================== TILE NAVEGADOR ==================== */
+.tile__badge--browser { color: #c084fc; background: rgba(192, 132, 252, 0.12); border-color: rgba(192, 132, 252, 0.3); }
+.tile--browser.tile--active { border-color: rgba(192, 132, 252, 0.4); }
+.tile__body--browser { padding: 0; display: flex; flex-direction: column; }
+.browsertile__bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline); background: rgba(255, 255, 255, 0.014);
+}
+.browsertile__nav {
+  width: 24px; height: 24px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 6px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+}
+.browsertile__nav:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.browsertile__url {
+  flex: 1; min-width: 0; height: 26px; padding: 0 10px; border-radius: 7px;
+  border: 1px solid var(--hairline); background: var(--bg); color: var(--text);
+  font: 11.5px ui-monospace, "SF Mono", monospace; outline: none;
+}
+.browsertile__url:focus { border-color: rgba(192, 132, 252, 0.4); }
+.browsertile__frame { flex: 1; min-height: 0; width: 100%; border: none; background: #fff; }
+.browsertile__empty { flex: 1; display: grid; place-items: center; padding: 20px; text-align: center; color: var(--faint); font-size: 12.5px; }
+.browsertile__empty code { font-family: ui-monospace, monospace; color: var(--muted); }
+
+/* botón preview en filas de archivos html */
+.fsrow-wrap { display: flex; align-items: center; }
+.fsrow-wrap .fsrow { flex: 1; min-width: 0; }
+.fsrow__preview {
+  flex: 0 0 auto; width: 22px; height: 22px; display: grid; place-items: center; margin-right: 4px;
+  border: none; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer; opacity: 0; transition: all 0.15s;
+}
+.fsrow-wrap:hover .fsrow__preview { opacity: 1; }
+.fsrow__preview:hover { color: #c084fc; background: rgba(192, 132, 252, 0.12); }
+
+/* chip de preview en la statusbar */
+.statusbar__preview {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; padding: 2px 8px;
+  border: 1px solid rgba(192, 132, 252, 0.3); border-radius: 20px; background: rgba(192, 132, 252, 0.08);
+  color: #c084fc; font: 11px ui-monospace, monospace; cursor: pointer; transition: all 0.15s;
+}
+.statusbar__preview:hover { background: rgba(192, 132, 252, 0.16); }
+.statusbar__preview-dot { width: 6px; height: 6px; border-radius: 50%; background: #c084fc; }

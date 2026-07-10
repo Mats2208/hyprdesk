@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
 import { CodeTile } from "./CodeTile";
+import { BrowserTile } from "./BrowserTile";
 import { FilesPanel } from "./FilesPanel";
 import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
@@ -26,7 +27,7 @@ type AgentLaunch = {
 };
 type Rect = { x: number; y: number; w: number; h: number };
 type SysStats = { cpu: number; mem_used: number; mem_total: number };
-type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string };
+type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string };
 type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[] };
 type Stage = "workspaces" | "ide";
 
@@ -56,8 +57,12 @@ function savedStateOf(s: WsSession): SavedState {
   return {
     id: s.meta.id, name: s.meta.name, routerWidth: s.routerWidth,
     tiles: s.terms
-      .filter((x) => x.sessionId) // solo agentes (no terminales manuales)
-      .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
+      // agentes (con sesión) + tiles de archivo/navegador (los diff son transitorios → fuera)
+      .filter((x) => x.sessionId || x.kind === "file" || x.kind === "browser")
+      .map((x) => ({
+        id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId ?? "", title: x.title,
+        kind: x.kind, filePath: x.filePath, url: x.url,
+      })),
   };
 }
 
@@ -93,6 +98,7 @@ function App() {
   const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
   const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
   const gitTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [previewsByWs, setPreviewsByWs] = useState<Record<string, string[]>>({}); // localhost URLs detectadas
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -213,13 +219,18 @@ function App() {
         rId = r.agentId;
       } catch (e) { err = String(e); }
     }
-    for (const t of saved.tiles.filter((x) => x.role === "worker")) {
+    // workers agentes (con sesión): revivir con --resume
+    for (const t of saved.tiles.filter((x) => x.role === "worker" && (!x.kind || x.kind === "terminal") && x.sessionId)) {
       try {
         const w = await invoke<AgentLaunch>("worker_launch", {
           engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder, routerId: rId || "router",
         });
         next.push(tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`));
       } catch { /* worker que no resume, lo salteamos */ }
+    }
+    // tiles de archivo/navegador: recrear sin lanzar procesos
+    for (const t of saved.tiles.filter((x) => x.kind === "file" || x.kind === "browser")) {
+      next.push({ id: t.id, title: t.title, role: "worker", kind: t.kind, filePath: t.filePath, url: t.url });
     }
     return {
       meta, terms: next, routerId: rId, activeId: rId || next[0]?.id || "",
@@ -323,6 +334,30 @@ function App() {
       });
     } catch { /* sin diff */ }
   }, [updateCurrent]);
+
+  // Abre (o enfoca) un tile navegador con una URL (localhost detectado, file://, o vacío).
+  const openBrowser = useCallback((url?: string) => {
+    updateCurrent((s) => {
+      if (url) {
+        const existing = s.terms.find((t) => t.kind === "browser" && t.url === url);
+        if (existing) return { ...s, activeId: existing.id };
+      }
+      if (s.terms.length >= MAX_TILES) return s;
+      let title = "navegador";
+      try { if (url) title = new URL(url).host || url; } catch { if (url) title = url; }
+      const t: Term = { id: crypto.randomUUID(), title, role: "worker", kind: "browser", url };
+      return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
+    });
+  }, [updateCurrent]);
+
+  // Registra una URL localhost detectada en la salida de un tile (dedupe, por workspace).
+  const addPreview = useCallback((folder: string, url: string) => {
+    setPreviewsByWs((prev) => {
+      const list = prev[folder] ?? [];
+      if (list.includes(url)) return prev;
+      return { ...prev, [folder]: [url, ...list].slice(0, 6) };
+    });
+  }, []);
 
   const closeTerminal = useCallback((id: string) => {
     const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
@@ -455,6 +490,18 @@ function App() {
                 onClose={closeTerminal}
                 onToggleMax={toggleMax}
               />
+            ) : t.kind === "browser" ? (
+              <BrowserTile
+                id={t.id}
+                title={t.title}
+                active={s.activeId === t.id}
+                canClose={t.role === "worker"}
+                maximized={s.maxId === t.id}
+                url={t.url}
+                onFocus={setActive}
+                onClose={closeTerminal}
+                onToggleMax={toggleMax}
+              />
             ) : (
               <TerminalTile
                 id={t.id}
@@ -472,6 +519,7 @@ function App() {
                 onFocus={setActive}
                 onClose={closeTerminal}
                 onToggleMax={toggleMax}
+                onDetectUrl={(url) => addPreview(s.meta.folder, url)}
               />
             )}
           </div>
@@ -522,6 +570,7 @@ function App() {
   const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine })) : [];
   const curChanges = current ? changesByWs[current.meta.folder] : undefined;
   const changeCount = curChanges ? (curChanges.git.length || curChanges.watched.length) : 0;
+  const curPreviews = current ? previewsByWs[current.meta.folder] ?? [] : [];
   const commands: Command[] = [
     { id: "new-term", label: "Nueva terminal manual", hint: "⌘T", run: addTerminal },
     { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (current?.activeId) closeTerminal(current.activeId); } },
@@ -529,6 +578,7 @@ function App() {
     { id: "focus-router", label: "Ir al router", run: () => { if (current?.routerId) setActive(current.routerId); } },
     { id: "files", label: "Explorador de archivos", run: () => { setPanel("files"); setSidebarOpen(true); } },
     { id: "changes", label: "Cambios (archivos modificados)", run: () => { setPanel("changes"); setSidebarOpen(true); } },
+    { id: "browser", label: "Nuevo navegador / preview", run: () => openBrowser() },
     { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
     { id: "close-ws", label: "Cerrar este workspace", run: () => { if (currentId) closeWorkspace(currentId); } },
     { id: "workspaces", label: "Panel de workspaces", run: () => { setPanel("workspaces"); setSidebarOpen(true); } },
@@ -585,7 +635,7 @@ function App() {
           panel === "workspaces"
             ? <WorkspacesPanel activeId={currentId ?? undefined} onSwitch={openWorkspace} />
             : panel === "files"
-              ? <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} />
+              ? <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} onPreview={(p) => openBrowser("file://" + p)} />
               : panel === "changes"
                 ? <ChangesPanel changes={curChanges} root={current?.meta.folder ?? null} onOpenDiff={openDiff} onOpenFile={openFile} />
                 : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
@@ -609,6 +659,14 @@ function App() {
               <span className="statusbar__changes-dot" /> {changeCount} cambio{changeCount !== 1 ? "s" : ""}
             </button>
           )}
+          {curPreviews.slice(0, 3).map((u) => {
+            let port = ""; try { port = new URL(u).port || new URL(u).host; } catch { port = u; }
+            return (
+              <button key={u} className="statusbar__preview" title={`Abrir preview: ${u}`} onClick={() => openBrowser(u)}>
+                <span className="statusbar__preview-dot" /> :{port}
+              </button>
+            );
+          })}
         </span>
         <span className="statusbar__keys"><kbd>⌘K</kbd> comandos · <kbd>⌘B</kbd> panel · <kbd>⌘T</kbd> terminal · <kbd>⌘←→</kbd> foco</span>
         <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>

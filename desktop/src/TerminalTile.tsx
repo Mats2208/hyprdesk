@@ -31,14 +31,19 @@ type Props = {
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
+  onDetectUrl?: (url: string) => void; // detecta localhost:PORT en la salida → preview
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, onFocus, onClose, onToggleMax,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, onFocus, onClose, onToggleMax, onDetectUrl,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const [exited, setExited] = useState(false);
+  const onDetectRef = useRef(onDetectUrl);
+  onDetectRef.current = onDetectUrl;
+  const urlBufRef = useRef("");
+  const seenUrlsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const host = bodyRef.current;
@@ -78,7 +83,18 @@ export function TerminalTile({
     let unlisten: (() => void) | undefined;
     (async () => {
       const u1 = await listen<OutputPayload>("pty-output", (e) => {
-        if (e.payload.id === id) term.write(b64ToBytes(e.payload.data));
+        if (e.payload.id !== id) return;
+        const bytes = b64ToBytes(e.payload.data);
+        term.write(bytes);
+        // autodetección de dev servers: buscar localhost:PUERTO en la salida (una vez por URL).
+        const fn = onDetectRef.current;
+        if (fn) {
+          urlBufRef.current = (urlBufRef.current + new TextDecoder().decode(bytes)).slice(-4000);
+          for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]]*/gi)) {
+            const u = m[0].replace(/[.,;:]+$/, "");
+            if (!seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
+          }
+        }
       });
       const u2 = await listen<string>("pty-exit", (e) => {
         if (e.payload === id) setExited(true);
