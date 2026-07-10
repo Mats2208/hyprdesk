@@ -414,6 +414,20 @@ fn register_worker(state: State<'_, ControlState>, id: String, engine: String, n
     );
 }
 
+// El front registra los perfiles del workspace bajo su router_id → el router los ve con list_profiles.
+#[tauri::command]
+fn register_profiles(state: State<'_, ControlState>, router_id: String, profiles: Vec<control::ProfileInfo>) {
+    state.profiles.lock().unwrap().insert(router_id, profiles);
+}
+
+// El usuario respondió una pregunta del router (ask_user) → destraba el canal que espera la respuesta.
+#[tauri::command]
+fn answer_user(state: State<'_, ControlState>, question_id: String, answer: String) {
+    if let Some(tx) = state.questions.lock().unwrap().remove(&question_id) {
+        let _ = tx.send(answer);
+    }
+}
+
 #[tauri::command]
 fn unregister_worker(state: State<'_, ControlState>, id: String) {
     let info = state.workers.lock().unwrap().remove(&id);
@@ -610,6 +624,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
+            register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,

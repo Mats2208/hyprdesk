@@ -25,12 +25,30 @@ pub struct WorkerInfo {
     pub branch: Option<String>, // rama del worktree, si el ws es git
 }
 
+// Perfil de agente (del workspace) que el router puede consultar (list_profiles) y usar al delegar.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProfileInfo {
+    pub id: String,
+    pub name: String,
+    pub engine: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    #[serde(default)]
+    pub persona: String,
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct ControlState {
     pub port: u16,
     pub router_id: Arc<Mutex<Option<String>>>,
     pub active_cwd: Arc<Mutex<Option<String>>>, // carpeta del workspace abierto
     pub workers: Arc<Mutex<HashMap<String, WorkerInfo>>>, // workers vivos (para list_workers)
+    pub profiles: Arc<Mutex<HashMap<String, Vec<ProfileInfo>>>>, // perfiles por router_id (para list_profiles)
+    pub questions: Arc<Mutex<HashMap<String, std::sync::mpsc::SyncSender<String>>>>, // ask_user pendientes
 }
 
 #[derive(Serialize, Clone)]
@@ -49,6 +67,7 @@ struct SpawnAgentEvent {
     #[serde(rename = "sessionId")]
     session_id: Option<String>,
     branch: Option<String>, // rama del worktree (para el badge)
+    color: Option<String>,  // color del perfil (si el worker vino de un perfil)
 }
 
 #[derive(Deserialize)]
@@ -58,6 +77,8 @@ struct SpawnBody {
     engine: Option<String>,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    profile: Option<String>, // id o nombre de un perfil del workspace (opcional)
     #[serde(default)]
     router: Option<String>,
     #[serde(default)]
@@ -78,24 +99,24 @@ pub fn start(app: AppHandle) -> ControlState {
         .to_ip()
         .map(|a| a.port())
         .expect("el control server no expuso puerto IP");
-    let router_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let active_cwd: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let workers: Arc<Mutex<HashMap<String, WorkerInfo>>> = Arc::new(Mutex::new(HashMap::new()));
-
-    let router_id_srv = router_id.clone();
-    let active_cwd_srv = active_cwd.clone();
-    let workers_srv = workers.clone();
+    let state = ControlState {
+        port,
+        router_id: Arc::new(Mutex::new(None)),
+        active_cwd: Arc::new(Mutex::new(None)),
+        workers: Arc::new(Mutex::new(HashMap::new())),
+        profiles: Arc::new(Mutex::new(HashMap::new())),
+        questions: Arc::new(Mutex::new(HashMap::new())),
+    };
+    let state_srv = state.clone();
     thread::spawn(move || {
         for req in server.incoming_requests() {
             let app = app.clone();
-            let router_id = router_id_srv.clone();
-            let active_cwd = active_cwd_srv.clone();
-            let workers = workers_srv.clone();
-            thread::spawn(move || handle_request(req, app, port, router_id, active_cwd, workers));
+            let state = state_srv.clone();
+            thread::spawn(move || handle_request(req, app, port, state));
         }
     });
 
-    ControlState { port, router_id, active_cwd, workers }
+    state
 }
 
 fn read_body(req: &mut tiny_http::Request) -> String {
@@ -109,14 +130,12 @@ fn json_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
     Response::from_string(body).with_header(header)
 }
 
-fn handle_request(
-    mut req: tiny_http::Request,
-    app: AppHandle,
-    port: u16,
-    router_id: Arc<Mutex<Option<String>>>,
-    active_cwd: Arc<Mutex<Option<String>>>,
-    workers: Arc<Mutex<HashMap<String, WorkerInfo>>>,
-) {
+fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state: ControlState) {
+    let router_id = &state.router_id;
+    let active_cwd = &state.active_cwd;
+    let workers = &state.workers;
+    let profiles = &state.profiles;
+    let questions = &state.questions;
     let url = req.url().to_string();
     if req.method() != &Method::Post {
         let _ = req.respond(Response::from_string("not found").with_status_code(404));
@@ -165,7 +184,6 @@ fn handle_request(
                 Ok(b) => b,
                 Err(_) => { let _ = req.respond(Response::from_string("bad json").with_status_code(400)); return; }
             };
-            let engine = parsed.engine.unwrap_or_else(|| "claude".into());
             let worker_id = uuid::Uuid::new_v4().to_string();
             // El router que spawnea manda su id y el cwd de SU workspace. Con varios
             // workspaces vivos no podemos usar un active_cwd global; caemos a él solo
@@ -173,6 +191,19 @@ fn handle_request(
             let router = parsed.router.clone().unwrap_or_else(|| {
                 router_id.lock().unwrap().clone().unwrap_or_else(|| "router".into())
             });
+            // Si el router pidió un PERFIL (por id o nombre), lo resolvemos → motor/modelo/effort/persona/color.
+            let profile = parsed.profile.as_ref().and_then(|pid| {
+                profiles.lock().unwrap().get(&router).and_then(|list| {
+                    list.iter()
+                        .find(|p| p.id == *pid || p.name.eq_ignore_ascii_case(pid))
+                        .cloned()
+                })
+            });
+            let engine = profile
+                .as_ref()
+                .map(|p| p.engine.clone())
+                .or(parsed.engine.clone())
+                .unwrap_or_else(|| "claude".into());
             let ws_root = parsed
                 .cwd
                 .clone()
@@ -184,13 +215,27 @@ fn handle_request(
                 Some(wt) => (wt.path, Some(wt.branch)),
                 None => (ws_root.clone(), None),
             };
-            let title = parsed
-                .name
-                .clone()
-                .filter(|n| !n.trim().is_empty())
-                .map(|n| format!("{n} · {engine}"))
-                .unwrap_or_else(|| format!("worker · {engine}"));
-            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &crate::engines::AgentOpts::default()) {
+            // Opts del perfil (modelo/effort/persona) — owned para que vivan durante el build.
+            let (p_model, p_effort, p_persona) = match &profile {
+                Some(p) => (p.model.clone(), p.effort.clone(), Some(p.persona.clone())),
+                None => (None, None, None),
+            };
+            let opts = crate::engines::AgentOpts {
+                model: p_model.as_deref(),
+                effort: p_effort.as_deref(),
+                persona: p_persona.as_deref(),
+            };
+            let color = profile.as_ref().and_then(|p| p.color.clone());
+            let display_name = profile
+                .as_ref()
+                .map(|p| p.name.clone())
+                .or_else(|| parsed.name.clone())
+                .filter(|n| !n.trim().is_empty());
+            let title = match &display_name {
+                Some(n) => format!("{n} · {engine}"),
+                None => format!("worker · {engine}"),
+            };
+            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &opts) {
                 Ok(spec) => {
                     workers.lock().unwrap().insert(worker_id.clone(), WorkerInfo {
                         id: worker_id.clone(), engine: engine.clone(), name: title.clone(),
@@ -210,12 +255,51 @@ fn handle_request(
                             capture: spec.capture,
                             session_id: spec.session_id,
                             branch,
+                            color,
                         },
                     );
                     let _ = req.respond(json_response(json!({ "workerId": worker_id }).to_string()));
                 }
                 Err(e) => { let _ = req.respond(Response::from_string(e).with_status_code(500)); }
             }
+        }
+        "/list_profiles" => {
+            let body = read_body(&mut req);
+            let router = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("router").and_then(|r| r.as_str()).map(String::from))
+                .unwrap_or_default();
+            let list: Vec<serde_json::Value> = profiles
+                .lock()
+                .unwrap()
+                .get(&router)
+                .map(|ps| {
+                    ps.iter()
+                        .map(|p| {
+                            // desc corta (no mandamos la persona completa)
+                            let desc: String = p.persona.chars().take(180).collect();
+                            json!({ "id": p.id, "name": p.name, "engine": p.engine, "model": p.model, "effort": p.effort, "desc": desc })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let _ = req.respond(json_response(serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())));
+        }
+        "/ask_user" => {
+            let body = read_body(&mut req);
+            let v = serde_json::from_str::<serde_json::Value>(&body).unwrap_or(json!({}));
+            let question = v.get("question").and_then(|q| q.as_str()).unwrap_or("").to_string();
+            let from = v.get("from").and_then(|f| f.as_str()).unwrap_or("router").to_string();
+            let qid = uuid::Uuid::new_v4().to_string();
+            let (tx, rx) = std::sync::mpsc::sync_channel::<String>(1);
+            questions.lock().unwrap().insert(qid.clone(), tx);
+            let _ = app.emit("ask-user", json!({ "questionId": qid, "question": question, "router": from }));
+            // bloquea hasta que el usuario responda (o timeout 5 min).
+            let answer = rx
+                .recv_timeout(std::time::Duration::from_secs(300))
+                .unwrap_or_else(|_| "(el usuario no respondió)".into());
+            questions.lock().unwrap().remove(&qid);
+            let _ = req.respond(json_response(json!({ "answer": answer }).to_string()));
         }
         "/message" => {
             let body = read_body(&mut req);

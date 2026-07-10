@@ -9,6 +9,7 @@ import { FilesPanel } from "./FilesPanel";
 import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
 import { SettingsModal } from "./SettingsModal";
 import { CreateAgentModal } from "./CreateAgentModal";
+import { AskUserModal } from "./AskUserModal";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -114,6 +115,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [askUser, setAskUser] = useState<{ id: string; question: string } | null>(null); // pregunta del router (ask_user)
   const [wtNoticeDismissed, setWtNoticeDismissed] = useState(() => localStorage.getItem("hd-wt-notice") === "1");
   const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
   const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
@@ -174,10 +176,13 @@ function App() {
     let un4: (() => void) | undefined;
     let un5: (() => void) | undefined;
     let un6: (() => void) | undefined;
+    let un7: (() => void) | undefined;
     (async () => {
       // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
-      un = await listen<AgentLaunch & { title: string; router: string }>("spawn-agent", (e) => {
+      un = await listen<AgentLaunch & { title: string; router: string; color?: string | null }>("spawn-agent", (e) => {
         const t = tileFromLaunch(e.payload, "worker", e.payload.title);
+        // si el worker nació de un perfil, el backend manda su color → lo pintamos en el tile/sidebar.
+        if (e.payload.color) t.color = e.payload.color;
         const routerAgentId = e.payload.router;
         setSessions((prev) => prev.map((s) => {
           if (s.routerId !== routerAgentId) return s;
@@ -222,8 +227,12 @@ function App() {
         if (r.ok) setToast(`✅ El router integró ${r.branch} a la rama principal`);
         else if (r.conflicts?.length) setToast(`⚠️ Conflicto al mergear ${r.branch}: ${r.conflicts.join(", ")}`);
       });
+      // el router (ask_user) necesita una decisión del usuario → abrimos el modal, bloquea hasta responder.
+      un7 = await listen<{ questionId: string; question: string; router: string }>("ask-user", (e) => {
+        setAskUser({ id: e.payload.questionId, question: e.payload.question });
+      });
     })();
-    return () => { un?.(); un2?.(); un3?.(); un4?.(); un5?.(); un6?.(); };
+    return () => { un?.(); un2?.(); un3?.(); un4?.(); un5?.(); un6?.(); un7?.(); };
   }, []);
 
   // auto-cerrar el toast
@@ -232,6 +241,21 @@ function App() {
     const t = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Registrar los perfiles de cada workspace en el hub bajo el id de SU router → el router los ve
+  // con list_profiles y delega a ellos (H1). Se re-registra cuando cambian los perfiles o el router.
+  useEffect(() => {
+    for (const s of sessions) {
+      if (!s.routerId) continue;
+      invoke("register_profiles", {
+        routerId: s.routerId,
+        profiles: s.profiles.map((p) => ({
+          id: p.id, name: p.name, engine: p.engine, model: p.model ?? null,
+          effort: p.effort ?? null, persona: p.persona, color: p.color ?? null,
+        })),
+      }).catch(() => {});
+    }
+  }, [sessions]);
 
   // Limpiar la actividad del tile que se enfoca (en la sesión actual).
   useEffect(() => {
@@ -864,6 +888,15 @@ function App() {
           onClose={() => setCreateAgentOpen(false)}
           onSave={(p) => saveProfile(p)}
           onSaveAndLaunch={(p) => { saveProfile(p); launchProfile(p); }}
+        />
+      )}
+      {askUser && (
+        <AskUserModal
+          question={askUser.question}
+          onAnswer={(answer) => {
+            invoke("answer_user", { questionId: askUser.id, answer }).catch(() => {});
+            setAskUser(null);
+          }}
         />
       )}
     </div>

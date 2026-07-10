@@ -744,6 +744,31 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 }
 .modal__save:hover { background: rgba(52, 211, 153, 0.2); }
 
+/* ==================== MODAL ASK_USER (el router pregunta) ==================== */
+.modal.askuser { width: 440px; padding: 18px; z-index: 210; }
+.askuser__head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.askuser__badge {
+  font: 10px ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--router); background: var(--router-soft); border: 1px solid rgba(52, 211, 153, 0.3);
+  padding: 2px 7px; border-radius: 5px;
+}
+.askuser__title { font-size: 14px; font-weight: 600; color: var(--text); }
+.askuser__q { font-size: 13.5px; line-height: 1.5; color: var(--text); margin: 0 0 12px; white-space: pre-wrap; }
+.askuser__input {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 9px;
+  border: 1px solid var(--hairline); background: var(--bg); color: var(--text);
+  font: 13px ui-monospace, monospace; outline: none; resize: vertical; min-height: 60px;
+}
+.askuser__input:focus { border-color: var(--router); }
+.askuser__foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 12px; }
+.askuser__hint { font-size: 11px; color: var(--faint); }
+.askuser__send {
+  padding: 8px 18px; border-radius: 9px; border: 1px solid var(--router);
+  background: var(--router-soft); color: var(--router); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.askuser__send:hover:not(:disabled) { background: rgba(52, 211, 153, 0.2); }
+.askuser__send:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .act--bottom { margin-top: auto; }
 
 /* ==================== PERFILES DE AGENTES (sidebar) ==================== */

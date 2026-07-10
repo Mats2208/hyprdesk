@@ -40,22 +40,70 @@ if (ROLE === "router") {
         "(recibirás un mensaje suyo). No bloquea.",
       inputSchema: {
         task: z.string().describe("Instrucción autocontenida y completa para el worker (rutas, requisitos, contexto)."),
+        profile: z
+          .string()
+          .optional()
+          .describe("PREFERIDO: id o nombre de un PERFIL del usuario (mirá list_profiles). Usa su motor/modelo/effort/persona y su color. Si el dominio de la tarea coincide con un perfil, usalo en vez de crear uno genérico."),
         engine: z
           .enum(["claude", "codex", "opencode"])
           .optional()
-          .describe("Motor del worker: 'claude' (default), 'codex' u 'opencode'. Elegí según la tarea si querés."),
+          .describe("Motor del worker si NO usás un perfil: 'claude' (default), 'codex' u 'opencode'. Si pasás profile, se ignora (manda el motor del perfil)."),
         name: z
           .string()
           .optional()
-          .describe("Nombre corto del worker por su DOMINIO (ej. 'frontend', 'backend', 'QA') — para identificarlo después con list_workers."),
+          .describe("Nombre corto del worker por su DOMINIO (ej. 'frontend', 'backend', 'QA') — para identificarlo después con list_workers. Con perfil, se usa el nombre del perfil."),
       },
     },
-    async ({ task, engine, name }) => {
+    async ({ task, profile, engine, name }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task, engine, name, router: AGENT_ID, cwd: CWD });
-        return ok(`Worker "${name || engine || "claude"}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
+        const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD });
+        return ok(`Worker "${profile || name || engine || "claude"}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_profiles",
+    {
+      title: "Listar los perfiles/agentes que el usuario definió",
+      description:
+        "Devuelve los PERFILES de agentes que el usuario configuró para este workspace (id, nombre, motor, modelo, " +
+        "descripción de su rol). ANTES de delegar, consultá esto: si hay un perfil cuyo dominio calza con la tarea, " +
+        "delegá a ÉL con spawn_worker({profile}). Si no hay ninguno adecuado o dudás cuál usar, preguntale al usuario con ask_user.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const list = await post("/list_profiles", { router: AGENT_ID });
+        if (!Array.isArray(list) || list.length === 0) return ok("El usuario no definió perfiles en este workspace. Podés crear workers genéricos con spawn_worker({engine}).");
+        const lines = list.map((p) => `- ${p.name} (id: ${p.id}) · ${p.engine}${p.model ? `/${p.model}` : ""}${p.effort ? ` · ${p.effort}` : ""}${p.desc ? ` — ${p.desc}` : ""}`).join("\n");
+        return ok(`Perfiles del usuario (${list.length}):\n${lines}\n\nDelegá con spawn_worker({ profile: "<id o nombre>", task }).`);
+      } catch (e) {
+        return err(`Error listando perfiles: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "ask_user",
+    {
+      title: "Preguntarle algo al usuario (bloqueante)",
+      description:
+        "Le hace una pregunta AL USUARIO y ESPERA su respuesta (bloquea hasta ~5 min). Usalo para decisiones que " +
+        "solo el usuario puede tomar: qué perfil usar si dudás, aclarar un requisito ambiguo, confirmar algo " +
+        "riesgoso. No lo uses para cosas que podés decidir vos.",
+      inputSchema: {
+        question: z.string().describe("La pregunta clara y concreta para el usuario."),
+      },
+    },
+    async ({ question }) => {
+      try {
+        const r = await post("/ask_user", { question, from: AGENT_ID });
+        return ok(`El usuario respondió: ${r.answer}`);
+      } catch (e) {
+        return err(`Error preguntando al usuario: ${e.message}`);
       }
     }
   );
