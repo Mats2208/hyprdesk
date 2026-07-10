@@ -8,6 +8,10 @@ fn default_engine() -> String {
     "claude".into()
 }
 
+fn default_permission() -> String {
+    "auto".into() // "auto" = bypass (autónomo) · "ask" = pedir aprobación (para leer/revisar)
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Assistant {
     #[serde(default = "default_engine")]
@@ -28,6 +32,14 @@ impl Default for Assistant {
 pub struct Settings {
     #[serde(default)]
     pub assistant: Assistant,
+    // "auto" (bypass, autónomo) | "ask" (los agentes piden aprobación antes de editar/correr comandos)
+    #[serde(default = "default_permission", rename = "permissionMode")]
+    pub permission_mode: String,
+}
+
+// Helper para engines: ¿los agentes deben PEDIR aprobación? (modo "ask")
+pub fn ask_permission() -> bool {
+    load_settings().permission_mode == "ask"
 }
 
 fn settings_path() -> std::path::PathBuf {

@@ -185,13 +185,14 @@ fn claude_mcp_config(agent_id: &str, env: &[(String, String)]) -> Result<String,
 
 // Config opencode (OPENCODE_CONFIG) por-agente: MCP hyprdesk + permisos abiertos (autonomía) +
 // el ROL como archivo de `instructions` (se suma al system prompt, no gasta un turno de usuario).
-fn opencode_config(agent_id: &str, role_txt: &str, env: &[(String, String)]) -> Result<String, String> {
+fn opencode_config(agent_id: &str, role_txt: &str, env: &[(String, String)], ask: bool) -> Result<String, String> {
     let role_path = std::env::temp_dir().join(format!("hyprdesk-role-{agent_id}.md"));
     std::fs::write(&role_path, role_txt).map_err(|e| e.to_string())?;
+    let perm = if ask { "ask" } else { "allow" }; // "ask" = pide aprobación antes de editar/correr
     let cfg = serde_json::json!({
         "$schema": "https://opencode.ai/config.json",
         "instructions": [role_path.to_string_lossy()],
-        "permission": { "edit": "allow", "bash": "allow", "webfetch": "allow" },
+        "permission": { "edit": perm, "bash": perm, "webfetch": perm },
         "mcp": { "hyprdesk": {
             "type": "local",
             "command": ["node", mcp_script()?],
@@ -263,10 +264,11 @@ pub fn build_agent(
         _ => None,
     };
     let env = mcp_env(port, agent_id, role, cwd, router_id);
+    let ask = crate::settings::ask_permission(); // modo "preguntar" vs auto (bypass)
     match engine {
-        "claude" => build_claude(agent_id, role, &env, resume_id, task, opts),
-        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task, opts),
-        "opencode" => build_opencode(agent_id, role, &env, resume_id, task, opts),
+        "claude" => build_claude(agent_id, role, &env, resume_id, task, opts, ask),
+        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task, opts, ask),
+        "opencode" => build_opencode(agent_id, role, &env, resume_id, task, opts, ask),
         other => Err(format!("motor desconocido: {other}")),
     }
 }
@@ -278,6 +280,7 @@ fn build_claude(
     resume_id: Option<String>,
     task: Option<&str>,
     opts: &AgentOpts,
+    ask: bool,
 ) -> Result<LaunchSpec, String> {
     let cfg = claude_mcp_config(agent_id, env)?;
     let role_txt = with_persona(role_text(role)?, opts.persona);
@@ -300,10 +303,13 @@ fn build_claude(
         "--mcp-config".into(),
         cfg,
         "--strict-mcp-config".into(),
-        "--dangerously-skip-permissions".into(),
         "--append-system-prompt".into(),
         role_txt,
     ]);
+    if !ask {
+        // modo auto (default): sin prompts de permiso. En modo "ask" NO lo ponemos → claude pregunta.
+        argv.push("--dangerously-skip-permissions".into());
+    }
     if let Some(m) = opts.model {
         argv.push("--model".into());
         argv.push(m.to_string());
@@ -319,6 +325,7 @@ fn build_codex(
     resume_id: Option<String>,
     task: Option<&str>,
     opts: &AgentOpts,
+    ask: bool,
 ) -> Result<LaunchSpec, String> {
     let mcp = mcp_script()?;
     let role_txt = with_persona(role_text(role)?, opts.persona);
@@ -338,7 +345,15 @@ fn build_codex(
     }
     // router (sin task): no pasamos prompt inicial → arranca idle esperando al usuario,
     // igual que claude con --append-system-prompt. El rol va como developer_instructions (abajo).
-    argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
+    if ask {
+        // modo "preguntar": codex pide aprobación antes de comandos, con escritura en el workspace.
+        argv.push("--ask-for-approval".to_string());
+        argv.push("on-request".to_string());
+        argv.push("--sandbox".to_string());
+        argv.push("workspace-write".to_string());
+    } else {
+        argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
+    }
     if let Some(m) = opts.model {
         argv.push("-m".to_string());
         argv.push(m.to_string());
@@ -378,9 +393,10 @@ fn build_opencode(
     resume_id: Option<String>,
     task: Option<&str>,
     opts: &AgentOpts,
+    ask: bool,
 ) -> Result<LaunchSpec, String> {
     let role_txt = with_persona(role_text(role)?, opts.persona);
-    let cfg = opencode_config(agent_id, &role_txt, env)?;
+    let cfg = opencode_config(agent_id, &role_txt, env, ask)?;
     let mut argv = vec!["opencode".to_string()];
     if let Some(m) = opts.model {
         argv.push("-m".to_string());

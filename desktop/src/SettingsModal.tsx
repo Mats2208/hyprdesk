@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type Assistant = { engine: string; model?: string | null; effort?: string | null };
-type Settings = { assistant: Assistant };
+type Settings = { assistant: Assistant; permissionMode?: string };
 
 const ENGINES = [
   { id: "claude", label: "Claude Code" },
@@ -16,6 +16,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [engine, setEngine] = useState("claude");
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
+  const [permission, setPermission] = useState("auto");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         setEngine(s.assistant?.engine ?? "claude");
         setModel(s.assistant?.model ?? "");
         setEffort(s.assistant?.effort ?? "");
+        setPermission(s.permissionMode === "ask" ? "ask" : "auto");
       })
       .catch(() => {});
   }, []);
@@ -37,6 +39,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     const settings: Settings = {
       assistant: { engine, model: model.trim() || null, effort: effort.trim() || null },
+      permissionMode: permission,
     };
     try {
       await invoke("save_settings", { settings });
@@ -79,6 +82,24 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               </select>
             </label>
           )}
+        </div>
+
+        <div className="modal__section" style={{ borderTop: "1px solid var(--hairline)" }}>
+          <div className="modal__label">Modo de permisos de los agentes</div>
+          <div className="modal__hint">Cómo trabajan router y workers. Aplica a los agentes que lances DESPUÉS de guardar.</div>
+          <div className="modal__engines">
+            <button className={`modal__engine ${permission === "auto" ? "modal__engine--on" : ""}`} onClick={() => setPermission("auto")}>
+              ⚡ Autónomo
+            </button>
+            <button className={`modal__engine ${permission === "ask" ? "modal__engine--on" : ""}`} onClick={() => setPermission("ask")}>
+              ✋ Preguntar
+            </button>
+          </div>
+          <div className="modal__hint">
+            {permission === "auto"
+              ? "Autónomo (bypass): los agentes editan y corren comandos sin pedir aprobación. Más rápido; ideal si confiás y querés que fluya solo."
+              : "Preguntar: cada agente pide tu aprobación antes de editar o correr comandos. Más lento, pero podés revisar todo (claude: prompts · codex: on-request · opencode: ask)."}
+          </div>
         </div>
         <div className="modal__foot">
           <button className="modal__save" onClick={save}>{saved ? "Guardado ✓" : "Guardar"}</button>
