@@ -2,12 +2,21 @@
 import type { GlmUsage, SysStats } from "../types";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
+import { THEME_LABEL, useTheme } from "../theme/theme";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
+
+// Íconos por tema (luna / sol / contraste).
+const THEME_ICON = {
+  dark: <path d="M13.5 10.2A5 5 0 016.8 3.5a5.5 5.5 0 106.7 6.7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />,
+  light: <g stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1" /></g>,
+  hc: <g><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" /><path d="M8 2a6 6 0 010 12z" fill="currentColor" /></g>,
+};
 
 export function TitleBar({ stats, glm, branch }: { stats: SysStats | null; glm: GlmUsage | null; branch: string | null }) {
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
   const togglePalette = useUiStore((s) => s.togglePalette);
+  const { theme, cycle } = useTheme();
 
   return (
     <div className="titlebar">
@@ -29,6 +38,9 @@ export function TitleBar({ stats, glm, branch }: { stats: SysStats | null; glm: 
       </div>
       <div className="titlebar__side titlebar__side--right">
         <span className="stat stat--live" title="agentes / tiles"><span className="dot" /> {current?.terms.length ?? 0}</span>
+        <button className="titlebar__icon" onClick={cycle} title={`Tema: ${THEME_LABEL[theme]} (clic para cambiar)`}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{THEME_ICON[theme]}</svg>
+        </button>
         <button className="titlebar__cmd" onClick={togglePalette}>Comandos <kbd>⌘K</kbd></button>
       </div>
     </div>
