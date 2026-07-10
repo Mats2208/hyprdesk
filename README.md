@@ -1,92 +1,157 @@
 # 🧭 HyprDesk
 
-**Un gestor de terminales estilo window manager (inspirado en Hyprland) donde los agentes de IA
-se interconectan y colaboran entre sí.**
+**Orquestador local de agentes de IA en una app de escritorio.** Un agente **router** —con el que
+hablás— delega tareas a agentes **worker**, cada uno en su propia terminal real, todos comunicados
+por un **túnel MCP local bidireccional**. Es, en esencia, **A2A (Agent2Agent) corriendo en tu
+máquina**: los agentes se consultan y se reportan entre sí, y vos podés intervenir en cualquiera.
 
-Cada terminal es real (PTY del sistema). Uno de ellos es un **router** — un agente con el que
-hablás — que delega tareas a **workers** — otros agentes en sus propias terminales. Router y
-workers se comunican por un **túnel bidireccional** (vía MCP): se hacen queries, se reportan el
-trabajo, y vos podés intervenir en cualquiera de ellos.
+Mezclás motores libremente — **Claude Code, Codex y OpenCode** pueden ser router o worker — sobre
+una superficie tipo IDE (editor de código, diffs, preview embebido, control de cambios con git).
 
-> ⚠️ **Esto es un PROTOTIPO / experimento**, no un producto terminado ni un desarrollo final.
-> Es un espacio para explorar la idea de orquestación de agentes tipo **A2A (Agent2Agent)** con
-> una UI de escritorio. Muchas cosas están a medio hacer y van a cambiar. Se sube a GitHub
-> principalmente para tener **persistencia** e ir iterando.
+> ⚠️ **Prototipo / experimento**, no un producto terminado. Es un espacio para explorar la
+> orquestación de agentes con una UI de escritorio. Cosas a medio hacer y en cambio constante.
+> Se sube a GitHub para tener persistencia e ir iterando.
 
 ---
 
-## Qué funciona hoy
+## ✨ Qué hace
 
-- 🖥️ **Terminales reales** embebidas (xterm.js + PTY vía Rust/Tauri): escribís, ejecutás, corrés
-  `claude`, `codex`, `htop`, lo que sea.
-- 🎛️ **Layout dinámico** tipo tiling (router a la izquierda con prioridad, workers en grilla),
-  con divisor arrastrable, foco por teclado, cerrar/maximizar.
-- 🧠 **Router = agente Claude Code interactivo** (elegís el agente en un selector al inicio).
-- 🔌 **Delegación por MCP**: el router usa `spawn_worker` / `send_to_worker`; el worker usa
-  `report_to_router` / `ask_router`. El "túnel" entrega mensajes inyectándolos en el PTY del
-  agente destino.
-- 🔁 **Túnel bidireccional**: el router delega, el worker trabaja de forma autónoma, le reporta
-  al router cuando termina, y el router revisa. Vos también podés hablarle directo a un worker y
-  él le avisa al router lo que hizo.
+- 🖥️ **Terminales reales** embebidas (xterm.js + PTY vía Rust/Tauri) — no simulaciones: corrés
+  `claude`, `codex`, `opencode`, `htop`, lo que sea.
+- 🧭 **Router → workers por MCP**: el router usa `spawn_worker` / `send_to_worker`; el worker usa
+  `report_to_router` / `ask_router`. El túnel entrega los mensajes inyectándolos en el PTY destino.
+- 🔀 **Multi-motor mezclable**: Claude / Codex / OpenCode, cada uno como router **o** worker. El rol
+  se inyecta como *system prompt* (no gasta un turno del agente).
+- 🗂️ **Multi-workspace keep-alive**: varios proyectos abiertos en tabs a la vez; cambiás al instante
+  sin matar agentes ni gastar tokens (todos siguen vivos en segundo plano).
+- 📄 **Superficie IDE**: visor/editor de código (CodeMirror, ⌘S para guardar), tiles de **diff**, y
+  **navegador/preview** embebido con autodetección de `localhost:PUERTO`.
+- 🔍 **Control de cambios en vivo**: un watcher del workspace + `git status`/`git diff` → panel de
+  archivos modificados y un chip "N cambios" para no perderte lo que toca un agente.
+- 📂 **Abrí cualquier carpeta**: enlazá un proyecto real existente como workspace (no destructivo —
+  nunca borra tu carpeta; su estado va aparte, sin ensuciar tu repo).
+- 💾 **Persistencia**: reabrís un workspace y los agentes reviven con `--resume` (session-id).
+- 🍎 **Integración nativa macOS**: barra de menú (Archivo/Editar/Ver/Ventana), múltiples ventanas,
+  pegar imágenes en cualquier tile.
 
-## Arquitectura (resumen)
+## 📸 Capturas
 
+<!-- Agregá las capturas en docs/ y descomentá:
+![Router delegando a workers](docs/router-workers.png)
+![Control de cambios + diff](docs/changes.png)
+![Preview embebido](docs/preview.png)
+-->
+_Próximamente._ (Router + workers, panel de cambios/diff, preview embebido, tabs multi-workspace.)
+
+## 🏗️ Arquitectura
+
+```mermaid
+flowchart TB
+  subgraph APP["HyprDesk · Tauri v2"]
+    FE["React + xterm.js<br/>tiles · IDE surface · panels"]
+    BE["Rust backend<br/>PtyManager · control server · file watcher"]
+    FE <-->|invoke / events| BE
+  end
+  BE -->|PTY| R["🧭 Router agent<br/>claude / codex / opencode"]
+  BE -->|PTY| W1["worker"]
+  BE -->|PTY| W2["worker"]
+  HUB(["control server<br/>(el túnel · tiny_http)"])
+  R <-->|MCP tools| HUB
+  W1 <-->|MCP tools| HUB
+  W2 <-->|MCP tools| HUB
 ```
-Tile ROUTER (claude interactivo + MCP hyprdesk)
-   │  spawn_worker / send_to_worker
-   ▼   (MCP → control server local de la app → inyección por PTY)
-Tile WORKER (claude interactivo + MCP hyprdesk)
-   │  report_to_router / ask_router
-   └──────────► el router revisa e itera
+
+- **Frontend** (`desktop/src/`): React + xterm.js — tiles (terminal/código/diff/browser), layout
+  tipo tiling, paneles (agentes, workspaces, archivos, cambios), command palette.
+- **Backend** (`desktop/src-tauri/src/`): Rust/Tauri — `PtyManager` (terminales reales),
+  `control.rs` (control server HTTP local = hub del túnel), `engines.rs` (adaptadores por motor),
+  `changes.rs` (watcher + git), `workspace.rs` (workspaces), `fsops.rs` (archivos).
+- **MCP** (`desktop/mcp/`): servidor stdio *role-aware* que expone las tools de router vs worker.
+
+## 🔌 El túnel (cómo delega)
+
+```mermaid
+sequenceDiagram
+  actor You as Vos
+  participant R as Router
+  participant H as Control server
+  participant W as Worker
+  You->>R: "armá una tienda con backend + front"
+  R->>H: spawn_worker(task, engine)
+  H->>W: nace un PTY + inyecta la tarea
+  W-->>W: trabaja de forma autónoma
+  W->>H: report_to_router(resumen, rutas)
+  H->>R: inyecta el reporte en su PTY
+  R->>You: revisa, itera o delega el siguiente paso
 ```
 
-- **Frontend**: React + xterm.js (`desktop/src/`).
-- **Backend**: Rust/Tauri — manager de PTYs + control server HTTP local que rutea el túnel
-  (`desktop/src-tauri/src/`).
-- **MCP**: servidor stdio role-aware que expone las tools de cada agente (`desktop/mcp/`).
+## 🧠 Motores soportados
 
-## Estructura del repo
+| Motor | Router | Worker | Rol inyectado como |
+|------|:------:|:------:|--------------------|
+| Claude Code | ✅ | ✅ | `--append-system-prompt` |
+| Codex | ✅ | ✅ | `-c developer_instructions=…` |
+| OpenCode | ✅ | ✅ | `instructions` en el config |
 
-```
-desktop/   → la app HyprDesk (Tauri v2 + React + Rust). El proyecto principal.
-  src/            frontend (tiles, layout, selector)
-  src-tauri/      backend Rust (PTYs, control server / túnel)
-  mcp/            MCP server + roles (router/worker)
-cli/       → prototipo previo: orquestador router→worker por CLI, agnóstico
-             al agente (claude/codex/opencode). Standalone.
-```
+## 📦 Requisitos
 
-## Cómo correr
+- macOS (probado), Node 20+, pnpm, Rust/Cargo.
+- Los CLIs de los agentes instalados y logueados: `claude`, y opcionalmente `codex` / `opencode`.
+- `git` en el PATH (para el control de cambios).
 
-Requisitos: Node 20+, pnpm, Rust/Cargo, y los CLIs de agentes instalados y logueados
-(`claude` para la v1). macOS (probado).
+## 🚀 Build e instalación
 
 ```bash
-# 1) dependencias
-cd desktop && pnpm install
-cd mcp && pnpm install && cd ..
+cd desktop
+pnpm install
 
-# 2) correr en dev (abre la ventana)
+# desarrollo (abre la ventana con hot-reload)
 pnpm tauri dev
+
+# build de producción → genera HyprDesk.app
+pnpm tauri build
+# y lo instalás copiándolo:
+cp -R src-tauri/target/release/bundle/macos/HyprDesk.app /Applications/
 ```
 
-En el selector elegí **Claude Code**, y pedile algo al router (ej. *"creá una web de X en ~/…"*).
-Vas a ver nacer un worker que lo hace y le reporta.
+## 🕹️ Uso
 
-## ⚠️ Seguridad
+1. **Creá un workspace** (carpeta nueva en `~/HyprDesk/`) o **abrí una carpeta existente** (tu
+   proyecto real, enlazado y no destructivo).
+2. Elegí el **motor del router** (Claude / Codex / OpenCode).
+3. **Hablale al router** como a cualquier agente: *"investigá X y armá una landing"*. Él delega
+   workers reales que trabajan y le reportan; vos ves todo en vivo y podés intervenir en cualquier tile.
 
-Los workers corren con `--dangerously-skip-permissions` para poder trabajar de forma autónoma
-(crear archivos, correr comandos). Es apropiado solo en una máquina local de confianza. **No lo
-uses con tareas o entradas no confiables.**
+## 📁 Estructura del repo
 
-## Roadmap / próximos pasos
+```
+desktop/            → la app HyprDesk (Tauri v2 + React + Rust) — el proyecto principal
+  src/              frontend (tiles, IDE surface, paneles, palette)
+  src-tauri/src/    backend Rust (PTYs, túnel, engines, watcher/git, workspaces)
+  mcp/              MCP server role-aware + roles (router/worker)
+cli/                → prototipo previo: orquestador router→worker por CLI, standalone
+```
 
-- [ ] Reubicar workspaces fuera del home (hoy los proyectos caen en `~/`, poco seguro) →
-      carpetas de workspace elegibles por el usuario.
-- [ ] Persistencia real de conversaciones y sesiones (resumir/rehidratar agentes).
-- [ ] Soportar otros agentes como router/worker (Codex, OpenCode).
-- [ ] Worktrees git por worker para paralelismo sin conflictos.
-- [ ] Pegar imágenes en cualquier tile; badges de notificación entre agentes.
+## 🔒 Seguridad
+
+Los agentes corren en **modo autónomo** (`--dangerously-skip-permissions` en claude,
+`--dangerously-bypass-approvals-and-sandbox` en codex, permisos abiertos en opencode) para poder
+trabajar sin pedirte aprobación en cada paso — es el punto de la delegación. El radio de acción es
+la carpeta del workspace. **Usalo solo en una máquina local de confianza y con tareas/entradas
+confiables.**
+
+## 🗺️ Roadmap
+
+- [x] Workspaces + persistencia (resume) + entorno saneado
+- [x] Túnel MCP bidireccional + multi-motor (claude/codex/opencode) mezclable
+- [x] Multi-workspace keep-alive en tabs
+- [x] Superficie IDE: editor de código, diffs, navegador/preview
+- [x] Control de cambios en vivo (watcher + git)
+- [x] Abrir carpetas externas (enlazadas, no destructivas)
+- [x] Integración nativa macOS (menú + ventanas)
+- [ ] **Git worktrees por worker** → paralelismo real sin que se pisen
+- [ ] **Perfiles/personas de agentes** (definibles, delegación por tipo de tarea)
+- [ ] Multi-ventana "de verdad" (ruteo por-ventana)
 
 ---
 
