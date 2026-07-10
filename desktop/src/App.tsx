@@ -10,6 +10,7 @@ import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
 import { SettingsModal } from "./SettingsModal";
 import { CreateAgentModal } from "./CreateAgentModal";
 import { AskUserModal } from "./AskUserModal";
+import { TeamModal } from "./TeamModal";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -114,6 +115,7 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [askUser, setAskUser] = useState<{ id: string; question: string } | null>(null); // pregunta del router (ask_user)
   const [wtNoticeDismissed, setWtNoticeDismissed] = useState(() => localStorage.getItem("hd-wt-notice") === "1");
@@ -470,13 +472,24 @@ function App() {
     try {
       const l = await invoke<AgentLaunch>("spawn_profile_worker", {
         engine: profile.engine, cwd: cur.meta.folder, routerId: cur.routerId,
-        model: profile.model || null, effort: profile.effort || null, persona: profile.persona || null, task: task || null,
+        model: profile.model || null, effort: profile.effort || null, persona: profile.persona || null,
+        task: task || null, name: profile.name || null,
       });
       const t = tileFromLaunch(l, "worker", profile.name);
       t.name = profile.name; t.color = profile.color;
       updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
     } catch { /* error de lanzamiento */ }
   }, [updateCurrent]);
+
+  // Lanza un EQUIPO de perfiles a la vez (A2). Cada uno arranca con el objetivo compartido (o idle).
+  const launchTeam = useCallback(async (selected: Profile[], goal: string) => {
+    for (const p of selected) {
+      const task = goal
+        ? `Sos parte de un equipo. Objetivo compartido: ${goal}\n\nEsperá instrucciones puntuales del router (o del usuario) para tu parte.`
+        : undefined;
+      await launchProfile(p, task);
+    }
+  }, [launchProfile]);
 
   // Registra una URL localhost detectada en la salida de un tile (dedupe, por workspace).
   const addPreview = useCallback((folder: string, url: string) => {
@@ -827,6 +840,7 @@ function App() {
                     onFocus={setActive} onNewTerminal={addTerminal}
                     onLaunchProfile={(p) => launchProfile(p)}
                     onCreateAgent={() => setCreateAgentOpen(true)}
+                    onLaunchTeam={() => setTeamOpen(true)}
                     onDeleteProfile={deleteProfile}
                   />
         )}
@@ -897,6 +911,14 @@ function App() {
             invoke("answer_user", { questionId: askUser.id, answer }).catch(() => {});
             setAskUser(null);
           }}
+        />
+      )}
+      {teamOpen && (
+        <TeamModal
+          profiles={current?.profiles ?? []}
+          canLaunch={!!current?.routerId}
+          onClose={() => setTeamOpen(false)}
+          onLaunch={launchTeam}
         />
       )}
     </div>

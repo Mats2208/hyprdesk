@@ -373,6 +373,7 @@ fn spawn_profile_worker(
     effort: Option<String>,
     persona: Option<String>,
     task: Option<String>,
+    name: Option<String>,
 ) -> Result<AgentLaunch, String> {
     let agent_id = uuid::Uuid::new_v4().to_string();
     let opts = engines::AgentOpts {
@@ -390,7 +391,8 @@ fn spawn_profile_worker(
         &engine, state.port, &agent_id, "worker", &agent_cwd, Some(&router_id), None, task.as_deref(), &opts,
     )?;
     state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
-        id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
+        id: agent_id.clone(), engine: engine.clone(),
+        name: name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| agent_id.clone()),
         router_id: router_id.clone(), cwd: agent_cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
     });
     Ok(AgentLaunch {

@@ -11,7 +11,7 @@ export const ENGINE_COLOR: Record<string, string> = {
 };
 
 export function Sidebar({
-  agents, activeId, activity, profiles, onFocus, onNewTerminal, onLaunchProfile, onCreateAgent, onDeleteProfile,
+  agents, activeId, activity, profiles, onFocus, onNewTerminal, onLaunchProfile, onCreateAgent, onLaunchTeam, onDeleteProfile,
 }: {
   agents: AgentRow[];
   activeId: string;
@@ -21,6 +21,7 @@ export function Sidebar({
   onNewTerminal: () => void;
   onLaunchProfile: (p: Profile) => void;
   onCreateAgent: () => void;
+  onLaunchTeam: () => void;
   onDeleteProfile: (id: string) => void;
 }) {
   return (
@@ -51,7 +52,15 @@ export function Sidebar({
         ))}
       </div>
 
-      <div className="sidebar__head sidebar__head--sub">Perfiles · {profiles.length}</div>
+      <div className="sidebar__head sidebar__head--sub">
+        <span>Perfiles · {profiles.length}</span>
+        {profiles.length > 0 && (
+          <button className="sidebar__team" onClick={onLaunchTeam} title="Lanzar un equipo de perfiles a la vez">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M3 2.5l8 4.5-8 4.5z" fill="currentColor" /></svg>
+            equipo
+          </button>
+        )}
+      </div>
       <div className="sidebar__profiles">
         {profiles.length === 0 && <div className="fslist__empty">sin perfiles · creá uno ↓</div>}
         {profiles.map((p) => (

@@ -52,6 +52,11 @@ const CloseIcon = () => (
   <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
 );
 
+// Perfil en blanco para el modo manual (sin IA).
+function blankProfile(): Profile {
+  return { id: crypto.randomUUID(), name: "", engine: "claude", model: undefined, effort: undefined, persona: "", color: COLORS[0], rules: { canMerge: "ask" } };
+}
+
 export function CreateAgentModal({
   onClose, onSave, onSaveAndLaunch, canLaunch,
 }: {
@@ -60,6 +65,7 @@ export function CreateAgentModal({
   onSaveAndLaunch: (p: Profile) => void;
   canLaunch: boolean;
 }) {
+  const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [desc, setDesc] = useState("");
   const [gen, setGen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +73,13 @@ export function CreateAgentModal({
   const [cat, setCat] = useState<Catalog | null>(null);
 
   useEffect(() => { invoke<Catalog>("list_models").then(setCat).catch(() => {}); }, []);
+
+  // Cambiar de modo: manual arranca con un perfil en blanco (form directo); IA vuelve al describir.
+  const switchMode = (m: "ai" | "manual") => {
+    setMode(m); setError(null);
+    if (m === "manual") setP((cur) => cur ?? blankProfile());
+    else setP(null);
+  };
 
   const generate = async () => {
     if (!desc.trim() || gen) return;
@@ -97,20 +110,26 @@ export function CreateAgentModal({
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className="modal modal--wide" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal__head">
-          <span className="modal__title">Crear agente con IA</span>
+          <span className="modal__title">Crear agente</span>
+          <div className="ca__modes">
+            <button className={`ca__mode ${mode === "ai" ? "ca__mode--on" : ""}`} onClick={() => switchMode("ai")}>Con IA ✨</button>
+            <button className={`ca__mode ${mode === "manual" ? "ca__mode--on" : ""}`} onClick={() => switchMode("manual")}>Manual</button>
+          </div>
           <button className="modal__close" onClick={onClose} title="Cerrar"><CloseIcon /></button>
         </div>
 
-        <div className="modal__section">
-          <div className="modal__hint">Describí el agente. El meta-agente (el CLI de Configuración) arma el perfil: motor, modelo, effort y persona. Es por-workspace.</div>
-          <textarea
-            className="ca__desc" value={desc} rows={4}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Ej: agente de backend, preciso pero no el más pesado, con instrucciones por endpoint y arquitectura; corre tests pero NUNCA mergea a git sin mi permiso."
-          />
-          <button className="modal__save" onClick={generate} disabled={gen || !desc.trim()}>{gen ? "Generando…" : "Generar perfil ✨"}</button>
-          {error && <div className="ca__error">{error}</div>}
-        </div>
+        {mode === "ai" && (
+          <div className="modal__section">
+            <div className="modal__hint">Describí el agente. El meta-agente (el CLI de Configuración) arma el perfil: motor, modelo, effort y persona. Es por-workspace.</div>
+            <textarea
+              className="ca__desc" value={desc} rows={4}
+              onChange={(e) => setDesc(e.target.value)}
+              placeholder="Ej: agente de backend, preciso pero no el más pesado, con instrucciones por endpoint y arquitectura; corre tests pero NUNCA mergea a git sin mi permiso."
+            />
+            <button className="modal__save" onClick={generate} disabled={gen || !desc.trim()}>{gen ? "Generando…" : "Generar perfil ✨"}</button>
+            {error && <div className="ca__error">{error}</div>}
+          </div>
+        )}
 
         {p && (
           <>
@@ -146,8 +165,8 @@ export function CreateAgentModal({
               </div>
             </div>
             <div className="modal__foot ca__foot">
-              <button className="modal__ghost" onClick={() => { onSave(p); onClose(); }}>Guardar</button>
-              <button className="modal__save" disabled={!canLaunch} title={canLaunch ? "" : "Necesitás un router en el workspace"} onClick={() => { onSaveAndLaunch(p); onClose(); }}>Guardar y lanzar</button>
+              <button className="modal__ghost" disabled={!p.name.trim()} onClick={() => { onSave(p); onClose(); }}>Guardar</button>
+              <button className="modal__save" disabled={!canLaunch || !p.name.trim()} title={canLaunch ? "" : "Necesitás un router en el workspace"} onClick={() => { onSaveAndLaunch(p); onClose(); }}>Guardar y lanzar</button>
             </div>
           </>
         )}

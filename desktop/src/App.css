@@ -773,6 +773,13 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 
 /* ==================== PERFILES DE AGENTES (sidebar) ==================== */
 .sidebar__head--sub { border-top: 1px solid var(--hairline); margin-top: 4px; }
+.sidebar__team {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;
+  border: 1px solid rgba(52, 211, 153, 0.3); background: transparent; color: var(--router);
+  font: 600 9px/1 ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer; transition: all 0.15s;
+}
+.sidebar__team:hover { background: var(--router-soft); border-color: var(--router); }
 .sidebar__profiles { flex: 0 1 auto; max-height: 40%; overflow-y: auto; padding: 2px 8px; display: flex; flex-direction: column; gap: 2px; }
 .profrow { display: flex; align-items: center; gap: 2px; }
 .profrow__open {
@@ -813,7 +820,35 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
   color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
 }
 .modal__ghost:hover { color: var(--text); border-color: var(--hairline-2); }
+.modal__ghost:disabled { opacity: 0.4; cursor: not-allowed; }
 .modal__save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* toggle IA / Manual en el header del modal Crear agente */
+.ca__modes { display: flex; gap: 3px; margin-left: auto; margin-right: 10px; background: var(--surface-2); border-radius: 8px; padding: 3px; }
+.ca__mode {
+  padding: 5px 11px; border-radius: 6px; border: none; background: transparent;
+  color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.ca__mode:hover { color: var(--text); }
+.ca__mode--on { color: var(--router); background: var(--router-soft); }
+
+/* ==================== MODAL EQUIPO (lanzar varios perfiles) ==================== */
+.team__list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
+.team__row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px;
+  border: 1px solid var(--hairline); background: var(--surface-2); cursor: pointer; transition: all 0.15s;
+}
+.team__row:hover { border-color: var(--hairline-2); }
+.team__row--on { border-color: var(--router); background: var(--router-soft); }
+.team__check {
+  width: 17px; height: 17px; flex: 0 0 auto; border-radius: 5px; border: 1.5px solid var(--hairline-2);
+  display: grid; place-items: center; color: transparent;
+}
+.team__row--on .team__check { border-color: var(--router); background: var(--router); color: #0b0b0d; }
+.team__dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.team__name { font-size: 13px; font-weight: 500; color: var(--text); }
+.team__meta { margin-left: auto; font: 10px ui-monospace, monospace; color: var(--faint); white-space: nowrap; }
+.team__empty { font-size: 12.5px; color: var(--muted); padding: 8px 2px; }
 
 /* ==================== WORKTREES (aislamiento por ramas) ==================== */
 .tile__branch {
