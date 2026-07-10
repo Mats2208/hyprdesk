@@ -247,6 +247,21 @@ fn with_persona(base: String, persona: Option<&str>) -> String {
     }
 }
 
+// Rol base + memoria del workspace (solo router): lo que el router guardó en sesiones anteriores se
+// le re-inyecta acá para que retome con contexto. Los workers no tienen memoria persistente.
+fn role_with_memory(role: &str, cwd: &str) -> Result<String, String> {
+    let base = role_text(role)?;
+    if role != "router" {
+        return Ok(base);
+    }
+    match crate::memory::read(cwd) {
+        Some(mem) => Ok(format!(
+            "{base}\n\n--- MEMORIA DE ESTE WORKSPACE (la mantenés vos con save_memory) ---\n\n{mem}"
+        )),
+        None => Ok(base),
+    }
+}
+
 pub fn build_agent(
     engine: &str,
     port: u16,
@@ -265,17 +280,19 @@ pub fn build_agent(
     };
     let env = mcp_env(port, agent_id, role, cwd, router_id);
     let ask = crate::settings::ask_permission(); // modo "preguntar" vs auto (bypass)
+    // Rol final = base + memoria (router) + persona (perfil). Se compone una vez acá.
+    let role_txt = with_persona(role_with_memory(role, cwd)?, opts.persona);
     match engine {
-        "claude" => build_claude(agent_id, role, &env, resume_id, task, opts, ask),
-        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task, opts, ask),
-        "opencode" => build_opencode(agent_id, role, &env, resume_id, task, opts, ask),
+        "claude" => build_claude(agent_id, &role_txt, &env, resume_id, task, opts, ask),
+        "codex" => build_codex(&role_txt, cwd, &env, resume_id, task, opts, ask),
+        "opencode" => build_opencode(agent_id, &role_txt, &env, resume_id, task, opts, ask),
         other => Err(format!("motor desconocido: {other}")),
     }
 }
 
 fn build_claude(
     agent_id: &str,
-    role: &str,
+    role_txt: &str,
     env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
@@ -283,7 +300,6 @@ fn build_claude(
     ask: bool,
 ) -> Result<LaunchSpec, String> {
     let cfg = claude_mcp_config(agent_id, env)?;
-    let role_txt = with_persona(role_text(role)?, opts.persona);
     let (sid, resume) = match resume_id {
         Some(id) => (id, true),
         None => (uuid::Uuid::new_v4().to_string(), false),
@@ -304,7 +320,7 @@ fn build_claude(
         cfg,
         "--strict-mcp-config".into(),
         "--append-system-prompt".into(),
-        role_txt,
+        role_txt.to_string(),
     ]);
     if !ask {
         // modo auto (default): sin prompts de permiso. En modo "ask" NO lo ponemos → claude pregunta.
@@ -318,8 +334,7 @@ fn build_claude(
 }
 
 fn build_codex(
-    _agent_id: &str,
-    role: &str,
+    role_txt: &str,
     cwd: &str,
     env: &[(String, String)],
     resume_id: Option<String>,
@@ -328,7 +343,6 @@ fn build_codex(
     ask: bool,
 ) -> Result<LaunchSpec, String> {
     let mcp = mcp_script()?;
-    let role_txt = with_persona(role_text(role)?, opts.persona);
     // Flags -c para el MCP hyprdesk inline (env por-agente). Los valores string van con
     // comillas TOML internas; los barewords (node) caen a raw string.
     let mut argv = vec!["codex".to_string()];
@@ -388,15 +402,14 @@ fn build_codex(
 
 fn build_opencode(
     agent_id: &str,
-    role: &str,
+    role_txt: &str,
     env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
     opts: &AgentOpts,
     ask: bool,
 ) -> Result<LaunchSpec, String> {
-    let role_txt = with_persona(role_text(role)?, opts.persona);
-    let cfg = opencode_config(agent_id, &role_txt, env, ask)?;
+    let cfg = opencode_config(agent_id, role_txt, env, ask)?;
     let mut argv = vec!["opencode".to_string()];
     if let Some(m) = opts.model {
         argv.push("-m".to_string());

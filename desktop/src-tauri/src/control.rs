@@ -322,6 +322,21 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
             questions.lock().unwrap().remove(&qid);
             let _ = req.respond(json_response(json!({ "answer": answer }).to_string()));
         }
+        "/save_memory" => {
+            let body = read_body(&mut req);
+            let v = serde_json::from_str::<serde_json::Value>(&body).unwrap_or(json!({}));
+            let cwd = v.get("cwd").and_then(|c| c.as_str()).unwrap_or("").to_string();
+            let content = v.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+            let result = if cwd.is_empty() {
+                json!({ "ok": false, "error": "sin cwd" })
+            } else {
+                match crate::memory::write(&cwd, &content) {
+                    Ok(_) => json!({ "ok": true }),
+                    Err(e) => json!({ "ok": false, "error": e }),
+                }
+            };
+            let _ = req.respond(json_response(result.to_string()));
+        }
         "/message" => {
             let body = read_body(&mut req);
             let msg = match serde_json::from_str::<MessageBody>(&body) {

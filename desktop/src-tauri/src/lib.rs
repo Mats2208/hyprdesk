@@ -14,6 +14,7 @@ mod changes;
 mod control;
 mod engines;
 mod fsops;
+mod memory;
 mod settings;
 mod usage;
 mod workspace;

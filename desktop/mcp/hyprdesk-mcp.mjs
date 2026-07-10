@@ -200,6 +200,31 @@ if (ROLE === "router") {
       }
     }
   );
+
+  server.registerTool(
+    "save_memory",
+    {
+      title: "Guardar tu memoria del workspace (persiste entre sesiones)",
+      description:
+        "Guardá/actualizá tu MEMORIA de este workspace. Se te re-inyecta al reabrirlo, así retomás con " +
+        "contexto. Sobrescribe el doc COMPLETO (mandá el texto entero actualizado, no un fragmento). " +
+        "Anotá lo DURADERO: arquitectura y decisiones técnicas, convenciones, dónde está cada cosa, el " +
+        "plan por fases, qué está hecho/pendiente, y preferencias del usuario. Conciso, en Markdown. " +
+        "Actualizala cuando tomes una decisión importante o cierres una fase.",
+      inputSchema: {
+        content: z.string().describe("El doc de memoria COMPLETO y actualizado (Markdown conciso)."),
+      },
+    },
+    async ({ content }) => {
+      try {
+        const r = await post("/save_memory", { cwd: CWD, content });
+        if (!r.ok) return err(r.error || "no se pudo guardar la memoria");
+        return ok("Memoria del workspace guardada. Se te va a re-inyectar la próxima vez que abras este workspace.");
+      } catch (e) {
+        return err(`Error guardando memoria: ${e.message}`);
+      }
+    }
+  );
 } else {
   server.registerTool(
     "report_to_router",
