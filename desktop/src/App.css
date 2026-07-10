@@ -956,3 +956,50 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .agentrow--worker { margin-left: 12px; border-left: 1px solid var(--hairline); border-radius: 0 8px 8px 0; padding-left: 12px; }
 .agentrow__branch { color: #c084fc; font-size: 11px; flex: 0 0 auto; }
+
+/* ==================== SETTINGS (panel buscable por schema) ==================== */
+.settings {
+  width: 760px; max-width: calc(100vw - 40px); height: 560px; max-height: calc(100vh - 80px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); animation: modal-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.settings__head { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--hairline); }
+.settings__title { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.settings__search {
+  flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--hairline);
+  background: var(--bg); color: var(--text); font-size: 13px; outline: none;
+}
+.settings__search:focus { border-color: var(--router); }
+.settings__body { flex: 1; display: flex; min-height: 0; }
+.settings__nav { width: 190px; flex: 0 0 auto; border-right: 1px solid var(--hairline); padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.settings__navitem { text-align: left; padding: 8px 10px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.12s; }
+.settings__navitem:hover { color: var(--text); background: var(--hover); }
+.settings__navitem--on { color: var(--router); background: var(--router-soft); }
+.settings__main { flex: 1; overflow-y: auto; padding: 14px 20px; }
+.settings__empty { color: var(--faint); font-size: 13px; padding: 20px; text-align: center; }
+.settings__cat { font: 600 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 10px 0; }
+.settings__field { padding: 13px 0; border-bottom: 1px solid var(--hairline); }
+.settings__field:last-child { border-bottom: none; }
+.settings__flabel { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.settings__fdesc { font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 9px; max-width: 520px; }
+.settings__input {
+  width: 100%; max-width: 420px; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--hairline); background: var(--bg); color: var(--text); font: 12.5px var(--font-mono); outline: none;
+}
+.settings__input:focus { border-color: var(--router); }
+.settings__input--sm { max-width: 120px; }
+.settings__seg { display: inline-flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 9px; }
+.settings__segbtn { padding: 6px 14px; border-radius: 6px; border: none; background: transparent; color: var(--muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.12s; }
+.settings__segbtn:hover { color: var(--text); }
+.settings__segbtn--on { color: var(--router); background: var(--router-soft); }
+
+.providers { display: flex; flex-direction: column; gap: 6px; max-width: 460px; }
+.providers__empty { font-size: 12px; color: var(--faint); }
+.providers__row { display: flex; gap: 6px; align-items: center; }
+.providers__label { flex: 0 0 140px; }
+.providers__key { flex: 1; }
+.providers__del { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--hairline); background: transparent; color: var(--faint); cursor: pointer; transition: all 0.15s; }
+.providers__del:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
+.providers__add { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 7px 12px; border-radius: 8px; border: 1px dashed var(--hairline-2); background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; transition: all 0.15s; }
+.providers__add:hover { color: var(--router); border-color: var(--router); }

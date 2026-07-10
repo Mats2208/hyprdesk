@@ -1,7 +1,7 @@
 // Todos los overlays/modales, cableados a los stores. Se montan al final del shell.
 import { invoke } from "@tauri-apps/api/core";
 import { CommandPalette } from "../CommandPalette";
-import { SettingsModal } from "../SettingsModal";
+import { SettingsView } from "../settings/SettingsView";
 import { CreateAgentModal } from "../CreateAgentModal";
 import { AskUserModal } from "../AskUserModal";
 import { TeamModal } from "../TeamModal";
@@ -30,7 +30,7 @@ export function Modals() {
     <>
       {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsView onClose={() => setSettingsOpen(false)} />}
       {createAgentOpen && (
         <CreateAgentModal
           canLaunch={canLaunch}

@@ -1,7 +1,7 @@
 // Raíz de composición: monta los hooks globales y elige la pantalla (gestor de workspaces vs IDE).
 // El estado y la lógica viven en los stores (store/) y el layout en (layout/).
 import { WorkspaceManager } from "./WorkspaceManager";
-import { SettingsModal } from "./SettingsModal";
+import { SettingsView } from "./settings/SettingsView";
 import { Shell } from "./layout/Shell";
 import "./commands/appCommands"; // registra los comandos (side-effect)
 import { useBackendEvents } from "./hooks/useBackendEvents";
@@ -26,7 +26,7 @@ function App() {
     return (
       <>
         <WorkspaceManager onOpen={openWorkspace} />
-        {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+        {settingsOpen && <SettingsView onClose={() => setSettingsOpen(false)} />}
       </>
     );
   }
