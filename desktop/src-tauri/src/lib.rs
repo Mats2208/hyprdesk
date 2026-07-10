@@ -20,7 +20,8 @@ use control::ControlState;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use sysinfo::System;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 // PATH real del usuario (resuelto vía login shell). Necesario porque una app lanzada
 // desde Finder/Applications hereda un PATH mínimo (sin nvm) y no encontraría claude/codex/node.
@@ -380,6 +381,77 @@ fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
     *state.active_cwd.lock().unwrap() = Some(folder);
 }
 
+// Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
+// (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust.
+fn build_menu(app: &tauri::App) -> tauri::Result<()> {
+    let h = app.handle();
+    let app_menu = SubmenuBuilder::new(h, "HyprDesk")
+        .about(None)
+        .separator()
+        .hide()
+        .hide_others()
+        .separator()
+        .quit()
+        .build()?;
+
+    let new_ws = MenuItem::with_id(h, "new-workspace", "Nuevo workspace", true, Some("CmdOrCtrl+N"))?;
+    let open_folder = MenuItem::with_id(h, "open-folder", "Abrir carpeta…", true, Some("CmdOrCtrl+O"))?;
+    let new_window = MenuItem::with_id(h, "new-window", "Nueva ventana", true, Some("CmdOrCtrl+Shift+N"))?;
+    let close_ws = MenuItem::with_id(h, "close-workspace", "Cerrar workspace", true, Some("CmdOrCtrl+Shift+W"))?;
+    let file_menu = SubmenuBuilder::new(h, "Archivo")
+        .item(&new_ws)
+        .item(&open_folder)
+        .separator()
+        .item(&new_window)
+        .separator()
+        .item(&close_ws)
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(h, "Editar")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    // Sin accelerator: ⌘B/⌘K ya los maneja el keydown del frontend (evitamos doble disparo).
+    let toggle_sidebar = MenuItem::with_id(h, "toggle-sidebar", "Mostrar / ocultar panel", true, None::<&str>)?;
+    let palette = MenuItem::with_id(h, "palette", "Comandos…", true, None::<&str>)?;
+    let view_menu = SubmenuBuilder::new(h, "Ver")
+        .item(&toggle_sidebar)
+        .item(&palette)
+        .separator()
+        .fullscreen()
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(h, "Ventana")
+        .minimize()
+        .item(&new_window)
+        .separator()
+        .close_window()
+        .build()?;
+
+    let menu = MenuBuilder::new(h)
+        .items(&[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu])
+        .build()?;
+    app.set_menu(menu)?;
+    Ok(())
+}
+
+// Abre otra ventana (comparte proceso: túnel/PTY globales; cada ventana maneja sus workspaces).
+fn open_new_window(app: &AppHandle) {
+    let label = format!("win-{}", uuid::Uuid::new_v4().simple());
+    let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title("HyprDesk")
+        .inner_size(1400.0, 900.0)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .build();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -392,7 +464,18 @@ pub fn run() {
             workspace::ensure_root();
             let state = control::start(app.handle().clone());
             app.manage(state);
+            build_menu(app)?;
             Ok(())
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "new-window" => open_new_window(app),
+            other => {
+                // solo a la ventana enfocada (con varias ventanas, evita el doble disparo)
+                match app.webview_windows().values().find(|w| w.is_focused().unwrap_or(false)) {
+                    Some(win) => { let _ = win.emit("menu", other.to_string()); }
+                    None => { let _ = app.emit("menu", other.to_string()); }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,

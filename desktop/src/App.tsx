@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { TerminalTile } from "./TerminalTile";
 import { CodeTile } from "./CodeTile";
 import { BrowserTile } from "./BrowserTile";
@@ -104,6 +105,7 @@ function App() {
   sessionsRef.current = sessions;
   const currentIdRef = useRef(currentId);
   currentIdRef.current = currentId;
+  const menuActionRef = useRef<(action: string) => void>(() => {}); // handlers del menú nativo (frescos por render)
 
   const current = sessions.find((s) => s.meta.id === currentId) ?? null;
   const currentActiveId = current?.activeId ?? "";
@@ -181,6 +183,13 @@ function App() {
   useEffect(() => {
     if (currentActiveId) setActivity((a) => (a.includes(currentActiveId) ? a.filter((x) => x !== currentActiveId) : a));
   }, [currentActiveId]);
+
+  // ---- menú nativo: el backend emite "menu"<action> → ejecutamos el handler fresco ----
+  useEffect(() => {
+    let un: (() => void) | undefined;
+    listen<string>("menu", (e) => menuActionRef.current(e.payload)).then((u) => { un = u; });
+    return () => un?.();
+  }, []);
 
   // ---- mantener el cwd "activo" del backend apuntando al workspace visible (fallback del túnel) ----
   useEffect(() => {
@@ -445,6 +454,23 @@ function App() {
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+  };
+
+  // Handler del menú nativo (reasignado cada render → captura los closures actuales).
+  menuActionRef.current = (action: string) => {
+    switch (action) {
+      case "new-workspace": setPanel("workspaces"); setSidebarOpen(true); break;
+      case "open-folder":
+        open({ directory: true, multiple: false, title: "Abrir carpeta como workspace" })
+          .then((picked) => (picked && typeof picked === "string"
+            ? invoke<WorkspaceMeta>("link_workspace", { folder: picked }) : undefined))
+          .then((meta) => { if (meta) openWorkspace(meta); })
+          .catch(() => {});
+        break;
+      case "close-workspace": if (currentId) closeWorkspace(currentId); break;
+      case "toggle-sidebar": setSidebarOpen((o) => !o); break;
+      case "palette": setPaletteOpen((o) => !o); break;
+    }
   };
 
   // ---- pantalla: gestor de workspaces (estado vacío / inicial) ----
