@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧭 HyprDesk
+# HyprDesk
 
 **Orchestrate a team of AI coding agents on your desktop.** A **router** agent — the one you talk to — _leads_: it thinks, investigates, designs, writes the critical code, and **delegates execution** to **worker** agents, each in its own real terminal. They all talk over a **local bidirectional MCP tunnel** — **A2A (Agent-to-Agent) running on your machine**.
 
-[![Status](https://img.shields.io/badge/status-active%20development-34d399?style=flat-square)](https://github.com/Mats2208/hyprdesk)
+[![Status](https://img.shields.io/badge/status-active%20development-3b9eff?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Platform](https://img.shields.io/badge/platform-macOS-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/Mats2208/hyprdesk)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -17,14 +17,14 @@
 <table>
 <tr>
 <td align="center"><strong>3 Engines</strong><br/><sub>Claude · Codex · OpenCode</sub></td>
-<td align="center"><strong>Router → N Workers</strong><br/><sub>parallel, real terminals</sub></td>
+<td align="center"><strong>Router → N Workers</strong><br/><sub>parallel, live terminals</sub></td>
 <td align="center"><strong>Local A2A Tunnel</strong><br/><sub>bidirectional MCP</sub></td>
 <td align="center"><strong>git Worktrees</strong><br/><sub>isolation + merge-back</sub></td>
-<td align="center"><strong>IDE Surface</strong><br/><sub>editor · diff · preview</sub></td>
+<td align="center"><strong>Source Control</strong><br/><sub>commit · push · pull · merge</sub></td>
 </tr>
 </table>
 
-**Mix engines freely — Claude Code, Codex and OpenCode can each be router _or_ worker — on an IDE-like surface, with AI-built agent profiles, git-worktree isolation and automatic merge-back.**
+**Mix engines freely — Claude Code, Codex and OpenCode can each be router _or_ worker — with AI-built agent profiles, git-worktree isolation, an in-app Source Control panel, and a premium, sober UI (dark / light / high-contrast).**
 
 </div>
 
@@ -33,51 +33,37 @@
 ## Showcase
 
 <p align="center">
-  <img src="docs/router-workers.png" alt="A router delegating to two workers in parallel — OpenCode as router, Claude and Codex as workers, each in its own real terminal" width="820"/>
+  <img src="docs/router-workers.png" alt="A router delegating to workers in parallel — each agent in its own live terminal" width="820"/>
 </p>
-<p align="center"><sub>A router delegating to two workers in parallel — OpenCode routing, Claude + Codex working, one showing its live diff on the right</sub></p>
+<p align="center"><sub>A router delegating to workers in parallel — each agent runs in its own live terminal, reporting back over the local A2A tunnel.</sub></p>
 
-<table>
-<tr>
-<td width="50%">
-<p align="center"><img src="docs/ide-editor.png" alt="Code editor and file explorer with live change counter" width="100%"/></p>
-<p align="center"><sub>IDE surface — file explorer + CodeMirror editor with the live change counter</sub></p>
-</td>
-<td width="50%">
-<p align="center"><img src="docs/command-palette.png" alt="Command palette over the agent grid" width="100%"/></p>
-<p align="center"><sub>Command palette (⌘K) over the agent grid</sub></p>
-</td>
-</tr>
-</table>
-
-<p align="center">
-  <img src="docs/selector.png" alt="Router engine selector when opening a workspace" width="560"/>
-</p>
-<p align="center"><sub>Pick the router engine when you open a workspace — Claude Code, Codex or OpenCode</sub></p>
+> **Note:** the UI was recently redesigned to a **premium, near-monochrome theme** (inspired by VS Code's *Dark Modern*). The screenshot above shows the multi-agent grid concept; fresh screenshots of the new look are on the way.
 
 ---
 
 ## What it does
 
-A desktop app where one agent **leads** a team of others, all wired through a local MCP tunnel.
+A desktop app where one agent **leads** a team of others — all wired through a local MCP tunnel, working in isolated git branches, with real Source Control built in.
 
 | | Feature | Details |
 |---|---------|---------|
 | **Lead agent** | Router leads & delegates | The router does the heavy thinking (investigate, design, write the critical code) and delegates execution with `spawn_worker` / `send_to_worker` — not a dumb dispatcher |
 | **Multi-engine** | Claude · Codex · OpenCode | Any of them as router **or** worker. The role is injected as a *system prompt* — no wasted turn. Model & reasoning effort selectable per agent |
 | **Local A2A** | Bidirectional MCP tunnel | Agents consult and report to each other through a `tiny_http` control server; you can jump into any terminal at any time |
-| **Profiles** | AI-built agent personas | Describe an agent in natural language → a meta-agent builds the profile (engine + model + effort + persona + color) against the models you actually have authenticated. Or build one **manually** |
+| **Profiles** | AI-built or manual personas | Describe an agent in natural language → a meta-agent builds the profile (engine + model + effort + persona + color) against the models you actually have authenticated. Or build one **by hand** |
 | **Delegation** | By profile, or it asks you | The router sees your profiles (`list_profiles`) and delegates to the right one — or asks you which to use (`ask_user`) instead of spawning generic workers |
+| **Teams** | Launch a squad at once | Pre-spawn a set of profiles as a team with a shared goal; they stay live and report to the router |
 | **Isolation** | git worktrees + merge-back | In git repos, each worker gets its own branch/worktree so they never collide; the router **integrates** branches into main (`merge_worker`) |
 | **Review** | Critic before merge | The router reads a worker's diff (`review_worker`) and verifies it before integrating — no blind merges |
 | **Memory** | Router memory across sessions | A per-workspace memory doc the router maintains (`save_memory`) and gets re-injected on reopen — it resumes with context |
-| **IDE surface** | Editor · diff · preview | CodeMirror viewer/editor (⌘S), diff tiles, and an embedded browser (iframe for localhost/HTML, native webview for external sites) with `localhost:PORT` auto-detection |
-| **Change control** | Live git tracking | A workspace watcher + `git status`/`git diff` → a modified-files panel and an "N changes" chip so you never miss what an agent touched |
+| **Source Control** | git, in-app | A VS Code-style panel: current branch, ahead/behind, **stage + commit + push + pull + merge + checkout** — plus a live changes list backed by a workspace watcher |
+| **Preview** | Embedded browser | An in-app browser (iframe for localhost/HTML, native webview for external sites) with `localhost:PORT` auto-detection when an agent starts a dev server |
 | **Workspaces** | Multi-workspace keep-alive | Several projects open in tabs at once; switch instantly without killing agents or burning tokens (all stay alive in the background) |
 | **Open any folder** | Non-destructive linking | Link a real existing project as a workspace — never deletes your folder; its state lives apart, without polluting your repo |
+| **Theming** | Premium & configurable | Near-monochrome dark / light / high-contrast themes, configurable UI & mono fonts and sizes, all from a searchable, schema-driven Settings panel |
 | **Permissions** | Autonomous or ask | *Autonomous* (bypass, flows on its own) or *ask* (review every edit/command) |
 | **Persistence** | Resume sessions | Reopen a workspace and agents revive via `--resume` (session-id) |
-| **Native macOS** | Menu · windows · paste images | Menu bar, multiple windows, paste images into any tile, and GLM (z.ai) quota in the header |
+| **Native macOS** | Menu · windows · paste images | Menu bar, multiple windows, paste images into any tile, command palette (⌘K), remappable keybindings, and GLM (z.ai) quota in the header |
 
 ## Installation
 
@@ -115,18 +101,18 @@ cp -R src-tauri/target/release/bundle/macos/HyprDesk.app /Applications/
 
    > *"Investigate the codebase and build a landing page with a backend."*
 
-   It delegates real workers that work and report back; you watch it all live and can jump into any tile.
+   It delegates real workers that work in isolated branches and report back; you watch it live, review their diffs, and commit/push from the Source Control panel.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
   subgraph APP["HyprDesk · Tauri v2"]
-    FE["React + xterm.js<br/>tiles · IDE surface · panels"]
-    BE["Rust backend<br/>PtyManager · control server · file watcher"]
+    FE["React + xterm.js<br/>terminal tiles · docks · Source Control"]
+    BE["Rust backend<br/>PtyManager · control server · git · watcher"]
     FE <-->|invoke / events| BE
   end
-  BE -->|PTY| R["🧭 Router agent<br/>claude / codex / opencode"]
+  BE -->|PTY| R["Router agent<br/>claude / codex / opencode"]
   BE -->|PTY| W1["worker"]
   BE -->|PTY| W2["worker"]
   HUB(["control server<br/>(the tunnel · tiny_http)"])
@@ -135,9 +121,9 @@ flowchart TB
   W2 <-->|MCP tools| HUB
 ```
 
-- **Frontend** (`desktop/src/`): React + xterm.js — tiles (terminal/code/diff/browser), tiling layout, panels (agents, workspaces, files, changes), command palette.
-- **Backend** (`desktop/src-tauri/src/`): Rust/Tauri — `lib.rs` (`PtyManager` + commands), `control.rs` (HTTP control server = tunnel hub + worker roster), `engines.rs` (per-engine adapters + model/effort/persona), `worktree.rs` (isolation + merge), `memory.rs` (router memory), `changes.rs` (watcher + git), `workspace.rs`, `settings.rs` (config + meta-agent + GLM quota), `browser.rs` (native webview).
-- **MCP** (`desktop/mcp/`): a *role-aware* stdio server exposing router vs worker tools (`spawn_worker`, `send_to_worker`, `list_workers`, `list_profiles`, `review_worker`, `merge_worker`, `ask_user`, `save_memory` / `report_to_router`, `ask_router`).
+- **Frontend** (`desktop/src/`): React + xterm.js. Modular — a zustand store (`store/`), hooks (`hooks/`), a layout shell (`layout/`: activity bar, side panel, tile grid, right dock, status bar), a command registry (`commands/`), a theme-token system (`theme/`), schema-driven settings (`settings/`), and onboarding.
+- **Backend** (`desktop/src-tauri/src/`): Rust/Tauri — `lib.rs` (`PtyManager` + commands), `control.rs` (HTTP control server = tunnel hub + worker roster), `engines.rs` (per-engine adapters + model/effort/persona), `worktree.rs` (isolation + merge), `memory.rs` (router memory), `changes.rs` (file watcher + all git commands: status/diff/commit/push/pull/branches/checkout/merge), `workspace.rs`, `settings.rs` (config + meta-agent + GLM quota), `browser.rs` (native webview).
+- **MCP** (`desktop/mcp/`): a *role-aware* stdio server exposing router vs worker tools — `spawn_worker`, `send_to_worker`, `list_workers`, `list_profiles`, `review_worker`, `merge_worker`, `ask_user`, `save_memory` (router) / `report_to_router`, `ask_router` (worker).
 
 ### How it delegates
 
@@ -169,8 +155,8 @@ sequenceDiagram
 
 ```
 desktop/            → the HyprDesk app (Tauri v2 + React + Rust) — the main project
-  src/              frontend (tiles, IDE surface, panels, palette)
-  src-tauri/src/    Rust backend (PTYs, tunnel, engines, watcher/git, workspaces, memory)
+  src/              frontend: store/ · hooks/ · layout/ · commands/ · theme/ · settings/ · onboarding/
+  src-tauri/src/    Rust backend (PTYs, tunnel, engines, worktrees/git, workspaces, memory)
   mcp/              role-aware MCP server + roles (router/worker)
 cli/                → earlier prototype: a standalone router→worker CLI orchestrator
 ```
@@ -185,8 +171,6 @@ By default agents run in **autonomous mode** (permission bypass: `--dangerously-
 - [x] Workspaces + persistence (resume) + sanitized environment
 - [x] Bidirectional MCP tunnel + mixable multi-engine (claude/codex/opencode)
 - [x] Multi-workspace keep-alive in tabs
-- [x] IDE surface: code editor, diffs, browser (iframe + native webview)
-- [x] Live change control (watcher + git)
 - [x] Open external folders (linked, non-destructive)
 - [x] Native macOS integration (menu + windows)
 - [x] AI-built agent profiles (per-workspace: model/effort/persona) + manual profiles
@@ -194,14 +178,16 @@ By default agents run in **autonomous mode** (permission bypass: `--dangerously-
 - [x] git worktrees per worker + router merge-back
 - [x] Configurable permission mode (auto / ask)
 - [x] Delegation by profile (`list_profiles`) + `ask_user`
-- [x] Per-agent status + team view
 - [x] Critic/review before merge (`review_worker`) + router memory across sessions
 - [x] Launch a team of profiles at once
+- [x] **Premium, near-monochrome UI** (VS Code *Dark Modern*-inspired) with dark / light / high-contrast themes
+- [x] **Schema-driven Settings** (themes · fonts · provider API keys · remappable keybindings) + onboarding
+- [x] **Source Control panel** — branch, ahead/behind, commit / push / pull / merge / checkout
 
 **Next**
 - [ ] Shared handoff doc injected into all workers
-- [ ] True multi-window (per-window routing) · light/dark theme
-- [ ] Codex/OpenCode usage in the header · app signing/notarization
+- [ ] True multi-window (per-window routing) · app signing/notarization
+- [ ] Codex/OpenCode usage in the header · fresh screenshots of the redesign
 
 ## Contributing
 
@@ -222,8 +208,8 @@ Released under the **[MIT License](LICENSE)** — © 2026 Mateo ([@Mats2208](htt
 
 <div align="center">
 
-**Built with 🦀 [Rust](https://www.rust-lang.org) · ⚛️ [React](https://react.dev) · [Tauri v2](https://tauri.app) · wired through [MCP](https://modelcontextprotocol.io)**
+**Built with Rust · React · Tauri v2 · wired through [MCP](https://modelcontextprotocol.io)**
 
-If HyprDesk is useful to you, star it ⭐ and share it with the community.
+If HyprDesk is useful to you, star it and share it with the community.
 
 </div>
