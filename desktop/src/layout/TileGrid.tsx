@@ -2,7 +2,6 @@
 // workers en cuadrícula a la derecha; divisor arrastrable; FAB de terminal manual.
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { TerminalTile } from "../TerminalTile";
-import { CodeTile } from "../CodeTile";
 import { BrowserTile } from "../BrowserTile";
 import type { Term, WsSession } from "../types";
 import { computeLayout } from "../store/sessionModel";
@@ -63,13 +62,7 @@ export function TileGrid({ session: s }: { session: WsSession }) {
     <div className={`workspace ${dragging && isCurrent ? "workspace--dragging" : ""}`}>
       {s.terms.map((t) => (
         <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
-          {t.kind === "file" || t.kind === "diff" ? (
-            <CodeTile
-              id={t.id} title={t.title} active={s.activeId === t.id} canClose={t.role === "worker"}
-              maximized={s.maxId === t.id} filePath={t.filePath} diff={t.diff}
-              onFocus={setActive} onClose={closeTerminal} onToggleMax={toggleMax}
-            />
-          ) : t.kind === "browser" ? (
+          {t.kind === "file" || t.kind === "diff" ? null : t.kind === "browser" ? (
             <BrowserTile
               id={t.id} title={t.title} active={s.activeId === t.id} canClose={t.role === "worker"}
               maximized={s.maxId === t.id} url={t.url}

@@ -17,7 +17,7 @@ export type Field = {
   visibleWhen?: (get: (k: string) => string) => boolean;
 };
 
-export const CATEGORIES = ["Apariencia", "Terminal", "Editor", "Agentes y permisos", "Proveedores y API keys", "Atajos"];
+export const CATEGORIES = ["Apariencia", "Terminal", "Agentes y permisos", "Proveedores y API keys", "Atajos"];
 
 export const SCHEMA: Field[] = [
   // — Apariencia (scope theme: store de tema) —
@@ -32,8 +32,6 @@ export const SCHEMA: Field[] = [
   // — Terminal / Editor (scope theme) —
   { key: "termFontSize", label: "Tamaño de fuente (terminal)", category: "Terminal", type: "number", scope: "theme",
     description: "Tamaño en px del texto de las terminales.", min: 8, max: 24, step: 0.5 },
-  { key: "editorFontSize", label: "Tamaño de fuente (editor)", category: "Editor", type: "number", scope: "theme",
-    description: "Tamaño en px del editor de código (CodeMirror).", min: 8, max: 24, step: 0.5 },
 
   // — Agentes y permisos (scope backend: ~/HyprDesk/settings.json) —
   { key: "assistantEngine", label: "Asistente de IA", category: "Agentes y permisos", type: "segmented", scope: "backend",

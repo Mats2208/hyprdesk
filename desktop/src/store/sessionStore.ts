@@ -36,8 +36,8 @@ async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Pro
       next.push(wt);
     } catch { /* worker que no resume, lo salteamos */ }
   }
-  for (const t of saved.tiles.filter((x) => x.kind === "file" || x.kind === "browser")) {
-    next.push({ id: t.id, title: t.title, role: "worker", kind: t.kind, filePath: t.filePath, url: t.url });
+  for (const t of saved.tiles.filter((x) => x.kind === "browser")) {
+    next.push({ id: t.id, title: t.title, role: "worker", kind: t.kind, url: t.url });
   }
   return {
     meta, terms: next, routerId: rId, activeId: rId || next[0]?.id || "",

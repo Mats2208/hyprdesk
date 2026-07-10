@@ -23,7 +23,7 @@ const BranchIcon = () => (
 export function SourceControl() {
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
   const changesByWs = useSessionStore((s) => s.changesByWs);
-  const { openDiff, startWatching } = useSessionStore.getState();
+  const { startWatching } = useSessionStore.getState();
   const setToast = useUiStore((s) => s.setToast);
   const folder = current?.meta.folder ?? null;
   const git = (folder ? changesByWs[folder]?.git : undefined) ?? [];
@@ -114,11 +114,11 @@ export function SourceControl() {
             {git.map((g) => {
               const s = statusLabel(g.status);
               return (
-                <button key={g.path} className="chgrow" title={g.path} onClick={() => openDiff(g.path)}>
+                <div key={g.path} className="chgrow chgrow--static" title={g.path}>
                   <span className={`chgrow__badge ${s.cls}`}>{s.txt}</span>
                   <span className="chgrow__name">{g.path.split("/").pop()}</span>
                   <span className="chgrow__dir">{g.path.replace(/\/?[^/]*$/, "")}</span>
-                </button>
+                </div>
               );
             })}
           </div>

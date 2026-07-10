@@ -5,8 +5,8 @@ import type { Panel, TileStatus } from "../types";
 
 // Layout persistido entre sesiones (sidebar abierto + panel activo).
 const savedPanel = localStorage.getItem("hd-panel");
-// "changes" ya no es un panel izquierdo (vive en el RightDock) → cae a "agents".
-const initPanel: Panel = savedPanel === "workspaces" || savedPanel === "files" ? savedPanel : "agents";
+// panel izquierdo: solo "agents" o "workspaces" (files/changes ya no existen ahí).
+const initPanel: Panel = savedPanel === "workspaces" ? "workspaces" : "agents";
 
 type UiState = {
   sidebarOpen: boolean;

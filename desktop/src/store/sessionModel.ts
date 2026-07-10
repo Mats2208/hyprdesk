@@ -18,8 +18,8 @@ export function savedStateOf(s: WsSession): SavedState {
   return {
     id: s.meta.id, name: s.meta.name, routerWidth: s.routerWidth,
     tiles: s.terms
-      // agentes (con sesión) + tiles de archivo/navegador (los diff son transitorios → fuera)
-      .filter((x) => x.sessionId || x.kind === "file" || x.kind === "browser")
+      // agentes (con sesión) + tiles de navegador (los de archivo/diff ya no se usan → fuera)
+      .filter((x) => x.sessionId || x.kind === "browser")
       .map((x) => ({
         id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId ?? "", title: x.title,
         kind: x.kind, filePath: x.filePath, url: x.url, name: x.name, color: x.color,

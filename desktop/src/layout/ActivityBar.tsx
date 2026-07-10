@@ -31,9 +31,6 @@ export function ActivityBar() {
       <button className={`act ${on("agents")}`} title="Agentes (⌘B)" onClick={() => clickPanel("agents")}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
       </button>
-      <button className={`act ${on("files")}`} title="Archivos" onClick={() => clickPanel("files")}>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11 3H5.5A1.5 1.5 0 004 4.5v11A1.5 1.5 0 005.5 17h9a1.5 1.5 0 001.5-1.5V8l-5-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M11 3v4.5H16" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
-      </button>
       <button className={`act ${rightOpen ? "act--on" : ""}`} title="Source Control" onClick={() => setRightOpen((o) => !o)}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="6" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" /><circle cx="6" cy="15" r="2.2" stroke="currentColor" strokeWidth="1.4" /><circle cx="14" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" /><path d="M6 8.2v4.6M14 8.2c0 3-2.5 4-4.5 4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
         {changeCount > 0 && <span className="act__badge">{changeCount > 99 ? "99+" : changeCount}</span>}
