@@ -121,7 +121,7 @@ fn handle_request(
                 .filter(|c| !c.is_empty())
                 .or_else(|| active_cwd.lock().unwrap().clone())
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
-            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt)) {
+            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &crate::engines::AgentOpts::default()) {
                 Ok(spec) => {
                     let _ = app.emit(
                         "spawn-agent",

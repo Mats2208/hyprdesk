@@ -227,6 +227,25 @@ fn file_with_id_exists(root: &PathBuf, id: &str) -> bool {
         .any(|p| p.file_name().map_or(false, |n| n.to_string_lossy().contains(id)))
 }
 
+// Opciones de lanzamiento por-agente (de un perfil): modelo, effort de razonamiento, y persona
+// (instrucciones extra que se concatenan al rol). Todos opcionales → default = comportamiento actual.
+#[derive(Default)]
+pub struct AgentOpts<'a> {
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
+    pub persona: Option<&'a str>,
+}
+
+// Compone el rol base con la persona del perfil (si hay).
+fn with_persona(base: String, persona: Option<&str>) -> String {
+    match persona {
+        Some(p) if !p.trim().is_empty() => {
+            format!("{base}\n\n--- PERSONA / INSTRUCCIONES DEL PERFIL ---\n\n{p}")
+        }
+        _ => base,
+    }
+}
+
 pub fn build_agent(
     engine: &str,
     port: u16,
@@ -236,6 +255,7 @@ pub fn build_agent(
     router_id: Option<&str>,
     resume_id: Option<String>,
     task: Option<&str>,
+    opts: &AgentOpts,
 ) -> Result<LaunchSpec, String> {
     // Fallback: si nos piden resumir una sesión que ya no existe, arrancamos fresca.
     let resume_id = match resume_id {
@@ -244,9 +264,9 @@ pub fn build_agent(
     };
     let env = mcp_env(port, agent_id, role, cwd, router_id);
     match engine {
-        "claude" => build_claude(agent_id, role, &env, resume_id, task),
-        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task),
-        "opencode" => build_opencode(agent_id, role, &env, resume_id, task),
+        "claude" => build_claude(agent_id, role, &env, resume_id, task, opts),
+        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task, opts),
+        "opencode" => build_opencode(agent_id, role, &env, resume_id, task, opts),
         other => Err(format!("motor desconocido: {other}")),
     }
 }
@@ -257,9 +277,10 @@ fn build_claude(
     env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
+    opts: &AgentOpts,
 ) -> Result<LaunchSpec, String> {
     let cfg = claude_mcp_config(agent_id, env)?;
-    let role_txt = role_text(role)?;
+    let role_txt = with_persona(role_text(role)?, opts.persona);
     let (sid, resume) = match resume_id {
         Some(id) => (id, true),
         None => (uuid::Uuid::new_v4().to_string(), false),
@@ -283,6 +304,10 @@ fn build_claude(
         "--append-system-prompt".into(),
         role_txt,
     ]);
+    if let Some(m) = opts.model {
+        argv.push("--model".into());
+        argv.push(m.to_string());
+    }
     Ok(LaunchSpec { argv, env: vec![], inject_task: None, capture: false, session_id: Some(sid) })
 }
 
@@ -293,9 +318,10 @@ fn build_codex(
     env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
+    opts: &AgentOpts,
 ) -> Result<LaunchSpec, String> {
     let mcp = mcp_script()?;
-    let role_txt = role_text(role)?;
+    let role_txt = with_persona(role_text(role)?, opts.persona);
     // Flags -c para el MCP hyprdesk inline (env por-agente). Los valores string van con
     // comillas TOML internas; los barewords (node) caen a raw string.
     let mut argv = vec!["codex".to_string()];
@@ -313,6 +339,10 @@ fn build_codex(
     // router (sin task): no pasamos prompt inicial → arranca idle esperando al usuario,
     // igual que claude con --append-system-prompt. El rol va como developer_instructions (abajo).
     argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
+    if let Some(m) = opts.model {
+        argv.push("-m".to_string());
+        argv.push(m.to_string());
+    }
     let mut cfgs = vec![
         "mcp_servers.hyprdesk.command=node".to_string(),
         format!("mcp_servers.hyprdesk.args=[{:?}]", mcp),
@@ -322,6 +352,9 @@ fn build_codex(
         // codex intenta parsear como TOML, falla (prosa multilínea) y lo usa como string literal.
         format!("developer_instructions={role_txt}"),
     ];
+    if let Some(e) = opts.effort {
+        cfgs.push(format!("model_reasoning_effort=\"{e}\""));
+    }
     for (k, v) in env {
         cfgs.push(format!("mcp_servers.hyprdesk.env.{k}=\"{v}\""));
     }
@@ -344,10 +377,15 @@ fn build_opencode(
     env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
+    opts: &AgentOpts,
 ) -> Result<LaunchSpec, String> {
-    let role_txt = role_text(role)?;
+    let role_txt = with_persona(role_text(role)?, opts.persona);
     let cfg = opencode_config(agent_id, &role_txt, env)?;
     let mut argv = vec!["opencode".to_string()];
+    if let Some(m) = opts.model {
+        argv.push("-m".to_string());
+        argv.push(m.to_string());
+    }
     if let Some(id) = &resume_id {
         argv.push("--session".to_string());
         argv.push(id.clone());

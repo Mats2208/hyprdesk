@@ -7,6 +7,7 @@ import { CodeTile } from "./CodeTile";
 import { BrowserTile } from "./BrowserTile";
 import { FilesPanel } from "./FilesPanel";
 import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
+import { SettingsModal } from "./SettingsModal";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -96,6 +97,7 @@ function App() {
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
   const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
   const gitTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -470,12 +472,18 @@ function App() {
       case "close-workspace": if (currentId) closeWorkspace(currentId); break;
       case "toggle-sidebar": setSidebarOpen((o) => !o); break;
       case "palette": setPaletteOpen((o) => !o); break;
+      case "settings": setSettingsOpen(true); break;
     }
   };
 
   // ---- pantalla: gestor de workspaces (estado vacío / inicial) ----
   if (stage === "workspaces") {
-    return <WorkspaceManager onOpen={openWorkspace} />;
+    return (
+      <>
+        <WorkspaceManager onOpen={openWorkspace} />
+        {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      </>
+    );
   }
 
   // ---- render de la grilla de UNA sesión (montada siempre; visible solo la actual) ----
@@ -605,6 +613,7 @@ function App() {
     { id: "files", label: "Explorador de archivos", run: () => { setPanel("files"); setSidebarOpen(true); } },
     { id: "changes", label: "Cambios (archivos modificados)", run: () => { setPanel("changes"); setSidebarOpen(true); } },
     { id: "browser", label: "Nuevo navegador / preview", run: () => openBrowser() },
+    { id: "settings", label: "Configuración", hint: "⌘,", run: () => setSettingsOpen(true) },
     { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
     { id: "close-ws", label: "Cerrar este workspace", run: () => { if (currentId) closeWorkspace(currentId); } },
     { id: "workspaces", label: "Panel de workspaces", run: () => { setPanel("workspaces"); setSidebarOpen(true); } },
@@ -655,6 +664,9 @@ function App() {
           <button className="act" title="Comandos (⌘K)" onClick={() => setPaletteOpen(true)}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" /><path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
           </button>
+          <button className="act act--bottom" title="Configuración (⌘,)" onClick={() => setSettingsOpen(true)}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.4" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          </button>
         </div>
 
         {sidebarOpen && (
@@ -699,6 +711,7 @@ function App() {
       </div>
 
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

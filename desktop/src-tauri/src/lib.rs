@@ -13,6 +13,7 @@ mod changes;
 mod control;
 mod engines;
 mod fsops;
+mod settings;
 mod workspace;
 
 use base64::Engine;
@@ -278,7 +279,7 @@ fn router_launch(
     // id único por lanzamiento (evita colisiones de tile/PTY al cambiar de workspace).
     // El túnel sigue resolviendo el literal "router" vía este router_id del hub.
     let agent_id = format!("router-{}", uuid::Uuid::new_v4());
-    let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None)?;
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None, &engines::AgentOpts::default())?;
     *state.router_id.lock().unwrap() = Some(agent_id.clone());
     Ok(AgentLaunch {
         agent_id,
@@ -302,7 +303,7 @@ fn worker_launch(
     cwd: String,
     router_id: String,
 ) -> Result<AgentLaunch, String> {
-    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None)?;
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None, &engines::AgentOpts::default())?;
     Ok(AgentLaunch {
         agent_id,
         engine,
@@ -385,8 +386,11 @@ fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
 // (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust.
 fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     let h = app.handle();
+    let settings_item = MenuItem::with_id(h, "settings", "Configuración…", true, Some("CmdOrCtrl+,"))?;
     let app_menu = SubmenuBuilder::new(h, "HyprDesk")
         .about(None)
+        .separator()
+        .item(&settings_item)
         .separator()
         .hide()
         .hide_others()
@@ -483,7 +487,8 @@ pub fn run() {
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
-            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff
+            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff,
+            settings::load_settings, settings::save_settings, settings::run_assistant
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
