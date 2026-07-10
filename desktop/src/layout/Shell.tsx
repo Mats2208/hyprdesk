@@ -6,7 +6,6 @@ import { WorktreeNotice } from "./WorktreeNotice";
 import { ActivityBar } from "./ActivityBar";
 import { SidePanel } from "./SidePanel";
 import { RightDock } from "./RightDock";
-import { CenterTabs } from "./CenterTabs";
 import { TileGrid } from "./TileGrid";
 import { RouterSelector } from "./RouterSelector";
 import { StatusBar } from "./StatusBar";
@@ -34,14 +33,11 @@ export function Shell() {
         <ActivityBar />
         {sidebarOpen && <SidePanel />}
         <div className="main">
-          <CenterTabs />
-          <div className="editorstack">
-            {sessions.map((s) => (
-              <div key={s.meta.id} className="wsview" style={{ display: s.meta.id === currentId ? "flex" : "none" }}>
-                {s.needsRouter ? <RouterSelector session={s} /> : <TileGrid session={s} />}
-              </div>
-            ))}
-          </div>
+          {sessions.map((s) => (
+            <div key={s.meta.id} className="wsview" style={{ display: s.meta.id === currentId ? "flex" : "none" }}>
+              {s.needsRouter ? <RouterSelector session={s} /> : <TileGrid session={s} />}
+            </div>
+          ))}
         </div>
         {rightOpen && <RightDock />}
       </div>

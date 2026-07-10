@@ -415,29 +415,7 @@ body {
 .scm__commitbtn:disabled { opacity: 0.4; cursor: default; }
 .scm__list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px; }
 
-.main { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-.editorstack { flex: 1; min-height: 0; min-width: 0; display: flex; position: relative; }
-
-/* Barra de tabs del centro (editor groups) */
-.ctabs { flex: 0 0 auto; display: flex; align-items: stretch; height: 35px; background: var(--surface); border-bottom: 1px solid var(--hairline); }
-.ctabs__list { display: flex; align-items: stretch; overflow-x: auto; min-width: 0; }
-.ctabs__list::-webkit-scrollbar { height: 0; }
-.ctab {
-  display: inline-flex; align-items: center; gap: 7px; padding: 0 8px 0 12px; max-width: 200px;
-  border: none; border-right: 1px solid var(--hairline); background: transparent; color: var(--muted);
-  font-size: 12px; cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s;
-}
-.ctab:hover { color: var(--text); background: var(--hover); }
-.ctab--active { color: var(--text-bright); background: var(--bg); box-shadow: inset 0 2px 0 var(--accent); }
-.ctab__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.ctab__name { overflow: hidden; text-overflow: ellipsis; }
-.ctab__close { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: var(--faint); flex: 0 0 auto; }
-.ctab__close:hover { color: var(--text); background: var(--hover-2); }
-.ctabs__view {
-  margin-left: auto; flex: 0 0 auto; width: 38px; display: grid; place-items: center;
-  border: none; border-left: 1px solid var(--hairline); background: transparent; color: var(--muted); cursor: pointer; transition: color 0.12s;
-}
-.ctabs__view:hover, .ctabs__view--on { color: var(--text); }
+.main { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .wsview { flex: 1; min-width: 0; min-height: 0; } /* display lo controla el inline (flex/none) */
 .wsview > .workspace, .wsview > .selector--inline { flex: 1; min-width: 0; min-height: 0; }
 .main .workspace { flex: 1; }
