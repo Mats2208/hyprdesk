@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Mutex;
 
+mod changes;
 mod control;
 mod engines;
 mod fsops;
@@ -25,7 +26,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // desde Finder/Applications hereda un PATH mínimo (sin nvm) y no encontraría claude/codex/node.
 static USER_PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-fn user_path() -> &'static str {
+pub(crate) fn user_path() -> &'static str {
     USER_PATH.get_or_init(|| {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
         let out = std::process::Command::new(&shell)
@@ -378,6 +379,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(PtyManager::default())
+        .manage(changes::WatchState::default())
         .manage(Mutex::new(System::new_all()))
         .setup(|app| {
             workspace::ensure_root();
@@ -390,7 +392,8 @@ pub fn run() {
             router_launch, worker_launch,
             list_workspaces, create_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
-            fsops::read_file, fsops::write_file, fsops::list_dir
+            fsops::read_file, fsops::write_file, fsops::list_dir,
+            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

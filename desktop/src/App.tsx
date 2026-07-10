@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
 import { CodeTile } from "./CodeTile";
 import { FilesPanel } from "./FilesPanel";
+import { ChangesPanel, type WsChanges, type GitEntry } from "./ChangesPanel";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -89,7 +90,9 @@ function App() {
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [panel, setPanel] = useState<"agents" | "workspaces" | "files">("agents");
+  const [panel, setPanel] = useState<"agents" | "workspaces" | "files" | "changes">("agents");
+  const [changesByWs, setChangesByWs] = useState<Record<string, WsChanges>>({}); // por carpeta de workspace
+  const gitTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -125,6 +128,7 @@ function App() {
     let un: (() => void) | undefined;
     let un2: (() => void) | undefined;
     let un3: (() => void) | undefined;
+    let un4: (() => void) | undefined;
     (async () => {
       // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
       un = await listen<AgentLaunch & { title: string; router: string }>("spawn-agent", (e) => {
@@ -147,8 +151,24 @@ function App() {
       un3 = await listen<string>("tile-activity", (e) => {
         setActivity((a) => (a.includes(e.payload) ? a : [...a, e.payload]));
       });
+      // un archivo del workspace cambió → acumular en "watched" + refrescar git status (debounce).
+      un4 = await listen<{ path: string; kind: string; root: string }>("file-changed", (e) => {
+        const { path, kind, root } = e.payload;
+        setChangesByWs((prev) => {
+          const cur = prev[root] ?? { git: [], watched: [] };
+          const watched = [{ path, kind }, ...cur.watched.filter((w) => w.path !== path)].slice(0, 200);
+          return { ...prev, [root]: { git: cur.git, watched } };
+        });
+        clearTimeout(gitTimersRef.current[root]);
+        gitTimersRef.current[root] = setTimeout(async () => {
+          try {
+            const git = await invoke<GitEntry[]>("git_status", { cwd: root });
+            setChangesByWs((prev) => ({ ...prev, [root]: { git, watched: prev[root]?.watched ?? [] } }));
+          } catch { /* no repo */ }
+        }, 400);
+      });
     })();
-    return () => { un?.(); un2?.(); un3?.(); };
+    return () => { un?.(); un2?.(); un3?.(); un4?.(); };
   }, []);
 
   // Limpiar la actividad del tile que se enfoca (en la sesión actual).
@@ -226,7 +246,16 @@ function App() {
     setSessions((prev) => [...prev.filter((s) => s.meta.id !== meta.id), session]);
     setCurrentId(meta.id);
     setStage("ide");
+    startWatching(meta.folder);
   };
+
+  // Vigila la carpeta del workspace (watcher) y carga el git status inicial.
+  const startWatching = useCallback((folder: string) => {
+    invoke("watch_workspace", { folder }).catch(() => {});
+    invoke<GitEntry[]>("git_status", { cwd: folder })
+      .then((git) => setChangesByWs((prev) => ({ ...prev, [folder]: { git, watched: prev[folder]?.watched ?? [] } })))
+      .catch(() => {});
+  }, []);
 
   // ---- crear el router de la sesión actual (workspace nuevo) ----
   const startRouter = async (engine: string) => {
@@ -248,6 +277,10 @@ function App() {
     const s = sessionsRef.current.find((x) => x.meta.id === wsId);
     if (s && !s.needsRouter) {
       await invoke("save_workspace", { folder: s.meta.folder, state: JSON.stringify(savedStateOf(s)) }).catch(() => {});
+    }
+    if (s) {
+      invoke("unwatch_workspace", { folder: s.meta.folder }).catch(() => {});
+      setChangesByWs((prev) => { const n = { ...prev }; delete n[s.meta.folder]; return n; });
     }
     const rest = sessionsRef.current.filter((x) => x.meta.id !== wsId);
     setSessions(rest);
@@ -274,6 +307,21 @@ function App() {
       const t: Term = { id: crypto.randomUUID(), title: name, role: "worker", kind: "file", filePath: path };
       return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
     });
+  }, [updateCurrent]);
+
+  // Abre un tile de diff (old=HEAD, new=disco) para un archivo repo-relativo del workspace actual.
+  const openDiff = useCallback(async (relPath: string) => {
+    const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
+    if (!cur) return;
+    try {
+      const d = await invoke<{ old: string; new: string }>("git_diff", { cwd: cur.meta.folder, path: relPath });
+      const name = relPath.split("/").pop() || relPath;
+      updateCurrent((s) => {
+        if (s.terms.length >= MAX_TILES) return s;
+        const t: Term = { id: crypto.randomUUID(), title: `Δ ${name}`, role: "worker", kind: "diff", filePath: `${cur.meta.folder}/${relPath}`, diff: d };
+        return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
+      });
+    } catch { /* sin diff */ }
   }, [updateCurrent]);
 
   const closeTerminal = useCallback((id: string) => {
@@ -472,12 +520,15 @@ function App() {
   // ---- pantalla: IDE (shell) ----
   const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
   const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine })) : [];
+  const curChanges = current ? changesByWs[current.meta.folder] : undefined;
+  const changeCount = curChanges ? (curChanges.git.length || curChanges.watched.length) : 0;
   const commands: Command[] = [
     { id: "new-term", label: "Nueva terminal manual", hint: "⌘T", run: addTerminal },
     { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (current?.activeId) closeTerminal(current.activeId); } },
     { id: "max", label: "Maximizar / restaurar activo", run: () => { if (current?.activeId) toggleMax(current.activeId); } },
     { id: "focus-router", label: "Ir al router", run: () => { if (current?.routerId) setActive(current.routerId); } },
     { id: "files", label: "Explorador de archivos", run: () => { setPanel("files"); setSidebarOpen(true); } },
+    { id: "changes", label: "Cambios (archivos modificados)", run: () => { setPanel("changes"); setSidebarOpen(true); } },
     { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
     { id: "close-ws", label: "Cerrar este workspace", run: () => { if (currentId) closeWorkspace(currentId); } },
     { id: "workspaces", label: "Panel de workspaces", run: () => { setPanel("workspaces"); setSidebarOpen(true); } },
@@ -521,6 +572,10 @@ function App() {
           <button className={`act ${sidebarOpen && panel === "files" ? "act--on" : ""}`} title="Archivos" onClick={() => { setPanel("files"); setSidebarOpen(true); }}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11 3H5.5A1.5 1.5 0 004 4.5v11A1.5 1.5 0 005.5 17h9a1.5 1.5 0 001.5-1.5V8l-5-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M11 3v4.5H16" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
           </button>
+          <button className={`act ${sidebarOpen && panel === "changes" ? "act--on" : ""}`} title="Cambios" onClick={() => { setPanel("changes"); setSidebarOpen(true); }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="6" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" /><circle cx="6" cy="15" r="2.2" stroke="currentColor" strokeWidth="1.4" /><circle cx="14" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" /><path d="M6 8.2v4.6M14 8.2c0 3-2.5 4-4.5 4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            {changeCount > 0 && <span className="act__badge">{changeCount > 99 ? "99+" : changeCount}</span>}
+          </button>
           <button className="act" title="Comandos (⌘K)" onClick={() => setPaletteOpen(true)}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" /><path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
           </button>
@@ -531,7 +586,9 @@ function App() {
             ? <WorkspacesPanel activeId={currentId ?? undefined} onSwitch={openWorkspace} />
             : panel === "files"
               ? <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} />
-              : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
+              : panel === "changes"
+                ? <ChangesPanel changes={curChanges} root={current?.meta.folder ?? null} onOpenDiff={openDiff} onOpenFile={openFile} />
+                : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
         )}
 
         <div className="main">
@@ -545,7 +602,14 @@ function App() {
       </div>
 
       <div className="statusbar">
-        <span className="statusbar__role"><span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""} · {sessions.length} ws</span>
+        <span className="statusbar__role">
+          <span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""} · {sessions.length} ws
+          {changeCount > 0 && (
+            <button className="statusbar__changes" title="Ver cambios" onClick={() => { setPanel("changes"); setSidebarOpen(true); }}>
+              <span className="statusbar__changes-dot" /> {changeCount} cambio{changeCount !== 1 ? "s" : ""}
+            </button>
+          )}
+        </span>
         <span className="statusbar__keys"><kbd>⌘K</kbd> comandos · <kbd>⌘B</kbd> panel · <kbd>⌘T</kbd> terminal · <kbd>⌘←→</kbd> foco</span>
         <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>
       </div>
