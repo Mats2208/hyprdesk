@@ -3,6 +3,10 @@
 import { create } from "zustand";
 import type { Panel, TileStatus } from "../types";
 
+// Layout persistido entre sesiones (sidebar abierto + panel activo).
+const savedPanel = localStorage.getItem("hd-panel");
+const initPanel: Panel = savedPanel === "workspaces" || savedPanel === "files" || savedPanel === "changes" ? savedPanel : "agents";
+
 type UiState = {
   sidebarOpen: boolean;
   panel: Panel;
@@ -38,8 +42,8 @@ type UiState = {
 };
 
 export const useUiStore = create<UiState>((set) => ({
-  sidebarOpen: true,
-  panel: "agents",
+  sidebarOpen: localStorage.getItem("hd-sidebar") !== "0",
+  panel: initPanel,
   paletteOpen: false,
   settingsOpen: false,
   createAgentOpen: false,
@@ -52,9 +56,13 @@ export const useUiStore = create<UiState>((set) => ({
   wtNoticeDismissed: localStorage.getItem("hd-wt-notice") === "1",
   welcomeOpen: localStorage.getItem("hd-onboarded") !== "1",
 
-  setSidebarOpen: (v) => set((s) => ({ sidebarOpen: typeof v === "function" ? v(s.sidebarOpen) : v })),
-  openPanel: (p) => set({ panel: p, sidebarOpen: true }),
-  setPanel: (p) => set({ panel: p }),
+  setSidebarOpen: (v) => set((s) => {
+    const sidebarOpen = typeof v === "function" ? v(s.sidebarOpen) : v;
+    localStorage.setItem("hd-sidebar", sidebarOpen ? "1" : "0");
+    return { sidebarOpen };
+  }),
+  openPanel: (p) => { localStorage.setItem("hd-panel", p); localStorage.setItem("hd-sidebar", "1"); set({ panel: p, sidebarOpen: true }); },
+  setPanel: (p) => { localStorage.setItem("hd-panel", p); set({ panel: p }); },
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setSettingsOpen: (v) => set({ settingsOpen: v }),

@@ -1,26 +1,21 @@
-// Atajos globales → despachan comandos por id (data-driven). Solo en el stage IDE. Requieren ⌘/Ctrl.
+// Atajos globales → despachan comandos por id, resolviendo desde los bindings remapeables.
+// Se lee getBindings() en cada tecla (evento raro) → los remaps aplican al instante.
 import { useEffect } from "react";
 import { runCommand } from "../commands/registry";
+import { eventToCombo, getBindings } from "../commands/keybindings";
 import { useSessionStore } from "../store/sessionStore";
 
-// mapa tecla (con ⌘/Ctrl) → id de comando. Cambiar acá cambia el atajo (base para remapeo en E6).
-const KEYMAP: Record<string, string> = {
-  t: "new-term",
-  w: "close-tile",
-  k: "toggle-palette",
-  b: "toggle-sidebar",
-  arrowright: "focus-next",
-  arrowdown: "focus-next",
-  arrowleft: "focus-prev",
-  arrowup: "focus-prev",
-};
+// alias verticales fijos (no remapeables): equivalen a las flechas horizontales.
+const ALIAS: Record<string, string> = { "mod+arrowdown": "focus-next", "mod+arrowup": "focus-prev" };
 
 export function useKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (useSessionStore.getState().stage !== "ide") return;
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const id = KEYMAP[e.key.toLowerCase()];
+      const combo = eventToCombo(e);
+      if (!combo) return;
+      const bindings = getBindings();
+      const id = Object.keys(bindings).find((cid) => bindings[cid] === combo) ?? ALIAS[combo];
       if (!id) return;
       e.preventDefault();
       e.stopPropagation();

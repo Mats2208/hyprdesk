@@ -1004,6 +1004,18 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 .providers__add { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 7px 12px; border-radius: 8px; border: 1px dashed var(--hairline-2); background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; transition: all 0.15s; }
 .providers__add:hover { color: var(--router); border-color: var(--router); }
 
+.keybinds { display: flex; flex-direction: column; gap: 3px; max-width: 460px; }
+.keybinds__row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.keybinds__name { flex: 1; font-size: 13px; color: var(--text); }
+.keybinds__key {
+  min-width: 64px; padding: 5px 12px; border-radius: 7px; border: 1px solid var(--hairline);
+  background: var(--bg); color: var(--text); font: 12px var(--font-mono); cursor: pointer; transition: all 0.15s;
+}
+.keybinds__key:hover { border-color: var(--hairline-2); }
+.keybinds__key--rec { border-color: var(--router); color: var(--router); background: var(--router-soft); }
+.keybinds__reset { border: none; background: transparent; color: var(--faint); font-size: 14px; cursor: pointer; padding: 2px 4px; }
+.keybinds__reset:hover { color: var(--text); }
+
 /* ==================== ONBOARDING / BIENVENIDA ==================== */
 .wel__overlay { z-index: 250; }
 .wel {

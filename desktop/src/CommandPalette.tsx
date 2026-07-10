@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import fuzzysort from "fuzzysort";
 import { listCommands, type Command } from "./commands/registry";
+import { comboLabel, getBindings } from "./commands/keybindings";
 
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
 
+  const binds = getBindings();
+  const hint = (c: Command) => (binds[c.id] ? comboLabel(binds[c.id]) : c.keybinding);
   const all = useMemo(() => listCommands().filter((c) => !c.when || c.when()), []);
   const results = useMemo<Command[]>(
     () => (q ? fuzzysort.go(q, all, { key: "title" }).map((r) => r.obj) : all),
@@ -46,7 +49,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   onClick={() => run(c)}
                 >
                   <span>{c.title}</span>
-                  {c.keybinding && <span className="palette__hint">{c.keybinding}</span>}
+                  {hint(c) && <span className="palette__hint">{hint(c)}</span>}
                 </button>
               </div>
             );

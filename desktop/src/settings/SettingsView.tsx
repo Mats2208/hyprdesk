@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CATEGORIES, SCHEMA, type Field } from "./schema";
 import { ProvidersSection } from "./ProvidersSection";
+import { KeybindingsSection } from "./KeybindingsSection";
 import { useThemeStore } from "../theme/theme";
+
+const SPECIAL = new Set(["Proveedores y API keys", "Atajos"]); // categorías con sección extra (no solo schema)
 
 type Settings = { assistant: { engine: string; model?: string | null; effort?: string | null }; permissionMode?: string; zaiApiKey?: string | null };
 type Backend = { assistantEngine: string; assistantModel: string; assistantEffort: string; permissionMode: string; zaiApiKey: string };
@@ -75,6 +78,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   }, [q, cat, backend, theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cats = q ? CATEGORIES.filter((c) => fields.some((f) => f.category === c)) : [cat];
+  const showEmpty = fields.length === 0 && !(!q && SPECIAL.has(cat));
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
@@ -93,7 +97,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             ))}
           </nav>
           <div className="settings__main">
-            {fields.length === 0 && <div className="settings__empty">Sin resultados</div>}
+            {showEmpty && <div className="settings__empty">Sin resultados</div>}
             {cats.map((c) => (
               <section key={c} className="settings__group">
                 {q && <div className="settings__cat">{c}</div>}
@@ -105,6 +109,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
                   </div>
                 ))}
                 {c === "Proveedores y API keys" && <ProvidersSection />}
+                {c === "Atajos" && <KeybindingsSection />}
               </section>
             ))}
           </div>
