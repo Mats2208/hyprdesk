@@ -833,3 +833,12 @@ button.sb-chip:hover { border-color: var(--hairline-2); color: var(--text); }
 /* placeholder donde flota la webview nativa (sitios externos) */
 .browsertile__native { flex: 1; min-height: 0; width: 100%; background: #fff; display: grid; place-items: center; }
 .browsertile__nativehint { font: 11px ui-monospace, monospace; color: #9aa; }
+
+/* ==================== ESTADO POR AGENTE + VISTA DE EQUIPO (sidebar) ==================== */
+.agentrow__status { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.agentrow__status--working { background: var(--router); box-shadow: 0 0 6px rgba(52, 211, 153, 0.7); animation: status-pulse 1s ease-in-out infinite; }
+.agentrow__status--idle { background: var(--hairline-2); }
+.agentrow__status--exited { background: #f87171; }
+@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.agentrow--worker { margin-left: 12px; border-left: 1px solid var(--hairline); border-radius: 0 8px 8px 0; padding-left: 12px; }
+.agentrow__branch { color: #c084fc; font-size: 11px; flex: 0 0 auto; }

@@ -108,6 +108,7 @@ function App() {
   const [branch, setBranch] = useState<string | null>(null);
   const [glm, setGlm] = useState<{ session?: number | null; weekly?: number | null } | null>(null);
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
+  const [statusByTile, setStatusByTile] = useState<Record<string, "working" | "idle" | "exited">>({}); // estado por agente
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -651,6 +652,7 @@ function App() {
                 onToggleMax={toggleMax}
                 onMerge={mergeWorker}
                 onDetectUrl={(url) => addPreview(s.meta.folder, url)}
+                onStatus={(tid, st) => setStatusByTile((m) => (m[tid] === st ? m : { ...m, [tid]: st }))}
               />
             )}
           </div>
@@ -698,7 +700,7 @@ function App() {
 
   // ---- pantalla: IDE (shell) ----
   const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
-  const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine, color: t.color })) : [];
+  const agents = current ? current.terms.filter((t) => !t.kind || t.kind === "terminal").map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine, color: t.color, status: statusByTile[t.id], branch: t.branch })) : [];
   const curChanges = current ? changesByWs[current.meta.folder] : undefined;
   const changeCount = curChanges ? (curChanges.git.length || curChanges.watched.length) : 0;
   const curPreviews = current ? previewsByWs[current.meta.folder] ?? [] : [];

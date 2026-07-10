@@ -1,7 +1,8 @@
 import type { Profile } from "./App";
 
 // Panel lateral de agentes: roster (router + workers vivos) + perfiles del workspace.
-export type AgentRow = { id: string; title: string; role: "router" | "worker"; engine?: string; color?: string };
+export type AgentStatus = "working" | "idle" | "exited";
+export type AgentRow = { id: string; title: string; role: "router" | "worker"; engine?: string; color?: string; status?: AgentStatus; branch?: string };
 
 export const ENGINE_COLOR: Record<string, string> = {
   claude: "#d9a06b",
@@ -24,17 +25,23 @@ export function Sidebar({
 }) {
   return (
     <div className="sidebar">
-      <div className="sidebar__head">Agentes · {agents.length}</div>
+      <div className="sidebar__head">Equipo · {agents.length}</div>
       <div className="sidebar__list">
         {agents.length === 0 && <div className="fslist__empty">sin agentes activos</div>}
-        {agents.map((a) => (
+        {[...agents].sort((a, b) => (a.role === "router" ? -1 : b.role === "router" ? 1 : 0)).map((a) => (
           <button
             key={a.id}
-            className={`agentrow ${activeId === a.id ? "agentrow--active" : ""} ${activity.includes(a.id) ? "agentrow--pulse" : ""}`}
+            className={`agentrow ${a.role === "worker" ? "agentrow--worker" : ""} ${activeId === a.id ? "agentrow--active" : ""} ${activity.includes(a.id) ? "agentrow--pulse" : ""}`}
             onClick={() => onFocus(a.id)}
+            title={a.branch ? `rama ${a.branch}` : undefined}
           >
+            <span
+              className={`agentrow__status agentrow__status--${a.status || "idle"}`}
+              title={a.status === "working" ? "trabajando" : a.status === "exited" ? "terminó / cerrado" : "en espera"}
+            />
             <span className="agentrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "#8a8a92" }} />
             <span className="agentrow__name">{a.title}</span>
+            {a.branch && <span className="agentrow__branch" title={a.branch}>⑂</span>}
             {a.role === "router" ? (
               <span className="agentrow__tag agentrow__tag--router">router</span>
             ) : (

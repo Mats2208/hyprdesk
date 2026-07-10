@@ -35,16 +35,21 @@ type Props = {
   onToggleMax: (id: string) => void;
   onMerge?: (id: string) => void; // mergear la rama del worker a la principal
   onDetectUrl?: (url: string) => void; // detecta localhost:PORT en la salida → preview
+  onStatus?: (id: string, status: "working" | "idle" | "exited") => void; // estado del agente
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, branch, onFocus, onClose, onToggleMax, onMerge, onDetectUrl,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, branch, onFocus, onClose, onToggleMax, onMerge, onDetectUrl, onStatus,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const [exited, setExited] = useState(false);
   const onDetectRef = useRef(onDetectUrl);
   onDetectRef.current = onDetectUrl;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
+  const busyRef = useRef(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const urlBufRef = useRef("");
   const seenUrlsRef = useRef<Set<string>>(new Set());
 
@@ -89,6 +94,13 @@ export function TerminalTile({
         if (e.payload.id !== id) return;
         const bytes = b64ToBytes(e.payload.data);
         term.write(bytes);
+        // estado: hay salida → "trabajando"; tras 1.5s sin salida → "idle".
+        const sfn = onStatusRef.current;
+        if (sfn) {
+          if (!busyRef.current) { busyRef.current = true; sfn(id, "working"); }
+          clearTimeout(idleTimerRef.current);
+          idleTimerRef.current = setTimeout(() => { busyRef.current = false; sfn(id, "idle"); }, 1500);
+        }
         // autodetección de dev servers: buscar localhost:PUERTO en la salida (una vez por URL).
         // Importante: hay que SACAR los escapes ANSI del terminal antes de matchear, si no se
         // cuelan en la URL (colores/cursor codes pegados al texto → chips con basura).
@@ -114,7 +126,7 @@ export function TerminalTile({
         }
       });
       const u2 = await listen<string>("pty-exit", (e) => {
-        if (e.payload === id) setExited(true);
+        if (e.payload === id) { setExited(true); clearTimeout(idleTimerRef.current); onStatusRef.current?.(id, "exited"); }
       });
       unlisten = () => { u1(); u2(); };
       await invoke("pty_spawn", {
@@ -153,6 +165,7 @@ export function TerminalTile({
       ro.disconnect();
       onData.dispose();
       unlisten?.();
+      clearTimeout(idleTimerRef.current);
       invoke("pty_kill", { id });
       term.dispose();
       termRef.current = null;
