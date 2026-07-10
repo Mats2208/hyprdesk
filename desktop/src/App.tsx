@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Mous
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { TerminalTile } from "./TerminalTile";
+import { CodeTile } from "./CodeTile";
+import { FilesPanel } from "./FilesPanel";
 import { WorkspaceManager, type WorkspaceMeta } from "./WorkspaceManager";
 import { Sidebar } from "./Sidebar";
 import { WorkspacesPanel } from "./WorkspacesPanel";
@@ -11,9 +13,11 @@ const HOSTS = ["dev@worker", "build@worker", "test@worker"];
 const MAX_TILES = 9;
 
 type Role = "router" | "worker";
+type TileKind = "terminal" | "file" | "diff" | "browser";
 type Term = {
   id: string; title: string; role: Role; engine?: string; sessionId?: string;
   argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
+  kind?: TileKind; filePath?: string; url?: string; diff?: { old: string; new: string }; // tiles no-terminal
 };
 type AgentLaunch = {
   agentId: string; engine: string; argv: string[]; env: [string, string][];
@@ -85,7 +89,7 @@ function App() {
   const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [panel, setPanel] = useState<"agents" | "workspaces">("agents");
+  const [panel, setPanel] = useState<"agents" | "workspaces" | "files">("agents");
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -260,6 +264,18 @@ function App() {
     updateCurrent((s) => ({ ...s, activeId: id }));
   }, [updateCurrent]);
 
+  // Abre (o enfoca) un tile de archivo con CodeMirror (visor/editor) en la sesión actual.
+  const openFile = useCallback((path: string) => {
+    const name = path.split("/").pop() || path;
+    updateCurrent((s) => {
+      const existing = s.terms.find((t) => t.kind === "file" && t.filePath === path);
+      if (existing) return { ...s, activeId: existing.id };
+      if (s.terms.length >= MAX_TILES) return s;
+      const t: Term = { id: crypto.randomUUID(), title: name, role: "worker", kind: "file", filePath: path };
+      return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
+    });
+  }, [updateCurrent]);
+
   const closeTerminal = useCallback((id: string) => {
     const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
     if (!cur) return;
@@ -378,23 +394,38 @@ function App() {
       <div className={`workspace ${dragging && isCurrent ? "workspace--dragging" : ""}`}>
         {s.terms.map((t) => (
           <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
-            <TerminalTile
-              id={t.id}
-              title={t.title}
-              active={s.activeId === t.id}
-              isRouter={t.role === "router"}
-              canClose={t.role === "worker"}
-              maximized={s.maxId === t.id}
-              argv={t.argv}
-              cwd={t.cwd}
-              env={t.env}
-              injectTask={t.injectTask}
-              captureEngine={t.captureEngine}
-              hasActivity={activity.includes(t.id)}
-              onFocus={setActive}
-              onClose={closeTerminal}
-              onToggleMax={toggleMax}
-            />
+            {t.kind === "file" || t.kind === "diff" ? (
+              <CodeTile
+                id={t.id}
+                title={t.title}
+                active={s.activeId === t.id}
+                canClose={t.role === "worker"}
+                maximized={s.maxId === t.id}
+                filePath={t.filePath}
+                diff={t.diff}
+                onFocus={setActive}
+                onClose={closeTerminal}
+                onToggleMax={toggleMax}
+              />
+            ) : (
+              <TerminalTile
+                id={t.id}
+                title={t.title}
+                active={s.activeId === t.id}
+                isRouter={t.role === "router"}
+                canClose={t.role === "worker"}
+                maximized={s.maxId === t.id}
+                argv={t.argv}
+                cwd={t.cwd}
+                env={t.env}
+                injectTask={t.injectTask}
+                captureEngine={t.captureEngine}
+                hasActivity={activity.includes(t.id)}
+                onFocus={setActive}
+                onClose={closeTerminal}
+                onToggleMax={toggleMax}
+              />
+            )}
           </div>
         ))}
 
@@ -446,6 +477,7 @@ function App() {
     { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (current?.activeId) closeTerminal(current.activeId); } },
     { id: "max", label: "Maximizar / restaurar activo", run: () => { if (current?.activeId) toggleMax(current.activeId); } },
     { id: "focus-router", label: "Ir al router", run: () => { if (current?.routerId) setActive(current.routerId); } },
+    { id: "files", label: "Explorador de archivos", run: () => { setPanel("files"); setSidebarOpen(true); } },
     { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
     { id: "close-ws", label: "Cerrar este workspace", run: () => { if (currentId) closeWorkspace(currentId); } },
     { id: "workspaces", label: "Panel de workspaces", run: () => { setPanel("workspaces"); setSidebarOpen(true); } },
@@ -486,14 +518,20 @@ function App() {
           <button className={`act ${sidebarOpen && panel === "agents" ? "act--on" : ""}`} title="Agentes (⌘B)" onClick={() => { setPanel("agents"); setSidebarOpen(true); }}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
           </button>
+          <button className={`act ${sidebarOpen && panel === "files" ? "act--on" : ""}`} title="Archivos" onClick={() => { setPanel("files"); setSidebarOpen(true); }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11 3H5.5A1.5 1.5 0 004 4.5v11A1.5 1.5 0 005.5 17h9a1.5 1.5 0 001.5-1.5V8l-5-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M11 3v4.5H16" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+          </button>
           <button className="act" title="Comandos (⌘K)" onClick={() => setPaletteOpen(true)}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" /><path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
           </button>
         </div>
 
-        {sidebarOpen && (panel === "workspaces"
-          ? <WorkspacesPanel activeId={currentId ?? undefined} onSwitch={openWorkspace} />
-          : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
+        {sidebarOpen && (
+          panel === "workspaces"
+            ? <WorkspacesPanel activeId={currentId ?? undefined} onSwitch={openWorkspace} />
+            : panel === "files"
+              ? <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} />
+              : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
         )}
 
         <div className="main">

@@ -11,6 +11,7 @@ use std::sync::Mutex;
 
 mod control;
 mod engines;
+mod fsops;
 mod workspace;
 
 use base64::Engine;
@@ -388,7 +389,8 @@ pub fn run() {
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
             router_launch, worker_launch,
             list_workspaces, create_workspace, load_workspace, save_workspace,
-            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard
+            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
+            fsops::read_file, fsops::write_file, fsops::list_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

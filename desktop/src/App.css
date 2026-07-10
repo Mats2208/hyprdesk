@@ -248,6 +248,7 @@ body {
 .sidebar__head {
   flex: 0 0 auto; padding: 12px 14px 8px; font: 600 10px/1 ui-monospace, monospace;
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 .sidebar__list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px; display: flex; flex-direction: column; gap: 2px; }
 .agentrow {
@@ -541,3 +542,33 @@ body {
   font: 10.5px ui-monospace, "SF Mono", monospace; color: var(--router);
   background: var(--router-soft); padding: 1px 6px; border-radius: 5px;
 }
+
+/* ==================== TILES DE CÓDIGO (CodeMirror) ==================== */
+.tile__badge--code { color: #60a5fa; background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.3); }
+.tile--code.tile--active { border-color: rgba(96, 165, 250, 0.4); }
+.tile--code.tile--active .tile__title { color: #93c5fd; }
+.tile__body--code { padding: 0; overflow: hidden; }
+.tile__body--code .cm-editor { height: 100%; }
+.tile__body--code .cm-scroller { overflow: auto; }
+.tile__body--code .cm-mergeView { height: 100%; }
+.tile__body--code .cm-mergeView .cm-editor { height: 100%; }
+
+/* ==================== PANEL DE ARCHIVOS (mini-árbol) ==================== */
+.sidebar__reload {
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px;
+  border: none; background: transparent; color: var(--faint); cursor: pointer; transition: all 0.15s;
+}
+.sidebar__reload:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.fslist { padding: 4px 6px; }
+.fsrow {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border-radius: 6px;
+  border: none; background: transparent; color: var(--text); cursor: pointer; text-align: left;
+  font-size: 12.5px; transition: background 0.12s;
+}
+.fsrow:hover { background: rgba(255, 255, 255, 0.05); }
+.fsrow__chevron { flex: 0 0 auto; color: var(--faint); transition: transform 0.12s; }
+.fsrow__chevron--open { transform: rotate(90deg); }
+.fsrow__dot { width: 4px; height: 4px; border-radius: 50%; background: var(--faint); flex: 0 0 auto; margin: 0 3px; }
+.fsrow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fslist__empty, .fslist__error { padding: 10px; font-size: 12px; color: var(--faint); }
+.fslist__error { color: #f87171; }
