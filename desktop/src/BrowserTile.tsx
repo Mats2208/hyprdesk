@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-// Tile navegador: iframe + barra de URL + navegación. CSP=null ⇒ localhost/file no se bloquean.
-// (back/forward/reload sólo funcionan bien same-origin; si el sitio prohíbe iframes, "abrir externo".)
+// Tile navegador. localhost/file → <iframe>/srcDoc (andan bien). Sitios EXTERNOS (que bloquean el
+// iframe con X-Frame-Options) → webview NATIVA de Tauri superpuesta al tile, posicionada al rect del
+// body por un loop de rAF (y ocultada cuando el tile no está visible o hay un modal encima).
 type Props = {
   id: string;
   title: string;
@@ -11,6 +12,7 @@ type Props = {
   canClose: boolean;
   maximized: boolean;
   url?: string;
+  hidden?: boolean; // forzar ocultar la webview nativa (modal abierto, etc.)
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
@@ -24,12 +26,26 @@ function normalize(u: string): string {
   return "http://" + s;
 }
 
-export function BrowserTile({ id, title, active, canClose, maximized, url, onFocus, onClose, onToggleMax }: Props) {
+// ¿URL externa? (http/https y host que NO es localhost) → necesita webview nativa.
+function isExternalUrl(u: string): boolean {
+  try {
+    const url = new URL(u);
+    return (url.protocol === "http:" || url.protocol === "https:") && !["localhost", "127.0.0.1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function BrowserTile({ id, title, active, canClose, maximized, url, hidden, onFocus, onClose, onToggleMax }: Props) {
   const [addr, setAddr] = useState(url ?? "");
   const [src, setSrc] = useState(normalize(url ?? ""));
   const [nonce, setNonce] = useState(0);        // fuerza remount del iframe (reload)
   const [doc, setDoc] = useState<string | null>(null); // srcDoc para file:// (WKWebView bloquea iframes file://)
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const nativeRef = useRef<HTMLDivElement>(null); // placeholder donde flota la webview nativa
+  const external = isExternalUrl(src);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
 
   // file:// → leemos el HTML y lo inyectamos por srcDoc (funciona con HTML self-contained).
   useEffect(() => {
@@ -42,6 +58,34 @@ export function BrowserTile({ id, title, active, canClose, maximized, url, onFoc
       setDoc(null);
     }
   }, [src, nonce]);
+
+  // Webview NATIVA para sitios externos: la creamos y la mantenemos pegada al rect del placeholder.
+  useEffect(() => {
+    if (!external) return;
+    const label = `browser-${id}`;
+    let raf = 0;
+    let opened = false;
+    let last = "";
+    const tick = () => {
+      const r = nativeRef.current?.getBoundingClientRect();
+      if (r) {
+        const visible = !hiddenRef.current && r.width > 20 && r.height > 20 && r.bottom > 0 && r.right > 0 && document.visibilityState === "visible";
+        const b = visible
+          ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+          : { x: -20000, y: 0, w: 800, h: 600 }; // fuera de pantalla = "oculto"
+        const key = `${b.x},${b.y},${b.w},${b.h}`;
+        if (key !== last) {
+          last = key;
+          if (!opened) { opened = true; invoke("browser_open", { label, url: src, ...b }).catch(() => {}); }
+          else invoke("browser_bounds", { label, ...b }).catch(() => {});
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); invoke("browser_close", { label }).catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, src, external, nonce]);
 
   const go = () => { const u = normalize(addr); setSrc(u); setAddr(u); setNonce((n) => n + 1); };
   const reload = () => setNonce((n) => n + 1);
@@ -80,9 +124,11 @@ export function BrowserTile({ id, title, active, canClose, maximized, url, onFoc
         </div>
         {!src
           ? <div className="browsertile__empty">Escribí una URL arriba (o dejá que se autodetecte un <code>localhost</code>).</div>
-          : doc !== null
-            ? <iframe key={"doc" + nonce} ref={frameRef} className="browsertile__frame" srcDoc={doc} title={title} />
-            : <iframe key={src + nonce} ref={frameRef} className="browsertile__frame" src={src} title={title} />}
+          : external
+            ? <div className="browsertile__native" ref={nativeRef}><span className="browsertile__nativehint">webview nativa</span></div>
+            : doc !== null
+              ? <iframe key={"doc" + nonce} ref={frameRef} className="browsertile__frame" srcDoc={doc} title={title} />
+              : <iframe key={src + nonce} ref={frameRef} className="browsertile__frame" src={src} title={title} />}
       </div>
     </div>
   );

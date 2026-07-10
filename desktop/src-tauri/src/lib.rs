@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Mutex;
 
+mod browser;
 mod changes;
 mod control;
 mod engines;
@@ -582,7 +583,8 @@ pub fn run() {
             fsops::read_file, fsops::write_file, fsops::list_dir,
             changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff, changes::git_branch,
             settings::load_settings, settings::save_settings, settings::run_assistant,
-            usage::usage_today
+            usage::usage_today,
+            browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

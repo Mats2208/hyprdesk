@@ -626,6 +626,7 @@ function App() {
                 canClose={t.role === "worker"}
                 maximized={s.maxId === t.id}
                 url={t.url}
+                hidden={paletteOpen || settingsOpen || createAgentOpen || s.meta.id !== currentId || (s.maxId != null && s.maxId !== t.id)}
                 onFocus={setActive}
                 onClose={closeTerminal}
                 onToggleMax={toggleMax}
