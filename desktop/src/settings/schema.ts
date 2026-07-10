@@ -46,7 +46,7 @@ export const SCHEMA: Field[] = [
     visibleWhen: (get) => get("assistantEngine") === "codex" },
   { key: "permissionMode", label: "Modo de permisos", category: "Agentes y permisos", type: "segmented", scope: "backend",
     description: "Cómo trabajan router y workers que lances DESPUÉS de guardar. Autónomo = editan/corren sin pedir; Preguntar = piden aprobación.",
-    options: [{ value: "auto", label: "⚡ Autónomo" }, { value: "ask", label: "✋ Preguntar" }] },
+    options: [{ value: "auto", label: "Autónomo" }, { value: "ask", label: "Preguntar" }] },
 
   // — Proveedores y API keys —
   { key: "zaiApiKey", label: "z.ai (GLM) API key", category: "Proveedores y API keys", type: "password", scope: "backend",

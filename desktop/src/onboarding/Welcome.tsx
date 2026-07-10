@@ -23,7 +23,7 @@ export function Welcome() {
           <p className="wel__lead">Un equipo de agentes de IA de código, en tu escritorio.</p>
           <p>Hablás con un agente <b>router</b> que <b>lidera</b>: piensa, diseña y escribe lo crítico, y <b>delega</b> la ejecución a agentes <b>worker</b>, cada uno en su terminal real. Se comunican por un túnel MCP local — <b>A2A (Agent-to-Agent) en tu máquina</b>.</p>
           <div className="wel__flow">
-            <span className="wel__node wel__node--router">🧭 router</span>
+            <span className="wel__node wel__node--router">router</span>
             <span className="wel__arrow">→</span>
             <span className="wel__node">worker</span>
             <span className="wel__node">worker</span>

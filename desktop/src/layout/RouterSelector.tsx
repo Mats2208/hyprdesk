@@ -7,7 +7,7 @@ export function RouterSelector({ session: s }: { session: WsSession }) {
   return (
     <div className="selector selector--inline">
       <div className="selector__card">
-        <div className="selector__brand">🧭 {s.meta.name}</div>
+        <div className="selector__brand">{s.meta.name}</div>
         <div className="selector__title">Elegí tu agente router</div>
         <div className="selector__sub">Vas a hablar con él; delega workers reales por vos.</div>
         <div className="selector__agents">

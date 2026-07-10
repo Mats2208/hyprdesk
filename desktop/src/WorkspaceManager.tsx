@@ -71,7 +71,7 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
     <div className="shell">
       <div className="wm">
         <div className="wm__card">
-          <div className="wm__brand">🧭 HyprDesk</div>
+          <div className="wm__brand">HyprDesk</div>
           <div className="wm__title">Workspaces</div>
           <div className="wm__sub">Cada workspace es su propia carpeta con su router y sus workers.</div>
 

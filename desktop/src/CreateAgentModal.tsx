@@ -112,7 +112,7 @@ export function CreateAgentModal({
         <div className="modal__head">
           <span className="modal__title">Crear agente</span>
           <div className="ca__modes">
-            <button className={`ca__mode ${mode === "ai" ? "ca__mode--on" : ""}`} onClick={() => switchMode("ai")}>Con IA ✨</button>
+            <button className={`ca__mode ${mode === "ai" ? "ca__mode--on" : ""}`} onClick={() => switchMode("ai")}>Con IA</button>
             <button className={`ca__mode ${mode === "manual" ? "ca__mode--on" : ""}`} onClick={() => switchMode("manual")}>Manual</button>
           </div>
           <button className="modal__close" onClick={onClose} title="Cerrar"><CloseIcon /></button>
@@ -126,7 +126,7 @@ export function CreateAgentModal({
               onChange={(e) => setDesc(e.target.value)}
               placeholder="Ej: agente de backend, preciso pero no el más pesado, con instrucciones por endpoint y arquitectura; corre tests pero NUNCA mergea a git sin mi permiso."
             />
-            <button className="modal__save" onClick={generate} disabled={gen || !desc.trim()}>{gen ? "Generando…" : "Generar perfil ✨"}</button>
+            <button className="modal__save" onClick={generate} disabled={gen || !desc.trim()}>{gen ? "Generando…" : "Generar perfil"}</button>
             {error && <div className="ca__error">{error}</div>}
           </div>
         )}

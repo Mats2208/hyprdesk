@@ -284,19 +284,20 @@ body {
 
 /* tabs de workspaces abiertos (keep-alive) */
 .wstabs {
-  flex: 0 0 auto; display: flex; align-items: stretch; gap: 2px; height: 34px;
-  padding: 0 8px; border-bottom: 1px solid var(--hairline); background: var(--surface); overflow-x: auto;
+  flex: 0 0 auto; display: flex; align-items: stretch; gap: 0; height: 35px;
+  padding: 0; border-bottom: 1px solid var(--hairline); background: var(--surface); overflow-x: auto;
 }
 .wstabs::-webkit-scrollbar { height: 0; }
+/* Tabs planas estilo VS Code: rectangulares, activa por línea de acento arriba (sin radius). */
 .wstab {
-  display: inline-flex; align-items: center; gap: 7px; padding: 0 8px 0 11px; cursor: pointer;
-  font-size: 12px; color: var(--muted); border: 1px solid transparent; border-bottom: none;
-  border-radius: 5px 5px 0 0; margin-top: 5px; max-width: 200px; white-space: nowrap; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; height: 100%; cursor: pointer;
+  font-size: 12px; color: var(--muted); border-right: 1px solid var(--hairline);
+  max-width: 200px; white-space: nowrap; transition: background 0.12s, color 0.12s;
 }
-.wstab:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
-.wstab--active { color: var(--text-bright); background: var(--bg); border-color: var(--hairline); box-shadow: inset 0 2px 0 var(--accent); }
+.wstab:hover { color: var(--text); background: var(--hover); }
+.wstab--active { color: var(--text-bright); background: var(--bg); box-shadow: inset 0 2px 0 var(--accent); }
 .wstab__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: 0 0 auto; }
-.wstab--active .wstab__dot { background: var(--router); }
+.wstab--active .wstab__dot { background: var(--accent); }
 .wstab__name { overflow: hidden; text-overflow: ellipsis; }
 .wstab__close {
   display: grid; place-items: center; width: 16px; height: 16px; border-radius: 5px;
@@ -673,13 +674,13 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 
 /* ==================== CONTROL DE CAMBIOS ==================== */
 .act__badge {
-  position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; padding: 0 3px;
-  display: grid; place-items: center; border-radius: 5px; background: var(--router); color: #06231a;
-  font: 700 9px/1 var(--font-mono); box-shadow: 0 0 0 2px var(--bg);
+  position: absolute; top: 4px; right: 6px; min-width: 15px; height: 15px; padding: 0 4px;
+  display: grid; place-items: center; border-radius: 8px; background: var(--accent-hover); color: #ffffff;
+  font: 700 9px/1 var(--font-mono); box-shadow: 0 0 0 2px var(--surface);
 }
 .chg__repo {
-  font: 600 8px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--router);
-  background: var(--router-soft); border: 1px solid rgba(59, 158, 255, 0.3); padding: 3px 5px; border-radius: 4px;
+  font: 600 8px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--hairline); padding: 3px 5px; border-radius: 4px;
 }
 .chgrow {
   display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 5px;
@@ -756,10 +757,10 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .wm__openfolder:hover { color: var(--text); border-color: var(--router); background: var(--router-soft); }
 .wm__ext {
   margin-left: 8px; font: 600 9px/1 var(--font-mono); letter-spacing: 0.04em;
-  color: #c084fc; background: rgba(192, 132, 252, 0.12); border: 1px solid rgba(192, 132, 252, 0.3);
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--hairline);
   padding: 2px 5px; border-radius: 4px; vertical-align: middle;
 }
-.wsrow__ext { flex: 0 0 auto; margin-left: 4px; font-size: 11px; color: #c084fc; }
+.wsrow__ext { flex: 0 0 auto; margin-left: 4px; font-size: 11px; color: var(--faint); }
 
 /* ==================== MODAL GENÉRICO (Settings, Crear agente) ==================== */
 .modal-overlay {
