@@ -5,6 +5,7 @@ import { WorkspaceTabs } from "./WorkspaceTabs";
 import { WorktreeNotice } from "./WorktreeNotice";
 import { ActivityBar } from "./ActivityBar";
 import { SidePanel } from "./SidePanel";
+import { RightDock } from "./RightDock";
 import { TileGrid } from "./TileGrid";
 import { RouterSelector } from "./RouterSelector";
 import { StatusBar } from "./StatusBar";
@@ -20,6 +21,7 @@ export function Shell() {
   const sessions = useSessionStore((s) => s.sessions);
   const currentId = useSessionStore((s) => s.currentId);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const rightOpen = useUiStore((s) => s.rightOpen);
 
   return (
     <div className="ide">
@@ -37,6 +39,7 @@ export function Shell() {
             </div>
           ))}
         </div>
+        {rightOpen && <RightDock />}
       </div>
 
       <StatusBar />

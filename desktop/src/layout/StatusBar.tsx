@@ -9,6 +9,7 @@ export function StatusBar() {
   const previewsByWs = useSessionStore((s) => s.previewsByWs);
   const openBrowser = useSessionStore((s) => s.openBrowser);
   const openPanel = useUiStore((s) => s.openPanel);
+  const setRightOpen = useUiStore((s) => s.setRightOpen);
 
   const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
   const curChanges = current ? changesByWs[current.meta.folder] : undefined;
@@ -24,7 +25,7 @@ export function StatusBar() {
           {workers.length}<span className="sb-chip__u">w</span> · {sessions.length}<span className="sb-chip__u">ws</span>
         </span>
         {changeCount > 0 && (
-          <button className="sb-chip sb-chip--warn" title="Ver cambios" onClick={() => openPanel("changes")}>
+          <button className="sb-chip sb-chip--warn" title="Ver cambios" onClick={() => setRightOpen(true)}>
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M7 1.5v11M1.5 7h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             {changeCount}
           </button>

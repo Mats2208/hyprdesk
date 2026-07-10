@@ -1,6 +1,5 @@
 // Panel lateral: conmuta entre Workspaces / Agentes (Sidebar) / Archivos / Cambios según uiStore.panel.
 import { FilesPanel } from "../FilesPanel";
-import { ChangesPanel } from "../ChangesPanel";
 import { Sidebar } from "../Sidebar";
 import { WorkspacesPanel } from "../WorkspacesPanel";
 import { useSessionStore } from "../store/sessionStore";
@@ -14,17 +13,13 @@ export function SidePanel() {
   const setTeamOpen = useUiStore((s) => s.setTeamOpen);
 
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
-  const changesByWs = useSessionStore((s) => s.changesByWs);
-  const { openWorkspace, setActive, addTerminal, launchProfile, deleteProfile, openFile, openBrowser, openDiff } = useSessionStore.getState();
+  const { openWorkspace, setActive, addTerminal, launchProfile, deleteProfile, openFile, openBrowser } = useSessionStore.getState();
 
   if (panel === "workspaces") {
     return <WorkspacesPanel activeId={current?.meta.id ?? undefined} onSwitch={openWorkspace} />;
   }
   if (panel === "files") {
     return <FilesPanel root={current?.meta.folder ?? null} onOpenFile={openFile} onPreview={(p) => openBrowser("file://" + p)} />;
-  }
-  if (panel === "changes") {
-    return <ChangesPanel changes={current ? changesByWs[current.meta.folder] : undefined} root={current?.meta.folder ?? null} onOpenDiff={openDiff} onOpenFile={openFile} />;
   }
 
   const agents = current

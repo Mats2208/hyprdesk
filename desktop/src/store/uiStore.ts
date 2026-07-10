@@ -5,7 +5,8 @@ import type { Panel, TileStatus } from "../types";
 
 // Layout persistido entre sesiones (sidebar abierto + panel activo).
 const savedPanel = localStorage.getItem("hd-panel");
-const initPanel: Panel = savedPanel === "workspaces" || savedPanel === "files" || savedPanel === "changes" ? savedPanel : "agents";
+// "changes" ya no es un panel izquierdo (vive en el RightDock) → cae a "agents".
+const initPanel: Panel = savedPanel === "workspaces" || savedPanel === "files" ? savedPanel : "agents";
 
 type UiState = {
   sidebarOpen: boolean;
@@ -21,8 +22,10 @@ type UiState = {
   dragging: boolean;
   wtNoticeDismissed: boolean;
   welcomeOpen: boolean; // onboarding / first-run
+  rightOpen: boolean;   // RightDock = Source Control (git)
 
   setSidebarOpen: (v: boolean | ((o: boolean) => boolean)) => void;
+  setRightOpen: (v: boolean | ((o: boolean) => boolean)) => void;
   openPanel: (p: Panel) => void; // setPanel + abrir sidebar
   setPanel: (p: Panel) => void;
   togglePalette: () => void;
@@ -55,11 +58,17 @@ export const useUiStore = create<UiState>((set) => ({
   dragging: false,
   wtNoticeDismissed: localStorage.getItem("hd-wt-notice") === "1",
   welcomeOpen: localStorage.getItem("hd-onboarded") !== "1",
+  rightOpen: localStorage.getItem("hd-right") === "1",
 
   setSidebarOpen: (v) => set((s) => {
     const sidebarOpen = typeof v === "function" ? v(s.sidebarOpen) : v;
     localStorage.setItem("hd-sidebar", sidebarOpen ? "1" : "0");
     return { sidebarOpen };
+  }),
+  setRightOpen: (v) => set((s) => {
+    const rightOpen = typeof v === "function" ? v(s.rightOpen) : v;
+    localStorage.setItem("hd-right", rightOpen ? "1" : "0");
+    return { rightOpen };
   }),
   openPanel: (p) => { localStorage.setItem("hd-panel", p); localStorage.setItem("hd-sidebar", "1"); set({ panel: p, sidebarOpen: true }); },
   setPanel: (p) => { localStorage.setItem("hd-panel", p); set({ panel: p }); },
