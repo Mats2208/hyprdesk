@@ -36,12 +36,22 @@ una superficie tipo IDE (editor de código, diffs, preview embebido, control de 
 
 ## 📸 Capturas
 
-<!-- Agregá las capturas en docs/ y descomentá:
+**Un router delegando a dos workers en paralelo** — OpenCode como router, Claude y Codex como
+workers, cada uno en su terminal real; a la derecha, un worker mostrando su diff en vivo.
+
 ![Router delegando a workers](docs/router-workers.png)
-![Control de cambios + diff](docs/changes.png)
-![Preview embebido](docs/preview.png)
--->
-_Próximamente._ (Router + workers, panel de cambios/diff, preview embebido, tabs multi-workspace.)
+
+**Superficie IDE** — explorador de archivos + editor de código (CodeMirror) con el contador de cambios.
+
+![Editor de código y explorador de archivos](docs/ide-editor.png)
+
+**Command palette (⌘K)** sobre la grilla de agentes.
+
+![Command palette](docs/command-palette.png)
+
+**Selector de router** al abrir un workspace — elegís Claude Code, Codex u OpenCode.
+
+![Selector de agente router](docs/selector.png)
 
 ## 🏗️ Arquitectura
 

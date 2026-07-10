@@ -1,12 +1,8 @@
 # docs / capturas
 
-Poné acá las capturas que referencia el README principal (y descomentá las líneas `![]()` en
-`../README.md`). Nombres sugeridos:
+Capturas usadas en el [README principal](../README.md):
 
-- `router-workers.png` — el router delegando y un worker trabajando/reportando (grilla router + workers).
-- `changes.png` — el panel "Cambios" con archivos modificados + un tile de diff abierto.
-- `preview.png` — el navegador/preview embebido cargando un `localhost` o un HTML generado.
-- `multi-workspace.png` — la barra de tabs con varios workspaces abiertos (keep-alive).
-
-Tip: en macOS, `⇧⌘4` + espacio captura una ventana con sombra. Recortá a ~1600px de ancho para que
-pesen poco.
+- `router-workers.png` — router (OpenCode) delegando a workers (Claude + Codex), con diff en vivo.
+- `ide-editor.png` — explorador de archivos + editor de código (CodeMirror).
+- `command-palette.png` — command palette (⌘K) sobre la grilla de agentes.
+- `selector.png` — selector de router al abrir un workspace.
