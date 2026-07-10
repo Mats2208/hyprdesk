@@ -102,6 +102,9 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
         b: { doc: diff.new, extensions: [...baseExtensions(filePath ?? title), ...themeExtensions(), EditorView.editable.of(false)] },
         parent: host,
       });
+      // re-medir al tamaño final (evita el texto encimado al abrir mientras el tile se acomoda).
+      const m = merge;
+      requestAnimationFrame(() => { m.a.requestMeasure(); m.b.requestMeasure(); });
       return () => { merge?.destroy(); };
     }
 
@@ -139,6 +142,7 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
       });
       viewRef.current = view;
       if (active) view.focus();
+      requestAnimationFrame(() => view.requestMeasure()); // re-medir al tamaño final
       // reaccionar a cambios de tema/fuente sin perder ediciones (reconfigurar el compartment).
       themeUnsub = useThemeStore.subscribe(() => view.dispatch({ effects: themeComp.reconfigure(themeExtensions()) }));
     })();

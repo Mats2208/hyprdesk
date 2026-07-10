@@ -155,6 +155,9 @@ body {
   from { opacity: 0; transform: scale(0.97) translateY(6px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
+/* Los tiles de código/diff NO usan la entrada con scale(): CodeMirror mide los caracteres durante
+   el transform y quedan encimados. Un fade sin transform lo evita. */
+@keyframes tile-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tile-out {
   from { opacity: 1; transform: scale(1); }
   to   { opacity: 0; transform: scale(0.94); }
@@ -197,6 +200,7 @@ body {
 .tile--router { border-color: rgba(59, 158, 255, 0.35); }
 .tile--router.tile--active { border-color: rgba(59, 158, 255, 0.6); }
 .tile--exited { opacity: 0.55; }
+.tile--code { animation: tile-fade 0.18s ease; } /* sin scale → CodeMirror mide bien */
 /* actividad del túnel: borde de acento parpadeante, sin glow. */
 .tile--activity {
   border-color: rgba(59, 158, 255, 0.6);
