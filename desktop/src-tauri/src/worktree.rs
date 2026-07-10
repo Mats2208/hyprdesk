@@ -56,6 +56,27 @@ pub fn remove(ws: &str, path: &str) {
     let _ = git(ws, &["worktree", "remove", "--force", path]);
 }
 
+// Revisión: qué hizo el worker en su rama vs la principal (para que el router critique antes de mergear).
+// Commitea el WIP del worktree (para que el diff lo incluya) y devuelve (resumen --stat, diff completo).
+// El diff se recorta a ~60KB para no reventar el contexto del router. None si no es git o falla.
+pub fn review(ws: &str, worktree_path: &str, branch: &str) -> Option<(String, String)> {
+    // 1) commitear WIP del worktree (los agentes no commitean solos) → el diff incluye todo
+    let _ = git(worktree_path, &["add", "-A"]);
+    let _ = git(worktree_path, &["commit", "-m", &format!("hyprdesk: review {branch}")]);
+    // 2) base = ancestro común entre la principal (HEAD del ws) y la rama del worker
+    let base = git(ws, &["merge-base", "HEAD", branch]).map(|s| s.trim().to_string())?;
+    let range = format!("{base}..{branch}");
+    let stat = git(ws, &["diff", "--stat", &range]).unwrap_or_default();
+    let mut diff = git(ws, &["diff", &range]).unwrap_or_default();
+    const MAX: usize = 60_000;
+    if diff.len() > MAX {
+        let cut = diff.char_indices().nth(MAX).map(|(i, _)| i).unwrap_or(MAX);
+        diff.truncate(cut);
+        diff.push_str("\n\n… (diff recortado — pedí archivos puntuales al worker o revisalos con shell)");
+    }
+    Some((stat, diff))
+}
+
 // Commitea lo que haya en el worktree y mergea su rama a la principal del ws.
 // Ok(()) si mergeó; Err(conflictos) si hubo conflicto (se aborta el merge).
 pub fn merge(ws: &str, worktree_path: &str, branch: &str) -> Result<(), Vec<String>> {

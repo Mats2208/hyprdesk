@@ -131,14 +131,39 @@ if (ROLE === "router") {
   );
 
   server.registerTool(
+    "review_worker",
+    {
+      title: "Revisar (criticar) el trabajo de un worker antes de mergear",
+      description:
+        "Devuelve el DIFF de la rama de un worker (qué cambió vs la rama principal) para que lo REVISES " +
+        "antes de integrar. Usalo SIEMPRE antes de merge_worker: leé el diff, verificá que hace lo pedido " +
+        "y no rompe nada. Si está bien → merge_worker. Si algo falla → send_to_worker con las correcciones " +
+        "(NO mergees). Si querés, corré tests/typecheck vos con shell antes de decidir.",
+      inputSchema: {
+        worker_id: z.string().describe("El id del worker cuyo trabajo querés revisar."),
+      },
+    },
+    async ({ worker_id }) => {
+      try {
+        const r = await post("/review_worker", { worker_id });
+        if (!r.ok) return err(r.error || "no se pudo revisar");
+        const body = r.diff && r.diff.trim() ? r.diff : "(sin cambios en la rama)";
+        return ok(`Diff de ${r.branch}:\n\n${r.stat || ""}\n\n${body}\n\n— Si está bien, mergealo con merge_worker. Si no, mandale correcciones con send_to_worker.`);
+      } catch (e) {
+        return err(`Error revisando: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
     "merge_worker",
     {
       title: "Mergear la rama de un worker a la principal",
       description:
         "Si el workspace es un repo git, cada worker trabaja en su propia rama/worktree aislada. Cuando " +
-        "un worker terminó y su trabajo está bien, llamá a esta tool para INTEGRAR su rama a la rama " +
-        "principal del workspace. Devuelve si mergeó o si hubo conflictos (con la lista de archivos). " +
-        "Avisale al usuario qué mergeaste.",
+        "un worker terminó, REVISÁ primero su trabajo con review_worker; si está bien, llamá a esta tool " +
+        "para INTEGRAR su rama a la rama principal del workspace. Devuelve si mergeó o si hubo conflictos " +
+        "(con la lista de archivos). Avisale al usuario qué mergeaste.",
       inputSchema: {
         worker_id: z.string().describe("El id del worker cuya rama querés integrar."),
       },

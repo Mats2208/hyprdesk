@@ -178,6 +178,27 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
             let _ = app.emit("merge-result", result.clone());
             let _ = req.respond(json_response(result.to_string()));
         }
+        "/review_worker" => {
+            let body = read_body(&mut req);
+            let wid = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("worker_id").and_then(|r| r.as_str()).map(String::from))
+                .unwrap_or_default();
+            let info = workers.lock().unwrap().get(&wid).cloned();
+            let result = match info {
+                Some(w) if w.branch.is_some() => {
+                    let branch = w.branch.clone().unwrap();
+                    match crate::worktree::review(&w.ws_root, &w.cwd, &branch) {
+                        Some((stat, diff)) => json!({ "ok": true, "branch": branch, "stat": stat, "diff": diff }),
+                        None => json!({ "ok": false, "error": "no pude generar el diff de la rama" }),
+                    }
+                }
+                // sin worktree (no-git): el worker escribió directo en la carpeta; no hay rama que revisar
+                Some(_) => json!({ "ok": false, "error": "el worker no tiene worktree (no es repo git); revisá los archivos directo" }),
+                None => json!({ "ok": false, "error": "no encuentro ese worker" }),
+            };
+            let _ = req.respond(json_response(result.to_string()));
+        }
         "/spawn_worker" => {
             let body = read_body(&mut req);
             let parsed = match serde_json::from_str::<SpawnBody>(&body) {
