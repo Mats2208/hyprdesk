@@ -186,11 +186,12 @@ export function TerminalTile({
   return (
     <div className={cls} style={accent} onMouseDown={() => onFocus(id)}>
       <div className="tile__header" onDoubleClick={() => onToggleMax(id)}>
-        <span className="tile__dots">
-          <i style={color && !isRouter ? { background: color } : undefined} /><i /><i />
-        </span>
-        {isRouter && <span className="tile__badge">PRINCIPAL</span>}
+        <span
+          className={`tile__status ${exited ? "tile__status--exited" : isRouter ? "tile__status--router" : ""}`}
+          style={color && !isRouter && !exited ? { background: color } : undefined}
+        />
         <span className="tile__title">{title}</span>
+        {isRouter && <span className="tile__badge">ROUTER</span>}
         {branch && (
           <span className="tile__branch" title={`rama aislada · ${branch}`}>
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.5v5M5.5 4h3a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>

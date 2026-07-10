@@ -164,9 +164,9 @@ export function CodeTile({ id, title, active, canClose, maximized, filePath, dif
   return (
     <div className={cls} onMouseDown={() => onFocus(id)}>
       <div className="tile__header" onDoubleClick={() => onToggleMax(id)}>
-        <span className="tile__dots"><i /><i /><i /></span>
-        <span className="tile__badge tile__badge--code">{diff ? "DIFF" : "ARCHIVO"}</span>
+        <span className="tile__status" />
         <span className="tile__title">{title}{dirty ? " ●" : ""}</span>
+        <span className="tile__badge tile__badge--code">{diff ? "DIFF" : "ARCHIVO"}</span>
         <span className="tile__path">{dir}</span>
         {error && <span className="tile__exited">error</span>}
         <span className="tile__controls">
