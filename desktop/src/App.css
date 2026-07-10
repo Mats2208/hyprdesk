@@ -353,6 +353,7 @@ body {
 .palette__item--active { background: rgba(52, 211, 153, 0.12); color: var(--router); }
 .palette__hint { font: 10px ui-monospace, monospace; color: var(--faint); }
 .palette__empty { padding: 16px; text-align: center; color: var(--faint); font-size: 13px; }
+.palette__cat { padding: 8px 12px 4px; font: 600 10px/1 ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
 
 /* ---------- selector de agente (inicio) ---------- */
 .selector { height: 100%; display: grid; place-items: center; }

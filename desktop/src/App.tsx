@@ -3,6 +3,7 @@
 import { WorkspaceManager } from "./WorkspaceManager";
 import { SettingsModal } from "./SettingsModal";
 import { Shell } from "./layout/Shell";
+import "./commands/appCommands"; // registra los comandos (side-effect)
 import { useBackendEvents } from "./hooks/useBackendEvents";
 import { useNativeMenu } from "./hooks/useNativeMenu";
 import { useKeyboard } from "./hooks/useKeyboard";

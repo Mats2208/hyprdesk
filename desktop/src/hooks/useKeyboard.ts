@@ -1,23 +1,30 @@
-// Atajos globales (⌘T/⌘W/⌘K/⌘B + flechas). Despacha a los stores. Solo en el stage IDE.
+// Atajos globales → despachan comandos por id (data-driven). Solo en el stage IDE. Requieren ⌘/Ctrl.
 import { useEffect } from "react";
+import { runCommand } from "../commands/registry";
 import { useSessionStore } from "../store/sessionStore";
-import { useUiStore } from "../store/uiStore";
+
+// mapa tecla (con ⌘/Ctrl) → id de comando. Cambiar acá cambia el atajo (base para remapeo en E6).
+const KEYMAP: Record<string, string> = {
+  t: "new-term",
+  w: "close-tile",
+  k: "toggle-palette",
+  b: "toggle-sidebar",
+  arrowright: "focus-next",
+  arrowdown: "focus-next",
+  arrowleft: "focus-prev",
+  arrowup: "focus-prev",
+};
 
 export function useKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const ss = useSessionStore.getState();
-      const us = useUiStore.getState();
-      if (ss.stage !== "ide") return;
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const k = e.key.toLowerCase();
-      if (k === "t") { e.preventDefault(); e.stopPropagation(); ss.addTerminal(); }
-      else if (k === "w") { e.preventDefault(); e.stopPropagation(); const a = ss.current()?.activeId; if (a) ss.closeTerminal(a); }
-      else if (k === "k") { e.preventDefault(); e.stopPropagation(); us.togglePalette(); }
-      else if (k === "b") { e.preventDefault(); e.stopPropagation(); us.setSidebarOpen((o) => !o); }
-      else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); ss.focusDelta(1); }
-      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); ss.focusDelta(-1); }
+      if (useSessionStore.getState().stage !== "ide") return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const id = KEYMAP[e.key.toLowerCase()];
+      if (!id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      runCommand(id);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

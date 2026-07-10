@@ -5,12 +5,10 @@ import { SettingsModal } from "../SettingsModal";
 import { CreateAgentModal } from "../CreateAgentModal";
 import { AskUserModal } from "../AskUserModal";
 import { TeamModal } from "../TeamModal";
-import { useCommands } from "../commands/useCommands";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 
 export function Modals() {
-  const commands = useCommands();
   const toast = useUiStore((s) => s.toast);
   const setToast = useUiStore((s) => s.setToast);
   const paletteOpen = useUiStore((s) => s.paletteOpen);
@@ -31,7 +29,7 @@ export function Modals() {
   return (
     <>
       {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
-      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {createAgentOpen && (
         <CreateAgentModal

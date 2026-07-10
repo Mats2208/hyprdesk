@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import fuzzysort from "fuzzysort";
+import { listCommands, type Command } from "./commands/registry";
 
-export type Command = { id: string; label: string; hint?: string; run: () => void };
-
-export function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: () => void }) {
+export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
 
-  const filtered = useMemo(
-    () => commands.filter((c) => c.label.toLowerCase().includes(q.toLowerCase())),
-    [commands, q]
+  const all = useMemo(() => listCommands().filter((c) => !c.when || c.when()), []);
+  const results = useMemo<Command[]>(
+    () => (q ? fuzzysort.go(q, all, { key: "title" }).map((r) => r.obj) : all),
+    [all, q]
   );
 
   useEffect(() => { setIdx(0); }, [q]);
@@ -25,25 +26,31 @@ export function CommandPalette({ commands, onClose }: { commands: Command[]; onC
           onChange={(e) => setQ(e.target.value)}
           placeholder="Escribí un comando…"
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, results.length - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter") { e.preventDefault(); run(filtered[idx]); }
+            else if (e.key === "Enter") { e.preventDefault(); run(results[idx]); }
             else if (e.key === "Escape") { e.preventDefault(); onClose(); }
           }}
         />
         <div className="palette__list">
-          {filtered.length === 0 && <div className="palette__empty">Sin resultados</div>}
-          {filtered.map((c, i) => (
-            <button
-              key={c.id}
-              className={`palette__item ${i === idx ? "palette__item--active" : ""}`}
-              onMouseEnter={() => setIdx(i)}
-              onClick={() => run(c)}
-            >
-              <span>{c.label}</span>
-              {c.hint && <span className="palette__hint">{c.hint}</span>}
-            </button>
-          ))}
+          {results.length === 0 && <div className="palette__empty">Sin resultados</div>}
+          {results.map((c, i) => {
+            // en modo lista (sin query) mostramos subtítulos de categoría al cambiar de grupo
+            const header = !q && (i === 0 || results[i - 1].category !== c.category) ? c.category : null;
+            return (
+              <div key={c.id}>
+                {header && <div className="palette__cat">{header}</div>}
+                <button
+                  className={`palette__item ${i === idx ? "palette__item--active" : ""}`}
+                  onMouseEnter={() => setIdx(i)}
+                  onClick={() => run(c)}
+                >
+                  <span>{c.title}</span>
+                  {c.keybinding && <span className="palette__hint">{c.keybinding}</span>}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
