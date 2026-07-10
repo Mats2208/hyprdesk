@@ -94,15 +94,20 @@ export function TerminalTile({
         // cuelan en la URL (colores/cursor codes pegados al texto → chips con basura).
         const fn = onDetectRef.current;
         if (fn) {
-          const text = new TextDecoder().decode(bytes)
-            .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC
-            .replace(/\x1b[@-Z\\-_]/g, "")                     // esc de un char
-            .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")         // CSI (colores, mover cursor)
-            .replace(/[\x00-\x1f\x7f]/g, " ");                 // otros control chars → espacio
-          urlBufRef.current = (urlBufRef.current + text).slice(-4000);
-          for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]<>]*/gi)) {
-            const u = m[0].replace(/[.,;:]+$/, "");
-            if (u && !seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
+          const raw = new TextDecoder().decode(bytes);
+          // GUARD barato: la gran mayoría de los chunks no tienen URL → evitamos el regex pesado
+          // (crítico para no colgar el main thread con varios agentes streaming a la vez).
+          if (raw.includes("://") || raw.includes("localhost")) {
+            const text = raw
+              .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC
+              .replace(/\x1b[@-Z\\-_]/g, "")                     // esc de un char
+              .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")         // CSI (colores, mover cursor)
+              .replace(/[\x00-\x1f\x7f]/g, " ");                 // otros control chars → espacio
+            urlBufRef.current = (urlBufRef.current + text).slice(-4000);
+            for (const m of urlBufRef.current.matchAll(/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s"'`)\]<>]*/gi)) {
+              const u = m[0].replace(/[.,;:]+$/, "");
+              if (u && !seenUrlsRef.current.has(u)) { seenUrlsRef.current.add(u); fn(u); }
+            }
           }
         }
       });
