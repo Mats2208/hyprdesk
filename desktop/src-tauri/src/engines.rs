@@ -183,10 +183,14 @@ fn claude_mcp_config(agent_id: &str, env: &[(String, String)]) -> Result<String,
     Ok(path.to_string_lossy().to_string())
 }
 
-// Config opencode (OPENCODE_CONFIG) por-agente: MCP hyprdesk + permisos abiertos (autonomía).
-fn opencode_config(agent_id: &str, env: &[(String, String)]) -> Result<String, String> {
+// Config opencode (OPENCODE_CONFIG) por-agente: MCP hyprdesk + permisos abiertos (autonomía) +
+// el ROL como archivo de `instructions` (se suma al system prompt, no gasta un turno de usuario).
+fn opencode_config(agent_id: &str, role_txt: &str, env: &[(String, String)]) -> Result<String, String> {
+    let role_path = std::env::temp_dir().join(format!("hyprdesk-role-{agent_id}.md"));
+    std::fs::write(&role_path, role_txt).map_err(|e| e.to_string())?;
     let cfg = serde_json::json!({
         "$schema": "https://opencode.ai/config.json",
+        "instructions": [role_path.to_string_lossy()],
         "permission": { "edit": "allow", "bash": "allow", "webfetch": "allow" },
         "mcp": { "hyprdesk": {
             "type": "local",
@@ -198,14 +202,6 @@ fn opencode_config(agent_id: &str, env: &[(String, String)]) -> Result<String, S
     let path = std::env::temp_dir().join(format!("hyprdesk-opencode-{agent_id}.json"));
     std::fs::write(&path, cfg.to_string()).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
-}
-
-// Prompt inicial con el rol prepended (para motores sin flag de system-prompt).
-fn role_prompt(role_txt: &str, task: Option<&str>) -> String {
-    match task {
-        Some(t) => format!("{role_txt}\n\n--- TU PRIMERA TAREA ---\n\n{t}"),
-        None => role_txt.to_string(),
-    }
 }
 
 // ¿Existe realmente el transcript/sesión para poder resumir? (si no, arrancamos fresco).
@@ -310,16 +306,21 @@ fn build_codex(
         if let Some(t) = task {
             argv.push(t.to_string());
         }
-    } else {
-        // prompt inicial = rol (+ tarea si es worker)
-        argv.push(role_prompt(&role_txt, task));
+    } else if let Some(t) = task {
+        // worker: la tarea SÍ auto-arranca (es su trabajo). El rol NO va como prompt.
+        argv.push(t.to_string());
     }
+    // router (sin task): no pasamos prompt inicial → arranca idle esperando al usuario,
+    // igual que claude con --append-system-prompt. El rol va como developer_instructions (abajo).
     argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
     let mut cfgs = vec![
         "mcp_servers.hyprdesk.command=node".to_string(),
         format!("mcp_servers.hyprdesk.args=[{:?}]", mcp),
         // marcar el cwd como confiable para evitar el prompt de trust
         format!("projects.{cwd:?}.trust_level=\"trusted\""),
+        // el rol como INSTRUCCIONES (contexto/developer), no como turno de usuario. Valor raw:
+        // codex intenta parsear como TOML, falla (prosa multilínea) y lo usa como string literal.
+        format!("developer_instructions={role_txt}"),
     ];
     for (k, v) in env {
         cfgs.push(format!("mcp_servers.hyprdesk.env.{k}=\"{v}\""));
@@ -344,18 +345,19 @@ fn build_opencode(
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
-    let cfg = opencode_config(agent_id, env)?;
     let role_txt = role_text(role)?;
+    let cfg = opencode_config(agent_id, &role_txt, env)?;
     let mut argv = vec!["opencode".to_string()];
     if let Some(id) = &resume_id {
         argv.push("--session".to_string());
         argv.push(id.clone());
     }
-    // opencode TUI no toma mensaje posicional => la tarea/rol se inyecta por PTY al arrancar.
+    // El rol va como `instructions` (system) en el config → no consume un turno. Solo inyectamos
+    // la TAREA (worker) por PTY al arrancar; el router queda idle esperando al usuario.
     let inject = if resume_id.is_some() {
         None
     } else {
-        Some(role_prompt(&role_txt, task))
+        task.map(|t| t.to_string())
     };
     Ok(LaunchSpec {
         argv,
