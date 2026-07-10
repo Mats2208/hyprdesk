@@ -10,6 +10,8 @@ import { z } from "zod";
 const PORT = process.env.HYPRDESK_PORT;
 const AGENT_ID = process.env.HYPRDESK_AGENT_ID || "unknown";
 const ROLE = process.env.HYPRDESK_ROLE || "worker";
+const CWD = process.env.HYPRDESK_CWD || null; // carpeta del workspace (routers)
+const ROUTER_ID = process.env.HYPRDESK_ROUTER_ID || "router"; // router al que reporta (workers)
 const BASE = `http://127.0.0.1:${PORT}`;
 
 async function post(path, body) {
@@ -46,7 +48,7 @@ if (ROLE === "router") {
     },
     async ({ task, engine }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task, engine });
+        const j = await post("/spawn_worker", { prompt: task, engine, router: AGENT_ID, cwd: CWD });
         return ok(`Worker (${engine || "claude"}) creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
@@ -87,7 +89,7 @@ if (ROLE === "router") {
     },
     async ({ message }) => {
       try {
-        await post("/message", { to: "router", from: AGENT_ID, text: message });
+        await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: message });
         return ok("Reporte enviado al router.");
       } catch (e) {
         return err(`Error reportando al router: ${e.message}`);
@@ -106,7 +108,7 @@ if (ROLE === "router") {
     },
     async ({ question }) => {
       try {
-        await post("/message", { to: "router", from: AGENT_ID, text: `[pregunta] ${question}` });
+        await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: `[pregunta] ${question}` });
         return ok("Consulta enviada al router.");
       } catch (e) {
         return err(`Error consultando al router: ${e.message}`);

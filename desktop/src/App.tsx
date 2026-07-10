@@ -22,6 +22,21 @@ type AgentLaunch = {
 type Rect = { x: number; y: number; w: number; h: number };
 type SysStats = { cpu: number; mem_used: number; mem_total: number };
 type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string };
+type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[] };
+type Stage = "workspaces" | "ide";
+
+// Una sesión = un workspace ABIERTO. Con keep-alive tenemos varias vivas a la vez; todas sus
+// tiles quedan montadas (PTYs vivos) y solo se muestra la actual (las demás con display:none).
+type WsSession = {
+  meta: WorkspaceMeta;
+  terms: Term[];
+  routerId: string | null;
+  activeId: string;
+  routerWidth: number;
+  maxId: string | null;
+  needsRouter: boolean; // workspace nuevo sin router → mostramos el selector en el panel principal
+  launchError: string | null;
+};
 
 // Convierte un AgentLaunch (del backend) en los campos de un tile.
 function tileFromLaunch(l: AgentLaunch, role: Role, title: string): Term {
@@ -31,8 +46,15 @@ function tileFromLaunch(l: AgentLaunch, role: Role, title: string): Term {
     injectTask: l.injectTask ?? undefined, captureEngine: l.capture ? l.engine : undefined,
   };
 }
-type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[] };
-type Stage = "workspaces" | "selector" | "workspace";
+
+function savedStateOf(s: WsSession): SavedState {
+  return {
+    id: s.meta.id, name: s.meta.name, routerWidth: s.routerWidth,
+    tiles: s.terms
+      .filter((x) => x.sessionId) // solo agentes (no terminales manuales)
+      .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
+  };
+}
 
 function computeLayout(n: number): Rect[] {
   if (n <= 0) return [];
@@ -55,24 +77,33 @@ const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
 function App() {
   const [stage, setStage] = useState<Stage>("workspaces");
-  const [workspace, setWorkspace] = useState<WorkspaceMeta | null>(null);
-  const [terms, setTerms] = useState<Term[]>([]);
-  const [routerId, setRouterId] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string>("");
-  const [maxId, setMaxId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<WsSession[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null); // meta.id del workspace visible
   const [closing, setClosing] = useState<string[]>([]);
-  const [routerWidth, setRouterWidth] = useState(50);
   const [dragging, setDragging] = useState(false);
   const [stats, setStats] = useState<SysStats | null>(null);
-  const [launchError, setLaunchError] = useState<string | null>(null);
-  const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo)
+  const [activity, setActivity] = useState<string[]>([]); // tiles con mensaje sin leer (parpadeo), global
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [panel, setPanel] = useState<"agents" | "workspaces">("agents");
 
-  const termsRef = useRef(terms);
-  termsRef.current = terms;
-  const wsRef = useRef<HTMLDivElement>(null);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const currentIdRef = useRef(currentId);
+  currentIdRef.current = currentId;
+
+  const current = sessions.find((s) => s.meta.id === currentId) ?? null;
+  const currentActiveId = current?.activeId ?? "";
+
+  // Muta una sesión por id.
+  const updateSession = useCallback((wsId: string, fn: (s: WsSession) => WsSession) => {
+    setSessions((prev) => prev.map((s) => (s.meta.id === wsId ? fn(s) : s)));
+  }, []);
+  // Muta la sesión ACTUAL (para handlers de teclado/eventos).
+  const updateCurrent = useCallback((fn: (s: WsSession) => WsSession) => {
+    const id = currentIdRef.current;
+    if (id) setSessions((prev) => prev.map((s) => (s.meta.id === id ? fn(s) : s)));
+  }, []);
 
   // ---- stats reales ----
   useEffect(() => {
@@ -85,23 +116,30 @@ function App() {
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  // ---- el router pidió spawnear un worker (agente vivo, del motor elegido) ----
+  // ---- eventos del backend (spawn de workers, session-id capturado, actividad del túnel) ----
   useEffect(() => {
     let un: (() => void) | undefined;
     let un2: (() => void) | undefined;
     let un3: (() => void) | undefined;
     (async () => {
-      un = await listen<AgentLaunch & { title: string }>("spawn-agent", (e) => {
+      // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
+      un = await listen<AgentLaunch & { title: string; router: string }>("spawn-agent", (e) => {
         const t = tileFromLaunch(e.payload, "worker", e.payload.title);
-        setTerms((prev) => (prev.length >= MAX_TILES ? prev : [...prev, t]));
-        setActiveId(t.id);
-        setMaxId(null);
+        const routerAgentId = e.payload.router;
+        setSessions((prev) => prev.map((s) => {
+          if (s.routerId !== routerAgentId) return s;
+          if (s.terms.length >= MAX_TILES) return s;
+          return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
+        }));
       });
-      // session-id capturado de codex/opencode → completar el tile (para persistir)
+      // session-id capturado de codex/opencode → completar el tile (para persistir), en cualquier sesión.
       un2 = await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {
-        setTerms((prev) => prev.map((t) => (t.id === e.payload.agentId ? { ...t, sessionId: e.payload.sessionId } : t)));
+        setSessions((prev) => prev.map((s) => ({
+          ...s,
+          terms: s.terms.map((t) => (t.id === e.payload.agentId ? { ...t, sessionId: e.payload.sessionId } : t)),
+        })));
       });
-      // un agente recibió un mensaje del túnel → marcar su tile con actividad (parpadeo)
+      // un agente recibió un mensaje del túnel → marcar su tile con actividad (parpadeo).
       un3 = await listen<string>("tile-activity", (e) => {
         setActivity((a) => (a.includes(e.payload) ? a : [...a, e.payload]));
       });
@@ -109,50 +147,38 @@ function App() {
     return () => { un?.(); un2?.(); un3?.(); };
   }, []);
 
-  // Limpiar la actividad del tile que se enfoca.
+  // Limpiar la actividad del tile que se enfoca (en la sesión actual).
   useEffect(() => {
-    if (activeId) setActivity((a) => (a.includes(activeId) ? a.filter((x) => x !== activeId) : a));
-  }, [activeId]);
+    if (currentActiveId) setActivity((a) => (a.includes(currentActiveId) ? a.filter((x) => x !== currentActiveId) : a));
+  }, [currentActiveId]);
 
-  // ---- auto-guardar el estado del workspace (debounce) ----
+  // ---- mantener el cwd "activo" del backend apuntando al workspace visible (fallback del túnel) ----
   useEffect(() => {
-    if (stage !== "workspace" || !workspace) return;
+    if (current) invoke("set_active_workspace", { folder: current.meta.folder }).catch(() => {});
+  }, [currentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- auto-guardar el estado de cada sesión abierta (debounce) ----
+  useEffect(() => {
+    if (stage !== "ide") return;
     const t = setTimeout(() => {
-      const state: SavedState = {
-        id: workspace.id,
-        name: workspace.name,
-        routerWidth,
-        tiles: termsRef.current
-          .filter((x) => x.sessionId) // solo agentes (no terminales manuales)
-          .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
-      };
-      invoke("save_workspace", { folder: workspace.folder, state: JSON.stringify(state) }).catch(() => {});
+      for (const s of sessionsRef.current) {
+        if (s.needsRouter) continue;
+        invoke("save_workspace", { folder: s.meta.folder, state: JSON.stringify(savedStateOf(s)) }).catch(() => {});
+      }
     }, 500);
     return () => clearTimeout(t);
-  }, [terms, routerWidth, stage, workspace]);
+  }, [sessions, stage]);
 
-  // ---- abrir un workspace (nuevo → selector; con estado → restaurar) ----
-  const openWorkspace = async (meta: WorkspaceMeta) => {
-    setWorkspace(meta);
-    setLaunchError(null);
-    await invoke("set_active_workspace", { folder: meta.folder });
-    invoke("touch_workspace", { id: meta.id }).catch(() => {});
-    let saved: SavedState | null = null;
-    try {
-      const s = await invoke<string | null>("load_workspace", { folder: meta.folder });
-      saved = s ? JSON.parse(s) : null;
-    } catch { /* sin estado */ }
-    if (saved && saved.tiles?.length) {
-      await restoreWorkspace(meta, saved);
-    } else {
-      setStage("selector");
-    }
-  };
+  // Si se cerró la última sesión, volvemos al gestor full-screen.
+  useEffect(() => {
+    if (stage === "ide" && sessions.length === 0) setStage("workspaces");
+  }, [sessions, stage]);
 
-  // ---- restaurar tiles + revivir agentes con --resume ----
-  const restoreWorkspace = async (meta: WorkspaceMeta, saved: SavedState) => {
+  // ---- construir una sesión restaurada (revive router + workers con --resume) ----
+  const buildRestoredSession = async (meta: WorkspaceMeta, saved: SavedState): Promise<WsSession> => {
     const next: Term[] = [];
     let rId: string | null = null;
+    let err: string | null = null;
     const routerTile = saved.tiles.find((t) => t.role === "router");
     if (routerTile) {
       try {
@@ -161,119 +187,137 @@ function App() {
         });
         next.push(tileFromLaunch(r, "router", routerTile.title || `router · ${routerTile.engine}`));
         rId = r.agentId;
-      } catch (e) { setLaunchError(String(e)); }
+      } catch (e) { err = String(e); }
     }
     for (const t of saved.tiles.filter((x) => x.role === "worker")) {
       try {
         const w = await invoke<AgentLaunch>("worker_launch", {
-          engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder,
+          engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder, routerId: rId || "router",
         });
         next.push(tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`));
       } catch { /* worker que no resume, lo salteamos */ }
     }
-    setTerms(next);
-    setRouterId(rId);
-    setActiveId(rId || next[0]?.id || "");
-    setRouterWidth(saved.routerWidth || 50);
-    setStage("workspace");
+    return {
+      meta, terms: next, routerId: rId, activeId: rId || next[0]?.id || "",
+      routerWidth: saved.routerWidth || 50, maxId: null, needsRouter: !routerTile, launchError: err,
+    };
   };
 
-  // ---- crear el router de un workspace nuevo ----
-  const startRouter = async (engine: string) => {
-    if (!workspace) return;
+  // ---- abrir un workspace: si ya está abierto → switch instantáneo; si no → crear sesión ----
+  const openWorkspace = async (meta: WorkspaceMeta) => {
+    if (sessionsRef.current.some((s) => s.meta.id === meta.id)) {
+      setCurrentId(meta.id);
+      setStage("ide");
+      return;
+    }
+    invoke("touch_workspace", { id: meta.id }).catch(() => {});
+    let saved: SavedState | null = null;
     try {
-      const r = await invoke<AgentLaunch>("router_launch", { engine, cwd: workspace.folder, resumeSession: null });
-      setTerms([tileFromLaunch(r, "router", `router · ${engine}`)]);
-      setRouterId(r.agentId);
-      setActiveId(r.agentId);
-      setStage("workspace");
+      const s = await invoke<string | null>("load_workspace", { folder: meta.folder });
+      saved = s ? JSON.parse(s) : null;
+    } catch { /* sin estado */ }
+    const session: WsSession = (saved && saved.tiles?.length)
+      ? await buildRestoredSession(meta, saved)
+      : { meta, terms: [], routerId: null, activeId: "", routerWidth: 50, maxId: null, needsRouter: true, launchError: null };
+    setSessions((prev) => [...prev.filter((s) => s.meta.id !== meta.id), session]);
+    setCurrentId(meta.id);
+    setStage("ide");
+  };
+
+  // ---- crear el router de la sesión actual (workspace nuevo) ----
+  const startRouter = async (engine: string) => {
+    const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
+    if (!cur) return;
+    try {
+      const r = await invoke<AgentLaunch>("router_launch", { engine, cwd: cur.meta.folder, resumeSession: null });
+      updateSession(cur.meta.id, (s) => ({
+        ...s, terms: [tileFromLaunch(r, "router", `router · ${engine}`)],
+        routerId: r.agentId, activeId: r.agentId, needsRouter: false, launchError: null,
+      }));
     } catch (e) {
-      setLaunchError(String(e));
+      updateSession(cur.meta.id, (s) => ({ ...s, launchError: String(e) }));
     }
   };
 
-  // Guarda el estado del workspace actual (para poder switchear sin perder sesiones).
-  const saveCurrent = async () => {
-    if (!workspace) return;
-    const state: SavedState = {
-      id: workspace.id, name: workspace.name, routerWidth,
-      tiles: termsRef.current
-        .filter((x) => x.sessionId)
-        .map((x) => ({ id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId!, title: x.title })),
-    };
-    try { await invoke("save_workspace", { folder: workspace.folder, state: JSON.stringify(state) }); } catch { /**/ }
+  // ---- cerrar una sesión (tab): guarda y desmonta sus tiles (mata sus PTYs) ----
+  const closeWorkspace = async (wsId: string) => {
+    const s = sessionsRef.current.find((x) => x.meta.id === wsId);
+    if (s && !s.needsRouter) {
+      await invoke("save_workspace", { folder: s.meta.folder, state: JSON.stringify(savedStateOf(s)) }).catch(() => {});
+    }
+    const rest = sessionsRef.current.filter((x) => x.meta.id !== wsId);
+    setSessions(rest);
+    if (currentIdRef.current === wsId) setCurrentId(rest[0]?.meta.id ?? null);
   };
 
-  // Cambiar de workspace desde la sidebar (sin volver al gestor full-screen).
-  const switchWorkspace = async (meta: WorkspaceMeta) => {
-    if (workspace && meta.id === workspace.id) return;
-    await saveCurrent();
-    setTerms([]);
-    setRouterId(null);
-    await openWorkspace(meta);
-  };
-
-  const backToWorkspaces = () => {
-    setTerms([]); // desmonta tiles → mata PTYs (ya persistidos)
-    setRouterId(null);
-    setWorkspace(null);
-    setMaxId(null);
-    setStage("workspaces");
-  };
-
-  // ---- terminal manual (⌘T): shell, no es agente, no se persiste ----
+  // ---- terminal manual (⌘T): shell, no es agente, no se persiste (en la sesión actual) ----
   const addTerminal = useCallback(() => {
     const t: Term = { id: crypto.randomUUID(), title: HOSTS[Math.floor(Math.random() * HOSTS.length)], role: "worker" };
-    setTerms((prev) => (prev.length >= MAX_TILES ? prev : [...prev, t]));
-    setActiveId(t.id);
-    setMaxId(null);
-  }, []);
+    updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
+  }, [updateCurrent]);
+
+  const setActive = useCallback((id: string) => {
+    updateCurrent((s) => ({ ...s, activeId: id }));
+  }, [updateCurrent]);
 
   const closeTerminal = useCallback((id: string) => {
-    const list = termsRef.current;
-    const t = list.find((x) => x.id === id);
+    const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
+    if (!cur) return;
+    const t = cur.terms.find((x) => x.id === id);
     if (!t || t.role === "router") return;
-    setActiveId((cur) => {
-      if (cur !== id) return cur;
-      const idx = list.findIndex((x) => x.id === id);
-      return list[idx + 1]?.id ?? list[idx - 1]?.id ?? list[0]?.id ?? "";
+    updateCurrent((s) => {
+      if (s.activeId !== id) return s;
+      const idx = s.terms.findIndex((x) => x.id === id);
+      const nextActive = s.terms[idx + 1]?.id ?? s.terms[idx - 1]?.id ?? s.terms[0]?.id ?? "";
+      return { ...s, activeId: nextActive };
     });
     setClosing((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
+  }, [updateCurrent]);
 
-  const toggleMax = useCallback((id: string) => setMaxId((cur) => (cur === id ? null : id)), []);
+  const toggleMax = useCallback((id: string) => {
+    updateCurrent((s) => ({ ...s, maxId: s.maxId === id ? null : id }));
+  }, [updateCurrent]);
 
+  // Anima el cierre y luego remueve el tile de su sesión.
   useEffect(() => {
     if (closing.length === 0) return;
     const timers = closing.map((id) =>
       setTimeout(() => {
-        setTerms((prev) => prev.filter((t) => t.id !== id));
-        setMaxId((cur) => (cur === id ? null : cur));
+        setSessions((prev) => prev.map((s) => ({
+          ...s,
+          terms: s.terms.filter((t) => t.id !== id),
+          maxId: s.maxId === id ? null : s.maxId,
+        })));
         setClosing((prev) => prev.filter((x) => x !== id));
       }, 200)
     );
     return () => timers.forEach(clearTimeout);
   }, [closing]);
 
+  // Si el tile activo desapareció, caer al router de esa sesión.
   useEffect(() => {
-    if (stage === "workspace" && routerId && !terms.find((t) => t.id === activeId)) setActiveId(routerId);
-  }, [terms, activeId, routerId, stage]);
+    if (!current) return;
+    if (current.routerId && !current.terms.find((t) => t.id === current.activeId)) {
+      updateSession(current.meta.id, (s) => ({ ...s, activeId: s.routerId || s.terms[0]?.id || "" }));
+    }
+  }, [current, updateSession]);
 
   const focusDelta = (d: number) => {
-    const list = termsRef.current;
-    const idx = list.findIndex((t) => t.id === activeId);
+    const cur = sessionsRef.current.find((s) => s.meta.id === currentIdRef.current);
+    if (!cur) return;
+    const idx = cur.terms.findIndex((t) => t.id === cur.activeId);
     if (idx < 0) return;
-    setActiveId(list[(idx + d + list.length) % list.length].id);
+    setActive(cur.terms[(idx + d + cur.terms.length) % cur.terms.length].id);
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (stage !== "workspace") return;
+      if (stage !== "ide") return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
       if (k === "t") { e.preventDefault(); e.stopPropagation(); addTerminal(); }
-      else if (k === "w") { e.preventDefault(); e.stopPropagation(); if (activeId) closeTerminal(activeId); }
+      else if (k === "w") { e.preventDefault(); e.stopPropagation(); const a = current?.activeId; if (a) closeTerminal(a); }
       else if (k === "k") { e.preventDefault(); e.stopPropagation(); setPaletteOpen((o) => !o); }
       else if (k === "b") { e.preventDefault(); e.stopPropagation(); setSidebarOpen((o) => !o); }
       else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); focusDelta(1); }
@@ -282,16 +326,18 @@ function App() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, addTerminal, closeTerminal, stage]);
+  }, [addTerminal, closeTerminal, stage, currentActiveId]);
 
   const startDrag = (e: ReactMouseEvent) => {
     e.preventDefault();
+    const ws = (e.currentTarget as HTMLElement).closest(".workspace") as HTMLElement | null;
+    const wsId = currentIdRef.current;
+    if (!ws || !wsId) return;
     setDragging(true);
     const onMove = (ev: MouseEvent) => {
-      const rect = wsRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      const rect = ws.getBoundingClientRect();
       const pct = ((ev.clientX - rect.left) / rect.width) * 100;
-      setRouterWidth(Math.max(28, Math.min(78, pct)));
+      updateSession(wsId, (s) => ({ ...s, routerWidth: Math.max(28, Math.min(78, pct)) }));
     };
     const onUp = () => {
       setDragging(false);
@@ -302,69 +348,107 @@ function App() {
     window.addEventListener("mouseup", onUp);
   };
 
-  const workers = terms.filter((t) => t.role === "worker");
-  const workerRects = computeLayout(workers.length);
-  const hasWorkers = workers.length > 0;
-
-  const slotStyle = (t: Term): CSSProperties => {
-    if (maxId != null) {
-      return maxId === t.id
-        ? { left: "0%", top: "0%", width: "100%", height: "100%", zIndex: 5 }
-        : { left: "0%", top: "0%", width: "100%", height: "100%", opacity: 0, pointerEvents: "none" };
-    }
-    if (!hasWorkers) return { left: "0%", top: "0%", width: "100%", height: "100%" };
-    if (t.role === "router") return { left: "0%", top: "0%", width: `${routerWidth}%`, height: "100%" };
-    const wi = workers.findIndex((w) => w.id === t.id);
-    const r = workerRects[wi] ?? { x: 0, y: 0, w: 100, h: 100 };
-    const rw = 100 - routerWidth;
-    return { left: `${routerWidth + (r.x * rw) / 100}%`, top: `${r.y}%`, width: `${(r.w * rw) / 100}%`, height: `${r.h}%` };
-  };
-
-  // ---- pantalla: gestor de workspaces ----
+  // ---- pantalla: gestor de workspaces (estado vacío / inicial) ----
   if (stage === "workspaces") {
     return <WorkspaceManager onOpen={openWorkspace} />;
   }
 
-  // ---- pantalla: selector de agente (workspace nuevo) ----
-  if (stage === "selector") {
+  // ---- render de la grilla de UNA sesión (montada siempre; visible solo la actual) ----
+  const renderGrid = (s: WsSession) => {
+    const workers = s.terms.filter((t) => t.role === "worker");
+    const workerRects = computeLayout(workers.length);
+    const hasWorkers = workers.length > 0;
+    const isCurrent = s.meta.id === currentId;
+
+    const slotStyle = (t: Term): CSSProperties => {
+      if (s.maxId != null) {
+        return s.maxId === t.id
+          ? { left: "0%", top: "0%", width: "100%", height: "100%", zIndex: 5 }
+          : { left: "0%", top: "0%", width: "100%", height: "100%", opacity: 0, pointerEvents: "none" };
+      }
+      if (!hasWorkers) return { left: "0%", top: "0%", width: "100%", height: "100%" };
+      if (t.role === "router") return { left: "0%", top: "0%", width: `${s.routerWidth}%`, height: "100%" };
+      const wi = workers.findIndex((w) => w.id === t.id);
+      const r = workerRects[wi] ?? { x: 0, y: 0, w: 100, h: 100 };
+      const rw = 100 - s.routerWidth;
+      return { left: `${s.routerWidth + (r.x * rw) / 100}%`, top: `${r.y}%`, width: `${(r.w * rw) / 100}%`, height: `${r.h}%` };
+    };
+
     return (
-      <div className="shell">
-        <div className="selector">
-          <div className="selector__card">
-            <div className="selector__brand">🧭 {workspace?.name}</div>
-            <div className="selector__title">Elegí tu agente router</div>
-            <div className="selector__sub">Vas a hablar con él; delega workers reales por vos.</div>
-            <div className="selector__agents">
-              <button className="agent-btn" onClick={() => startRouter("claude")}>
-                <span className="agent-btn__name">Claude Code</span>
-                <span className="agent-btn__go">Iniciar →</span>
-              </button>
-              <button className="agent-btn" onClick={() => startRouter("codex")}>
-                <span className="agent-btn__name">Codex</span>
-                <span className="agent-btn__go">Iniciar →</span>
-              </button>
-              <button className="agent-btn" onClick={() => startRouter("opencode")}>
-                <span className="agent-btn__name">OpenCode</span>
-                <span className="agent-btn__go">Iniciar →</span>
-              </button>
-            </div>
-            <button className="selector__back" onClick={backToWorkspaces}>← volver a workspaces</button>
-            {launchError && <div className="selector__error">{launchError}</div>}
+      <div className={`workspace ${dragging && isCurrent ? "workspace--dragging" : ""}`}>
+        {s.terms.map((t) => (
+          <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
+            <TerminalTile
+              id={t.id}
+              title={t.title}
+              active={s.activeId === t.id}
+              isRouter={t.role === "router"}
+              canClose={t.role === "worker"}
+              maximized={s.maxId === t.id}
+              argv={t.argv}
+              cwd={t.cwd}
+              env={t.env}
+              injectTask={t.injectTask}
+              captureEngine={t.captureEngine}
+              hasActivity={activity.includes(t.id)}
+              onFocus={setActive}
+              onClose={closeTerminal}
+              onToggleMax={toggleMax}
+            />
           </div>
-        </div>
+        ))}
+
+        {hasWorkers && s.maxId == null && (
+          <div className="divider" style={{ left: `${s.routerWidth}%` }} onMouseDown={startDrag} title="Arrastrá para ajustar el router" />
+        )}
+
+        <button className="fab" title="Terminal manual (⌘T)" onClick={addTerminal}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
     );
-  }
+  };
 
-  // ---- pantalla: workspace (shell tipo IDE) ----
-  const agents = terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine }));
+  // ---- selector de agente para una sesión nueva (sin router) ----
+  const renderSelector = (s: WsSession) => (
+    <div className="selector selector--inline">
+      <div className="selector__card">
+        <div className="selector__brand">🧭 {s.meta.name}</div>
+        <div className="selector__title">Elegí tu agente router</div>
+        <div className="selector__sub">Vas a hablar con él; delega workers reales por vos.</div>
+        <div className="selector__agents">
+          <button className="agent-btn" onClick={() => startRouter("claude")}>
+            <span className="agent-btn__name">Claude Code</span>
+            <span className="agent-btn__go">Iniciar →</span>
+          </button>
+          <button className="agent-btn" onClick={() => startRouter("codex")}>
+            <span className="agent-btn__name">Codex</span>
+            <span className="agent-btn__go">Iniciar →</span>
+          </button>
+          <button className="agent-btn" onClick={() => startRouter("opencode")}>
+            <span className="agent-btn__name">OpenCode</span>
+            <span className="agent-btn__go">Iniciar →</span>
+          </button>
+        </div>
+        <button className="selector__back" onClick={() => closeWorkspace(s.meta.id)}>← cerrar este workspace</button>
+        {s.launchError && <div className="selector__error">{s.launchError}</div>}
+      </div>
+    </div>
+  );
+
+  // ---- pantalla: IDE (shell) ----
+  const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
+  const agents = current ? current.terms.map((t) => ({ id: t.id, title: t.title, role: t.role, engine: t.engine })) : [];
   const commands: Command[] = [
     { id: "new-term", label: "Nueva terminal manual", hint: "⌘T", run: addTerminal },
-    { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (activeId) closeTerminal(activeId); } },
-    { id: "max", label: "Maximizar / restaurar activo", run: () => { if (activeId) toggleMax(activeId); } },
-    { id: "focus-router", label: "Ir al router", run: () => { if (routerId) setActiveId(routerId); } },
+    { id: "close", label: "Cerrar tile activo", hint: "⌘W", run: () => { if (current?.activeId) closeTerminal(current.activeId); } },
+    { id: "max", label: "Maximizar / restaurar activo", run: () => { if (current?.activeId) toggleMax(current.activeId); } },
+    { id: "focus-router", label: "Ir al router", run: () => { if (current?.routerId) setActive(current.routerId); } },
     { id: "sidebar", label: "Mostrar / ocultar panel", hint: "⌘B", run: () => setSidebarOpen((o) => !o) },
-    { id: "workspaces", label: "Volver a workspaces", run: backToWorkspaces },
+    { id: "close-ws", label: "Cerrar este workspace", run: () => { if (currentId) closeWorkspace(currentId); } },
+    { id: "workspaces", label: "Panel de workspaces", run: () => { setPanel("workspaces"); setSidebarOpen(true); } },
   ];
 
   return (
@@ -374,11 +458,24 @@ function App() {
           <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
           <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
         </div>
-        <div className="titlebar__title">HyprDesk<span className="titlebar__sep">·</span><span className="titlebar__ws">{workspace?.name}</span></div>
+        <div className="titlebar__title">HyprDesk<span className="titlebar__sep">·</span><span className="titlebar__ws">{current?.meta.name ?? ""}</span></div>
         <div className="titlebar__side titlebar__side--right">
           <button className="titlebar__cmd" onClick={() => setPaletteOpen(true)}>Comandos <kbd>⌘K</kbd></button>
-          <span className="stat stat--live"><span className="dot" /> {terms.length}</span>
+          <span className="stat stat--live"><span className="dot" /> {current?.terms.length ?? 0}</span>
         </div>
+      </div>
+
+      {/* tabs de workspaces abiertos (keep-alive) */}
+      <div className="wstabs">
+        {sessions.map((s) => (
+          <div key={s.meta.id} className={`wstab ${s.meta.id === currentId ? "wstab--active" : ""}`} onClick={() => setCurrentId(s.meta.id)}>
+            <span className="wstab__dot" />
+            <span className="wstab__name">{s.meta.name}</span>
+            <button className="wstab__close" title="Cerrar workspace" onClick={(e) => { e.stopPropagation(); closeWorkspace(s.meta.id); }}>
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+        ))}
       </div>
 
       <div className="ide__body">
@@ -395,49 +492,22 @@ function App() {
         </div>
 
         {sidebarOpen && (panel === "workspaces"
-          ? <WorkspacesPanel activeId={workspace?.id} onSwitch={switchWorkspace} />
-          : <Sidebar agents={agents} activeId={activeId} activity={activity} onFocus={setActiveId} onNewTerminal={addTerminal} />
+          ? <WorkspacesPanel activeId={currentId ?? undefined} onSwitch={openWorkspace} />
+          : <Sidebar agents={agents} activeId={currentActiveId} activity={activity} onFocus={setActive} onNewTerminal={addTerminal} />
         )}
 
         <div className="main">
-          <div className={`workspace ${dragging ? "workspace--dragging" : ""}`} ref={wsRef}>
-            {terms.map((t) => (
-              <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
-                <TerminalTile
-                  id={t.id}
-                  title={t.title}
-                  active={activeId === t.id}
-                  isRouter={t.role === "router"}
-                  canClose={t.role === "worker"}
-                  maximized={maxId === t.id}
-                  argv={t.argv}
-                  cwd={t.cwd}
-                  env={t.env}
-                  injectTask={t.injectTask}
-                  captureEngine={t.captureEngine}
-                  hasActivity={activity.includes(t.id)}
-                  onFocus={setActiveId}
-                  onClose={closeTerminal}
-                  onToggleMax={toggleMax}
-                />
-              </div>
-            ))}
-
-            {hasWorkers && maxId == null && (
-              <div className="divider" style={{ left: `${routerWidth}%` }} onMouseDown={startDrag} title="Arrastrá para ajustar el router" />
-            )}
-
-            <button className="fab" title="Terminal manual (⌘T)" onClick={addTerminal}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
+          {/* todas las sesiones montadas (PTYs vivos); solo la actual visible → switch sin costo */}
+          {sessions.map((s) => (
+            <div key={s.meta.id} className="wsview" style={{ display: s.meta.id === currentId ? "flex" : "none" }}>
+              {s.needsRouter ? renderSelector(s) : renderGrid(s)}
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="statusbar">
-        <span className="statusbar__role"><span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""}</span>
+        <span className="statusbar__role"><span className="dot dot--router" /> {workers.length} worker{workers.length !== 1 ? "s" : ""} · {sessions.length} ws</span>
         <span className="statusbar__keys"><kbd>⌘K</kbd> comandos · <kbd>⌘B</kbd> panel · <kbd>⌘T</kbd> terminal · <kbd>⌘←→</kbd> foco</span>
         <span className="statusbar__hint">Pedile al router que haga algo — él delega workers</span>
       </div>

@@ -22,6 +22,7 @@ struct SpawnAgentEvent {
     #[serde(rename = "agentId")]
     agent_id: String,
     engine: String,
+    router: String, // id del router que lo spawneó (para asignar el worker a su workspace)
     title: String,
     cwd: String,
     argv: Vec<String>,
@@ -38,6 +39,10 @@ struct SpawnBody {
     prompt: String,
     #[serde(default)]
     engine: Option<String>,
+    #[serde(default)]
+    router: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -104,12 +109,19 @@ fn handle_request(
             };
             let engine = parsed.engine.unwrap_or_else(|| "claude".into());
             let worker_id = uuid::Uuid::new_v4().to_string();
-            let cwd = active_cwd
-                .lock()
-                .unwrap()
+            // El router que spawnea manda su id y el cwd de SU workspace. Con varios
+            // workspaces vivos no podemos usar un active_cwd global; caemos a él solo
+            // como último recurso.
+            let router = parsed.router.clone().unwrap_or_else(|| {
+                router_id.lock().unwrap().clone().unwrap_or_else(|| "router".into())
+            });
+            let cwd = parsed
+                .cwd
                 .clone()
+                .filter(|c| !c.is_empty())
+                .or_else(|| active_cwd.lock().unwrap().clone())
                 .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
-            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, None, Some(&parsed.prompt)) {
+            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt)) {
                 Ok(spec) => {
                     let _ = app.emit(
                         "spawn-agent",
@@ -117,6 +129,7 @@ fn handle_request(
                             agent_id: worker_id.clone(),
                             title: format!("worker · {engine}"),
                             engine,
+                            router,
                             cwd,
                             argv: spec.argv,
                             env: spec.env,

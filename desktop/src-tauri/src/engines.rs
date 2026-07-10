@@ -146,17 +146,36 @@ pub fn role_text(role: &str) -> Result<String, String> {
     std::fs::read_to_string(p).map_err(|e| e.to_string())
 }
 
+// Env del MCP hyprdesk para un agente (base + extras por rol).
+fn mcp_env(port: u16, agent_id: &str, role: &str, cwd: &str, router_id: Option<&str>) -> Vec<(String, String)> {
+    let mut e = vec![
+        ("HYPRDESK_PORT".to_string(), port.to_string()),
+        ("HYPRDESK_AGENT_ID".to_string(), agent_id.to_string()),
+        ("HYPRDESK_ROLE".to_string(), role.to_string()),
+    ];
+    if role == "router" {
+        e.push(("HYPRDESK_CWD".to_string(), cwd.to_string())); // para pasar cwd al spawnear workers
+    } else if let Some(r) = router_id {
+        e.push(("HYPRDESK_ROUTER_ID".to_string(), r.to_string())); // el worker reporta a SU router
+    }
+    e
+}
+
+fn env_object(env: &[(String, String)]) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    for (k, v) in env {
+        m.insert(k.clone(), serde_json::Value::String(v.clone()));
+    }
+    serde_json::Value::Object(m)
+}
+
 // Config MCP para claude (archivo por-agente en temp).
-fn claude_mcp_config(port: u16, agent_id: &str, role: &str) -> Result<String, String> {
+fn claude_mcp_config(agent_id: &str, env: &[(String, String)]) -> Result<String, String> {
     let cfg = serde_json::json!({
         "mcpServers": { "hyprdesk": {
             "command": "node",
             "args": [mcp_script()?],
-            "env": {
-                "HYPRDESK_PORT": port.to_string(),
-                "HYPRDESK_AGENT_ID": agent_id,
-                "HYPRDESK_ROLE": role
-            }
+            "env": env_object(env)
         }}
     });
     let path = std::env::temp_dir().join(format!("hyprdesk-mcp-{agent_id}.json"));
@@ -165,18 +184,14 @@ fn claude_mcp_config(port: u16, agent_id: &str, role: &str) -> Result<String, St
 }
 
 // Config opencode (OPENCODE_CONFIG) por-agente: MCP hyprdesk + permisos abiertos (autonomía).
-fn opencode_config(port: u16, agent_id: &str, role: &str) -> Result<String, String> {
+fn opencode_config(agent_id: &str, env: &[(String, String)]) -> Result<String, String> {
     let cfg = serde_json::json!({
         "$schema": "https://opencode.ai/config.json",
         "permission": { "edit": "allow", "bash": "allow", "webfetch": "allow" },
         "mcp": { "hyprdesk": {
             "type": "local",
             "command": ["node", mcp_script()?],
-            "environment": {
-                "HYPRDESK_PORT": port.to_string(),
-                "HYPRDESK_AGENT_ID": agent_id,
-                "HYPRDESK_ROLE": role
-            },
+            "environment": env_object(env),
             "enabled": true
         }}
     });
@@ -222,6 +237,7 @@ pub fn build_agent(
     agent_id: &str,
     role: &str,
     cwd: &str,
+    router_id: Option<&str>,
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
@@ -230,22 +246,23 @@ pub fn build_agent(
         Some(id) if session_exists(engine, cwd, &id) => Some(id),
         _ => None,
     };
+    let env = mcp_env(port, agent_id, role, cwd, router_id);
     match engine {
-        "claude" => build_claude(port, agent_id, role, resume_id, task),
-        "codex" => build_codex(port, agent_id, role, cwd, resume_id, task),
-        "opencode" => build_opencode(port, agent_id, role, resume_id, task),
+        "claude" => build_claude(agent_id, role, &env, resume_id, task),
+        "codex" => build_codex(agent_id, role, cwd, &env, resume_id, task),
+        "opencode" => build_opencode(agent_id, role, &env, resume_id, task),
         other => Err(format!("motor desconocido: {other}")),
     }
 }
 
 fn build_claude(
-    port: u16,
     agent_id: &str,
     role: &str,
+    env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
-    let cfg = claude_mcp_config(port, agent_id, role)?;
+    let cfg = claude_mcp_config(agent_id, env)?;
     let role_txt = role_text(role)?;
     let (sid, resume) = match resume_id {
         Some(id) => (id, true),
@@ -274,10 +291,10 @@ fn build_claude(
 }
 
 fn build_codex(
-    port: u16,
-    agent_id: &str,
+    _agent_id: &str,
     role: &str,
     cwd: &str,
+    env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
@@ -298,15 +315,15 @@ fn build_codex(
         argv.push(role_prompt(&role_txt, task));
     }
     argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
-    let cfgs = [
+    let mut cfgs = vec![
         "mcp_servers.hyprdesk.command=node".to_string(),
         format!("mcp_servers.hyprdesk.args=[{:?}]", mcp),
-        format!("mcp_servers.hyprdesk.env.HYPRDESK_PORT=\"{port}\""),
-        format!("mcp_servers.hyprdesk.env.HYPRDESK_ROLE=\"{role}\""),
-        format!("mcp_servers.hyprdesk.env.HYPRDESK_AGENT_ID=\"{agent_id}\""),
         // marcar el cwd como confiable para evitar el prompt de trust
         format!("projects.{cwd:?}.trust_level=\"trusted\""),
     ];
+    for (k, v) in env {
+        cfgs.push(format!("mcp_servers.hyprdesk.env.{k}=\"{v}\""));
+    }
     for c in cfgs {
         argv.push("-c".to_string());
         argv.push(c);
@@ -321,13 +338,13 @@ fn build_codex(
 }
 
 fn build_opencode(
-    port: u16,
     agent_id: &str,
     role: &str,
+    env: &[(String, String)],
     resume_id: Option<String>,
     task: Option<&str>,
 ) -> Result<LaunchSpec, String> {
-    let cfg = opencode_config(port, agent_id, role)?;
+    let cfg = opencode_config(agent_id, env)?;
     let role_txt = role_text(role)?;
     let mut argv = vec!["opencode".to_string()];
     if let Some(id) = &resume_id {

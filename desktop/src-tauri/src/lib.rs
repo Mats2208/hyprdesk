@@ -275,7 +275,7 @@ fn router_launch(
     // id único por lanzamiento (evita colisiones de tile/PTY al cambiar de workspace).
     // El túnel sigue resolviendo el literal "router" vía este router_id del hub.
     let agent_id = format!("router-{}", uuid::Uuid::new_v4());
-    let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, resume_session, None)?;
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None)?;
     *state.router_id.lock().unwrap() = Some(agent_id.clone());
     Ok(AgentLaunch {
         agent_id,
@@ -297,8 +297,9 @@ fn worker_launch(
     agent_id: String,
     session_id: String,
     cwd: String,
+    router_id: String,
 ) -> Result<AgentLaunch, String> {
-    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(session_id), None)?;
+    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None)?;
     Ok(AgentLaunch {
         agent_id,
         engine,
