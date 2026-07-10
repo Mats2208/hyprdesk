@@ -44,12 +44,16 @@ if (ROLE === "router") {
           .enum(["claude", "codex", "opencode"])
           .optional()
           .describe("Motor del worker: 'claude' (default), 'codex' u 'opencode'. Elegí según la tarea si querés."),
+        name: z
+          .string()
+          .optional()
+          .describe("Nombre corto del worker por su DOMINIO (ej. 'frontend', 'backend', 'QA') — para identificarlo después con list_workers."),
       },
     },
-    async ({ task, engine }) => {
+    async ({ task, engine, name }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task, engine, router: AGENT_ID, cwd: CWD });
-        return ok(`Worker (${engine || "claude"}) creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
+        const j = await post("/spawn_worker", { prompt: task, engine, name, router: AGENT_ID, cwd: CWD });
+        return ok(`Worker "${name || engine || "claude"}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
       }

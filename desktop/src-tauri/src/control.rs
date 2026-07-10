@@ -57,6 +57,8 @@ struct SpawnBody {
     #[serde(default)]
     engine: Option<String>,
     #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
     router: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
@@ -182,7 +184,12 @@ fn handle_request(
                 Some(wt) => (wt.path, Some(wt.branch)),
                 None => (ws_root.clone(), None),
             };
-            let title = format!("worker · {engine}");
+            let title = parsed
+                .name
+                .clone()
+                .filter(|n| !n.trim().is_empty())
+                .map(|n| format!("{n} · {engine}"))
+                .unwrap_or_else(|| format!("worker · {engine}"));
             match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &crate::engines::AgentOpts::default()) {
                 Ok(spec) => {
                     workers.lock().unwrap().insert(worker_id.clone(), WorkerInfo {
