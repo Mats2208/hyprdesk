@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Profile } from "./App";
+import type { Profile } from "./types";
 
 const CloseIcon = () => (
   <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>

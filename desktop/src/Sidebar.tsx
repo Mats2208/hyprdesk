@@ -1,4 +1,4 @@
-import type { Profile } from "./App";
+import type { Profile } from "./types";
 
 // Panel lateral de agentes: roster (router + workers vivos) + perfiles del workspace.
 export type AgentStatus = "working" | "idle" | "exited";
