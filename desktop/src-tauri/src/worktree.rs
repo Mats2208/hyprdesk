@@ -55,25 +55,45 @@ pub fn remove(ws: &str, path: &str) {
     let _ = git(ws, &["worktree", "remove", "--force", path]);
 }
 
-// Revisión: qué hizo el worker en su rama vs la principal (para que el router critique antes de mergear).
-// Commitea el WIP del worktree (para que el diff lo incluya) y devuelve (resumen --stat, diff completo).
-// El diff se recorta a ~60KB para no reventar el contexto del router. None si no es git o falla.
-pub fn review(ws: &str, worktree_path: &str, branch: &str) -> Option<(String, String)> {
-    // 1) commitear WIP del worktree (los agentes no commitean solos) → el diff incluye todo
+// Commitea el WIP del worktree (los agentes no commitean solos) para que el diff lo incluya.
+// Idempotente: si no hay cambios el commit falla sin efecto. Devuelve el rango base..branch.
+fn commit_wip_and_range(ws: &str, worktree_path: &str, branch: &str) -> Option<String> {
     let _ = git(worktree_path, &["add", "-A"]);
     let _ = git(worktree_path, &["commit", "-m", &format!("hyprdesk: review {branch}")]);
-    // 2) base = ancestro común entre la principal (HEAD del ws) y la rama del worker
     let base = git(ws, &["merge-base", "HEAD", branch]).map(|s| s.trim().to_string())?;
-    let range = format!("{base}..{branch}");
-    let stat = git(ws, &["diff", "--stat", &range]).unwrap_or_default();
-    let mut diff = git(ws, &["diff", &range]).unwrap_or_default();
-    const MAX: usize = 60_000;
-    if diff.len() > MAX {
-        let cut = diff.char_indices().nth(MAX).map(|(i, _)| i).unwrap_or(MAX);
-        diff.truncate(cut);
-        diff.push_str("\n\n… (diff recortado — pedí archivos puntuales al worker o revisalos con shell)");
+    Some(format!("{base}..{branch}"))
+}
+
+// Recorta `s` a ~`max` bytes en un límite de char, con nota de que se cortó.
+fn cap(mut s: String, max: usize, note: &str) -> String {
+    if s.len() > max {
+        let cut = s.char_indices().nth(max).map(|(i, _)| i).unwrap_or(max);
+        s.truncate(cut);
+        s.push_str(note);
     }
+    s
+}
+
+// Revisión BARATA (C2): commitea el WIP y devuelve (resumen --stat, diff-inline). El --stat lista
+// los archivos cambiados (barato). El diff completo va inline SOLO si es chico (≤ INLINE); si es
+// grande, diff = "" y el router pide archivos puntuales con review_file → no revienta su contexto.
+// None si no es git o falla.
+pub fn review(ws: &str, worktree_path: &str, branch: &str) -> Option<(String, String)> {
+    let range = commit_wip_and_range(ws, worktree_path, branch)?;
+    let stat = git(ws, &["diff", "--stat", &range]).unwrap_or_default();
+    let diff = git(ws, &["diff", &range]).unwrap_or_default();
+    const INLINE: usize = 6_000; // diffs chicos van inline; los grandes se piden por archivo
+    let diff = if diff.len() <= INLINE { diff } else { String::new() };
     Some((stat, diff))
+}
+
+// Review on-demand (C2): diff de UN archivo de la rama del worker vs la principal. El router lo
+// llama tras ver el --stat, para inspeccionar archivos puntuales sin volcar todo el diff.
+// Se recorta a ~40KB como red de seguridad (un solo archivo enorme). None si no es git o falla.
+pub fn review_file(ws: &str, worktree_path: &str, branch: &str, file: &str) -> Option<String> {
+    let range = commit_wip_and_range(ws, worktree_path, branch)?;
+    let diff = git(ws, &["diff", &range, "--", file]).unwrap_or_default();
+    Some(cap(diff, 40_000, "\n\n… (archivo recortado — es enorme; revisalo con shell si necesitás el resto)"))
 }
 
 // Commitea lo que haya en el worktree y mergea su rama a la principal del ws.

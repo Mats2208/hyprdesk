@@ -112,7 +112,9 @@ PROPIA rama/worktree aislada (`hyprdesk/<x>`) — así trabajan en paralelo sin 
 están en la rama principal hasta que los integres.
 
 **Revisá ANTES de mergear (sos el crítico).** Cuando un worker dice que terminó:
-1. Llamá a **`review_worker(worker_id)`** → te devuelve el diff de su rama (qué cambió vs la principal).
+1. Llamá a **`review_worker(worker_id)`** → te da la lista de archivos tocados (--stat) y, si el cambio
+   es chico, el diff inline. Si es grande, inspeccioná archivos puntuales con
+   **`review_file(worker_id, archivo)`** (así no te comés todo el diff en contexto).
 2. **Leé el diff con criterio**: ¿hace lo que se pidió? ¿respeta los contratos/arquitectura que definiste?
    ¿no rompe otra cosa? Si querés más certeza, corré tests/typecheck/lint vos mismo con shell.
 3. Si está **bien** → **`merge_worker(worker_id)`** para unir su rama a la principal, y **contale al

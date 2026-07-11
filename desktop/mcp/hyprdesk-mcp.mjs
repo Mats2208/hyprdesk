@@ -137,8 +137,10 @@ if (ROLE === "router") {
     {
       title: "Revisar (criticar) el trabajo de un worker antes de mergear",
       description:
-        "Devuelve el DIFF de la rama de un worker (qué cambió vs la rama principal) para que lo REVISES " +
-        "antes de integrar. Usalo SIEMPRE antes de merge_worker: leé el diff, verificá que hace lo pedido " +
+        "Devuelve el RESUMEN del cambio de un worker: la lista de archivos tocados (--stat) y, si el " +
+        "diff es chico, el diff completo inline. Si el diff es grande NO se vuelca entero (te ahorra " +
+        "contexto): pedí archivos puntuales con review_file(worker_id, archivo). Usalo SIEMPRE antes de " +
+        "merge_worker: mirá qué archivos cambió, inspeccioná los que importen, verificá que hace lo pedido " +
         "y no rompe nada. Si está bien → merge_worker. Si algo falla → send_to_worker con las correcciones " +
         "(NO mergees). Si querés, corré tests/typecheck vos con shell antes de decidir.",
       inputSchema: {
@@ -149,10 +151,40 @@ if (ROLE === "router") {
       try {
         const r = await post("/review_worker", { worker_id });
         if (!r.ok) return err(r.error || "no se pudo revisar");
-        const body = r.diff && r.diff.trim() ? r.diff : "(sin cambios en la rama)";
-        return ok(`Diff de ${r.branch}:\n\n${r.stat || ""}\n\n${body}\n\n— Si está bien, mergealo con merge_worker. Si no, mandale correcciones con send_to_worker.`);
+        const stat = (r.stat || "").trim();
+        if (!stat) return ok(`Rama ${r.branch}: sin cambios.`);
+        const inline = r.diff && r.diff.trim();
+        const detail = inline
+          ? `Diff completo:\n\n${r.diff}`
+          : `Diff grande — no lo vuelco entero. Inspeccioná archivos puntuales con review_file(worker_id, "<archivo de la lista>").`;
+        return ok(`Cambios de ${r.branch}:\n\n${stat}\n\n${detail}\n\n— Si está bien, mergealo con merge_worker. Si no, mandale correcciones con send_to_worker.`);
       } catch (e) {
         return err(`Error revisando: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "review_file",
+    {
+      title: "Ver el diff de UN archivo del trabajo de un worker (on-demand)",
+      description:
+        "Devuelve el diff de un solo archivo de la rama de un worker (vs la rama principal). Usalo tras " +
+        "review_worker para inspeccionar archivos puntuales sin volcar todo el diff al contexto. El " +
+        "`archivo` es una ruta relativa a la raíz del repo (una de las que listó --stat en review_worker).",
+      inputSchema: {
+        worker_id: z.string().describe("El id del worker cuyo trabajo querés revisar."),
+        file: z.string().describe("Ruta relativa (desde la raíz del repo) del archivo a inspeccionar."),
+      },
+    },
+    async ({ worker_id, file }) => {
+      try {
+        const r = await post("/review_file", { worker_id, file });
+        if (!r.ok) return err(r.error || "no se pudo revisar el archivo");
+        const body = r.diff && r.diff.trim() ? r.diff : `(sin cambios en ${r.file})`;
+        return ok(`Diff de ${r.file} (${r.branch}):\n\n${body}`);
+      } catch (e) {
+        return err(`Error revisando el archivo: ${e.message}`);
       }
     }
   );
