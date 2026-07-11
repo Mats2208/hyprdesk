@@ -21,7 +21,7 @@ mod worktree;
 
 use base64::Engine;
 use control::ControlState;
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use sysinfo::System;
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
@@ -150,7 +150,7 @@ pub(crate) fn user_path() -> &'static str {
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+    killer: Box<dyn ChildKiller + Send + Sync>, // matar el proceso desde pty_kill (el Child vive en el waiter)
 }
 
 #[derive(Default)]
@@ -282,14 +282,25 @@ fn pty_spawn(
         cmd.env("PATH", user_path());
     }
 
-    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let killer = child.clone_killer(); // para pty_kill (el Child se mueve al hilo waiter)
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     manager.sessions.lock().unwrap().insert(
         id.clone(),
-        PtySession { master: pair.master, writer, child },
+        PtySession { master: pair.master, writer, killer },
     );
+
+    // Waiter: bloquea hasta que el PROCESO muera y emite pty-exit. Necesario porque en Windows
+    // (ConPTY) el `read` del PTY NO devuelve EOF cuando el agente hace /exit o Ctrl+C — solo al
+    // cerrar el tile. Con child.wait() detectamos la muerte real en cualquier plataforma.
+    let app_wait = app.clone();
+    let id_wait = id.clone();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        let _ = app_wait.emit("pty-exit", id_wait);
+    });
 
     // Lector → canal → flusher. El lector bloquea leyendo del PTY y manda los chunks por un canal;
     // el flusher los JUNTA en una ventana de ~25ms (o al llegar a 32KB) y emite un solo "pty-output".
@@ -337,7 +348,8 @@ fn pty_spawn(
                 }
             }
         }
-        let _ = app2.emit("pty-exit", id2.clone());
+        // pty-exit lo emite el hilo waiter (child.wait), no acá: el EOF del reader no es fiable
+        // en Windows/ConPTY (no llega al morir el proceso, solo al cerrar el PTY).
     });
 
     // Inyectar la tarea inicial tras el arranque del TUI (motores sin prompt posicional, ej. opencode).
@@ -389,7 +401,7 @@ fn pty_resize(manager: State<'_, PtyManager>, id: String, cols: u16, rows: u16) 
 #[tauri::command]
 fn pty_kill(manager: State<'_, PtyManager>, id: String) -> Result<(), String> {
     if let Some(mut s) = manager.sessions.lock().unwrap().remove(&id) {
-        let _ = s.child.kill();
+        let _ = s.killer.kill();
     }
     Ok(())
 }

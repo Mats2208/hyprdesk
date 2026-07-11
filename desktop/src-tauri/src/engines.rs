@@ -327,8 +327,17 @@ pub fn build_agent(
 ) -> Result<LaunchSpec, String> {
     // Fallback: si nos piden resumir una sesión que ya no existe, arrancamos fresca.
     let resume_id = match resume_id {
-        Some(id) if session_exists(engine, cwd, &id) => Some(id),
-        _ => None,
+        Some(id) => {
+            // Diagnóstico (visible en la terminal de `tauri dev`): por qué resume o no.
+            let ok = session_exists(engine, cwd, &id);
+            eprintln!("[hyprdesk] resume {role}/{engine}: id={id} transcript_existe={ok} cwd={cwd}");
+            if ok {
+                Some(id)
+            } else {
+                None
+            }
+        }
+        None => None,
     };
     let env = mcp_env(port, agent_id, role, cwd, router_id);
     let ask = crate::settings::ask_permission(); // modo "preguntar" vs auto (bypass)
