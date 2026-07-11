@@ -37,7 +37,7 @@ pub async fn browser_bounds(window: Window, label: String, x: f64, y: f64, w: f6
 
 #[tauri::command]
 pub async fn browser_navigate(window: Window, label: String, url: String) -> Result<(), String> {
-    if let Some(mut wv) = find(&window, &label) {
+    if let Some(wv) = find(&window, &label) {
         wv.navigate(parse_url(&url)?).map_err(|e| e.to_string())?;
     }
     Ok(())

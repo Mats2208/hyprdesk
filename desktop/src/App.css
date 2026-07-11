@@ -388,32 +388,28 @@ body {
 }
 .sidebar__newws button:disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* RightDock = Source Control (git), a la derecha del área de trabajo. */
-.rightdock { flex: 0 0 auto; width: 280px; display: flex; min-height: 0; }
-.scm { width: 100%; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--hairline); background: var(--surface); }
-.scm__ibtn { border: none; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; }
-.scm__ibtn:hover { color: var(--text); }
-.scm__branchbar { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
-.scm__branch { flex: 1; display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 8px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--surface-2); color: var(--text); font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scm__branch:hover:not(:disabled) { border-color: var(--hairline-2); }
-.scm__branch svg { flex: 0 0 auto; color: var(--muted); }
-.scm__sync { min-width: 34px; padding: 5px 7px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--surface-2); color: var(--muted); font: 11px var(--font-mono); cursor: pointer; }
-.scm__sync:hover:not(:disabled) { color: var(--text); border-color: var(--hairline-2); }
-.scm__sync:disabled { opacity: 0.4; cursor: default; }
-.scm__branches { max-height: 160px; overflow-y: auto; border-bottom: 1px solid var(--hairline); padding: 4px; }
-.scm__brow { display: flex; align-items: center; gap: 4px; }
-.scm__bname { flex: 1; text-align: left; padding: 5px 8px; border-radius: 5px; border: none; background: transparent; color: var(--text); font: 12px var(--font-mono); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scm__bname:hover { background: var(--hover); }
-.scm__bname--on { color: var(--accent); }
-.scm__bmerge { flex: 0 0 auto; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--hairline); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
-.scm__bmerge:hover:not(:disabled) { color: var(--text); border-color: var(--hairline-2); }
-.scm__commit { padding: 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--hairline); }
-.scm__msg { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--bg); color: var(--text); font: 12.5px var(--font-ui); outline: none; resize: vertical; }
-.scm__msg:focus { border-color: var(--accent); }
-.scm__commitbtn { padding: 7px; border-radius: 5px; border: 1px solid var(--accent-hover); background: var(--accent-hover); color: #ffffff; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.scm__commitbtn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
-.scm__commitbtn:disabled { opacity: 0.4; cursor: default; }
-.scm__list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px; }
+/* ---------- panel de Archivos (árbol) ---------- */
+.filetree { padding: 2px 4px; }
+.filerow {
+  display: flex; align-items: center; gap: 5px; width: 100%; padding: 3px 6px; border: none;
+  background: transparent; color: var(--text); cursor: pointer; text-align: left;
+  font-size: 12.5px; border-radius: 4px; white-space: nowrap; overflow: hidden;
+}
+.filerow:hover { background: var(--hover); }
+.filerow__caret { flex: 0 0 auto; width: 9px; height: 9px; color: var(--faint); transition: transform 0.12s; }
+.filerow__caret--open { transform: rotate(90deg); }
+.filerow__icon { flex: 0 0 auto; display: inline-flex; color: var(--muted); }
+.filerow__name { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- tile editor de archivos ---------- */
+.tile__badge--file { color: #6bb3d9; background: rgba(107, 179, 217, 0.12); border-color: rgba(107, 179, 217, 0.3); }
+.tile--file.tile--active { border-color: rgba(107, 179, 217, 0.4); }
+.tile__body--file { padding: 0; }
+.tile__dirty { color: #fbbf24; }
+.filetile__cm { height: 100%; overflow: hidden; }
+.filetile__cm .cm-editor { height: 100%; }
+.filetile__cm .cm-scroller { overflow: auto; font: 12.5px var(--font-mono); }
+.filetile__err { padding: 14px; color: var(--muted); font: 12px var(--font-mono); line-height: 1.5; }
 
 .main { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .wsview { flex: 1; min-width: 0; min-height: 0; } /* display lo controla el inline (flex/none) */
@@ -717,40 +713,6 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .fsrow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fslist__empty, .fslist__error { padding: 10px; font-size: 12px; color: var(--faint); }
 .fslist__error { color: #f87171; }
-
-/* ==================== CONTROL DE CAMBIOS ==================== */
-.act__badge {
-  position: absolute; top: 4px; right: 6px; min-width: 15px; height: 15px; padding: 0 4px;
-  display: grid; place-items: center; border-radius: 8px; background: var(--accent-hover); color: #ffffff;
-  font: 700 9px/1 var(--font-mono); box-shadow: 0 0 0 2px var(--surface);
-}
-.chg__repo {
-  font: 600 8px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted);
-  background: var(--surface-2); border: 1px solid var(--hairline); padding: 3px 5px; border-radius: 4px;
-}
-.chgrow {
-  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 5px;
-  border: none; background: transparent; color: var(--text); cursor: pointer; text-align: left; transition: background 0.12s;
-}
-.chgrow:hover { background: var(--hover); }
-.chgrow__badge {
-  flex: 0 0 auto; font: 600 8.5px/1 var(--font-mono); letter-spacing: 0.03em;
-  padding: 3px 5px; border-radius: 4px; text-transform: uppercase;
-}
-.chg--add { color: #81b88b; }
-.chg--mod { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
-.chg--del { color: #f87171; background: rgba(248, 113, 113, 0.12); }
-.chgrow__name { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
-.chgrow__dir { font: 10.5px var(--font-mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
-
-/* chip de cambios en la statusbar */
-.statusbar__changes {
-  display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; padding: 2px 8px;
-  border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 5px; background: rgba(251, 191, 36, 0.08);
-  color: #fbbf24; font-size: 11px; cursor: pointer; transition: all 0.15s;
-}
-.statusbar__changes:hover { background: rgba(251, 191, 36, 0.16); }
-.statusbar__changes-dot { width: 6px; height: 6px; border-radius: 50%; background: #fbbf24; }
 
 /* ==================== TILE NAVEGADOR ==================== */
 .tile__badge--browser { color: #c084fc; background: rgba(192, 132, 252, 0.12); border-color: rgba(192, 132, 252, 0.3); }

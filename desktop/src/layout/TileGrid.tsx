@@ -3,6 +3,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { TerminalTile } from "../TerminalTile";
 import { BrowserTile } from "../BrowserTile";
+import { FileTile } from "../FileTile";
 import type { Term, WsSession } from "../types";
 import { computeLayout } from "../store/sessionModel";
 import { useSessionStore } from "../store/sessionStore";
@@ -62,7 +63,14 @@ export function TileGrid({ session: s }: { session: WsSession }) {
     <div className={`workspace ${dragging && isCurrent ? "workspace--dragging" : ""}`}>
       {s.terms.map((t) => (
         <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
-          {t.kind === "file" || t.kind === "diff" ? null : t.kind === "browser" ? (
+          {t.kind === "file" ? (
+            <FileTile
+              id={t.id} title={t.title} filePath={t.filePath ?? ""} active={s.activeId === t.id} canClose={t.role === "worker"}
+              maximized={s.maxId === t.id}
+              hidden={paletteOpen || settingsOpen || createAgentOpen || s.meta.id !== currentId || (s.maxId != null && s.maxId !== t.id)}
+              onFocus={setActive} onClose={closeTerminal} onToggleMax={toggleMax}
+            />
+          ) : t.kind === "browser" ? (
             <BrowserTile
               id={t.id} title={t.title} active={s.activeId === t.id} canClose={t.role === "worker"}
               maximized={s.maxId === t.id} url={t.url}

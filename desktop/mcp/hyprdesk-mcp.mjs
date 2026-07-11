@@ -122,7 +122,9 @@ if (ROLE === "router") {
     },
     async ({ worker_id, message }) => {
       try {
-        await post("/message", { to: worker_id, from: AGENT_ID, text: message });
+        const r = await post("/message", { to: worker_id, from: AGENT_ID, text: message });
+        if (r && r.ok === false)
+          return err(`No se pudo entregar a ${worker_id}: ${r.error || "destino no disponible"}. Puede haber terminado su proceso — mirá list_workers (si dice "terminó", revisá/mergeá su trabajo o re-delegá a un worker nuevo).`);
         return ok(`Mensaje enviado a ${worker_id}.`);
       } catch (e) {
         return err(`Error enviando al worker: ${e.message}`);
@@ -193,8 +195,8 @@ if (ROLE === "router") {
       try {
         const list = await post("/list_workers", { router: AGENT_ID });
         if (!Array.isArray(list) || list.length === 0) return ok("No tenés workers vivos ahora mismo.");
-        const lines = list.map((w) => `- ${w.id} · ${w.name || w.engine} (${w.engine})`).join("\n");
-        return ok(`Workers vivos (${list.length}):\n${lines}`);
+        const lines = list.map((w) => `- ${w.id} · ${w.name || w.engine} (${w.engine})${w.dead ? " · ⚠️ terminó su proceso (revisá/mergeá o re-delegá; NO le mandes mensajes)" : ""}`).join("\n");
+        return ok(`Workers (${list.length}):\n${lines}`);
       } catch (e) {
         return err(`Error listando workers: ${e.message}`);
       }
@@ -239,7 +241,9 @@ if (ROLE === "router") {
     },
     async ({ message }) => {
       try {
-        await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: message });
+        const r = await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: message });
+        if (r && r.ok === false)
+          return err(`No se pudo entregar el reporte al router: ${r.error || "no disponible"}. El router pudo haber terminado su proceso; reintentá en un momento.`);
         return ok("Reporte enviado al router.");
       } catch (e) {
         return err(`Error reportando al router: ${e.message}`);
@@ -258,7 +262,9 @@ if (ROLE === "router") {
     },
     async ({ question }) => {
       try {
-        await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: `[pregunta] ${question}` });
+        const r = await post("/message", { to: ROUTER_ID, from: AGENT_ID, text: `[pregunta] ${question}` });
+        if (r && r.ok === false)
+          return err(`No se pudo entregar la consulta al router: ${r.error || "no disponible"}.`);
         return ok("Consulta enviada al router.");
       } catch (e) {
         return err(`Error consultando al router: ${e.message}`);

@@ -32,8 +32,7 @@ pub fn is_git_repo(cwd: &str) -> bool {
 fn worktrees_root(ws: &str) -> PathBuf {
     let mut h = DefaultHasher::new();
     ws.hash(&mut h);
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join("HyprDesk/.worktrees").join(format!("{:016x}", h.finish()))
+    crate::home_dir().join("HyprDesk/.worktrees").join(format!("{:016x}", h.finish()))
 }
 
 // Crea worktree + rama `hyprdesk/<short>` para el worker si el ws es git. None si no es git o falla.

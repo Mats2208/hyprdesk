@@ -2,12 +2,12 @@
 import type { WorkspaceMeta } from "./WorkspaceManager";
 
 export type Role = "router" | "worker";
-export type TileKind = "terminal" | "file" | "diff" | "browser";
+export type TileKind = "terminal" | "file" | "browser";
 
 export type Term = {
   id: string; title: string; role: Role; engine?: string; sessionId?: string;
   argv?: string[]; cwd?: string; env?: [string, string][]; injectTask?: string; captureEngine?: string;
-  kind?: TileKind; filePath?: string; url?: string; diff?: { patch: string }; // tiles no-terminal
+  kind?: TileKind; filePath?: string; url?: string; // tiles no-terminal
   name?: string; color?: string; // agente de un perfil (nombre + color propios)
   branch?: string; // rama del worktree (repos git)
 };
@@ -31,7 +31,7 @@ export type SavedTile = { id: string; role: Role; engine: string; sessionId: str
 export type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[]; profiles?: Profile[] };
 export type Stage = "workspaces" | "ide";
 export type TileStatus = "working" | "idle" | "exited";
-export type Panel = "agents" | "workspaces" | "files" | "changes";
+export type Panel = "agents" | "workspaces" | "files";
 
 // Una sesión = un workspace ABIERTO. Con keep-alive tenemos varias vivas a la vez; todas sus
 // tiles quedan montadas (PTYs vivos) y solo se muestra la actual (las demás con display:none).

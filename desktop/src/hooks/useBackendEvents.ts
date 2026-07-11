@@ -26,12 +26,10 @@ export function useBackendEvents() {
       }));
       // un agente recibió un mensaje del túnel → marcar su tile con actividad (parpadeo).
       unsubs.push(await listen<string>("tile-activity", (e) => us().addActivity(e.payload)));
-      // un archivo del workspace cambió → acumular + refrescar git status (debounce).
-      unsubs.push(await listen<{ path: string; kind: string; root: string }>("file-changed", (e) => {
-        ss().addWatchedChange(e.payload.root, e.payload.path, e.payload.kind);
-      }));
-      // un PTY murió → sacar ese worker del roster.
+      // un PTY murió → marcar ese worker como muerto (preserva su worktree) y avisar al router.
       unsubs.push(await listen<string>("pty-exit", (e) => { invoke("unregister_worker", { id: e.payload }).catch(() => {}); }));
+      // un mensaje del túnel no se pudo entregar (agente muerto) → avisar al usuario.
+      unsubs.push(await listen<string>("tunnel-error", (e) => us().setToast(`⚠️ ${e.payload}`)));
       // el router mergeó una rama de worker → avisar por toast.
       unsubs.push(await listen<{ ok: boolean; branch?: string; conflicts?: string[] }>("merge-result", (e) => {
         const r = e.payload;

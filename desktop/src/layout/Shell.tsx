@@ -5,27 +5,23 @@ import { WorkspaceTabs } from "./WorkspaceTabs";
 import { WorktreeNotice } from "./WorktreeNotice";
 import { ActivityBar } from "./ActivityBar";
 import { SidePanel } from "./SidePanel";
-import { RightDock } from "./RightDock";
 import { TileGrid } from "./TileGrid";
 import { RouterSelector } from "./RouterSelector";
 import { StatusBar } from "./StatusBar";
 import { Modals } from "./Modals";
 import { useSystemStats } from "../hooks/useSystemStats";
-import { useGitBranch } from "../hooks/useGitBranch";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 
 export function Shell() {
   const { stats, glm } = useSystemStats();
-  const branch = useGitBranch();
   const sessions = useSessionStore((s) => s.sessions);
   const currentId = useSessionStore((s) => s.currentId);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
-  const rightOpen = useUiStore((s) => s.rightOpen);
 
   return (
     <div className="ide">
-      <TitleBar stats={stats} glm={glm} branch={branch} />
+      <TitleBar stats={stats} glm={glm} />
       <WorkspaceTabs />
       <WorktreeNotice />
 
@@ -39,7 +35,6 @@ export function Shell() {
             </div>
           ))}
         </div>
-        {rightOpen && <RightDock />}
       </div>
 
       <StatusBar />

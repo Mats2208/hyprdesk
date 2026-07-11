@@ -28,8 +28,7 @@ pub struct WorkspaceMeta {
 }
 
 pub fn root() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join("HyprDesk")
+    crate::home_dir().join("HyprDesk")
 }
 
 pub fn ensure_root() {

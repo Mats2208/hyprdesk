@@ -23,6 +23,8 @@ pub struct WorkerInfo {
     #[serde(rename = "wsRoot")]
     pub ws_root: String, // carpeta del workspace (para el merge)
     pub branch: Option<String>, // rama del worktree, si el ws es git
+    #[serde(default)]
+    pub dead: bool, // el PTY murió: preservamos su worktree para review/merge/recuperación
 }
 
 // Perfil de agente (del workspace) que el router puede consultar (list_profiles) y usar al delegar.
@@ -169,7 +171,14 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 Some(w) if w.branch.is_some() => {
                     let branch = w.branch.clone().unwrap();
                     match crate::worktree::merge(&w.ws_root, &w.cwd, &branch) {
-                        Ok(_) => json!({ "ok": true, "branch": branch }),
+                        Ok(_) => {
+                            // worker muerto ya integrado → limpiar su worktree y sacarlo del roster.
+                            if w.dead {
+                                crate::worktree::remove(&w.ws_root, &w.cwd);
+                                workers.lock().unwrap().remove(&wid);
+                            }
+                            json!({ "ok": true, "branch": branch })
+                        }
                         Err(conflicts) => json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
                     }
                 }
@@ -230,7 +239,7 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 .clone()
                 .filter(|c| !c.is_empty())
                 .or_else(|| active_cwd.lock().unwrap().clone())
-                .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
+                .unwrap_or_else(|| crate::home_dir().to_string_lossy().into_owned());
             // Si el ws es git → worker en su propio worktree/rama (aislamiento). Si no → comparte carpeta.
             let (cwd, branch) = match crate::worktree::create(&ws_root, &worker_id) {
                 Some(wt) => (wt.path, Some(wt.branch)),
@@ -261,6 +270,7 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                     workers.lock().unwrap().insert(worker_id.clone(), WorkerInfo {
                         id: worker_id.clone(), engine: engine.clone(), name: title.clone(),
                         router_id: router.clone(), cwd: cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
+                        dead: false,
                     });
                     let _ = app.emit(
                         "spawn-agent",
@@ -349,27 +359,44 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
             } else {
                 Some(msg.to.clone())
             };
-            if let Some(target) = target {
-                // Inyectar como un turno nuevo del agente destino (colapsando saltos de línea).
+            // Entrega = escribir en el PTY destino. Si el PTY no existe (agente muerto), `write`
+            // devuelve false → NO fingimos éxito: le devolvemos el fallo al emisor (R1: acks reales).
+            let delivered = if let Some(target) = &target {
                 let clean = msg.text.replace('\n', " ").replace('\r', " ");
                 let payload = format!("Mensaje de {}: {}", msg.from, clean);
-                {
+                let wrote = {
                     let mgr = app.state::<crate::PtyManager>();
-                    mgr.write(&target, &payload);
+                    mgr.write(target, &payload)
+                };
+                if wrote {
+                    // avisar al frontend para que el tile destino "parpadee" (notificación)
+                    let _ = app.emit("tile-activity", target.clone());
+                    // El Enter va como keystroke SEPARADO tras un delay: si va pegado, claude
+                    // trata todo como un "paste" y no lo envía. Separado = submit real.
+                    let app2 = app.clone();
+                    let target2 = target.clone();
+                    thread::spawn(move || {
+                        thread::sleep(std::time::Duration::from_millis(350));
+                        let mgr = app2.state::<crate::PtyManager>();
+                        mgr.write(&target2, "\r");
+                    });
                 }
-                // avisar al frontend para que el tile destino "parpadee" (notificación)
-                let _ = app.emit("tile-activity", target.clone());
-                // El Enter va como keystroke SEPARADO tras un delay: si va pegado, claude
-                // trata todo como un "paste" y no lo envía. Separado = submit real.
-                let app2 = app.clone();
-                let target2 = target.clone();
-                thread::spawn(move || {
-                    thread::sleep(std::time::Duration::from_millis(350));
-                    let mgr = app2.state::<crate::PtyManager>();
-                    mgr.write(&target2, "\r");
-                });
+                wrote
+            } else {
+                false
+            };
+            if delivered {
+                let _ = req.respond(json_response(json!({ "ok": true }).to_string()));
+            } else {
+                // dead-letter: avisar al usuario y devolver error al agente emisor.
+                let _ = app.emit(
+                    "tunnel-error",
+                    format!("No se pudo entregar un mensaje a \"{}\" (el agente no está vivo).", msg.to),
+                );
+                let _ = req.respond(json_response(
+                    json!({ "ok": false, "error": "destino no disponible (el agente pudo haber terminado su proceso)" }).to_string(),
+                ));
             }
-            let _ = req.respond(json_response(json!({ "ok": true }).to_string()));
         }
         _ => { let _ = req.respond(Response::from_string("not found").with_status_code(404)); }
     }

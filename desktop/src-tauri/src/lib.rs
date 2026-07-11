@@ -10,7 +10,6 @@ use std::io::{Read, Write};
 use std::sync::Mutex;
 
 mod browser;
-mod changes;
 mod control;
 mod engines;
 mod fsops;
@@ -28,25 +27,122 @@ use sysinfo::System;
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-// PATH real del usuario (resuelto vía login shell). Necesario porque una app lanzada
+// Home del usuario, multiplataforma. En Unix es $HOME; en Windows %USERPROFILE%
+// (con fallback a $HOME por si corre bajo un shell tipo Git Bash que lo setea).
+pub(crate) fn home_dir() -> std::path::PathBuf {
+    #[cfg(windows)]
+    let h = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".into());
+    #[cfg(not(windows))]
+    let h = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    std::path::PathBuf::from(h)
+}
+
+// Windows: los CLIs de agente (claude/codex/opencode) se instalan como shims de npm — hay un
+// script de shell SIN extensión, un `.cmd` y un `.ps1`, pero el binario real vive en node_modules.
+// portable-pty resuelve el script de shell sin extensión (existe) y CreateProcessW no puede
+// ejecutarlo → el agente no arranca. Resolvemos el shim `.cmd` a su binario/JS real.
+// Devuelve (programa, args_previos). Ej: ("…/claude.exe", []) o ("…/node.exe", ["…/codex.js"]).
+#[cfg(windows)]
+pub(crate) fn resolve_win_program(arg0: &str) -> (String, Vec<String>) {
+    use std::path::{Path, PathBuf};
+    // Ya es una ruta concreta que existe → usar tal cual.
+    if (arg0.contains('\\') || arg0.contains('/')) && Path::new(arg0).exists() {
+        return (arg0.to_string(), vec![]);
+    }
+    let mut cmd_shim: Option<PathBuf> = None;
+    for dir in std::env::split_paths(user_path()) {
+        let exe = dir.join(format!("{arg0}.exe"));
+        if exe.exists() {
+            return (exe.to_string_lossy().into_owned(), vec![]); // .exe directo en PATH (git, node…)
+        }
+        if cmd_shim.is_none() {
+            let cmd = dir.join(format!("{arg0}.cmd"));
+            if cmd.exists() {
+                cmd_shim = Some(cmd);
+            }
+        }
+    }
+    if let Some(shim) = cmd_shim {
+        if let Some(res) = parse_npm_cmd_shim(&shim) {
+            return res;
+        }
+    }
+    (arg0.to_string(), vec![]) // sin mejor opción; portable-pty lo intentará (y probablemente falle)
+}
+
+// Extrae del shim `.cmd` de npm el binario/JS real al que apunta. El shim ejecuta algo como
+// `"%dp0%\node_modules\<pkg>\bin\x.exe" %*` o `"node" "%dp0%\node_modules\<pkg>\bin\x.js" %*`.
+#[cfg(windows)]
+fn parse_npm_cmd_shim(shim: &std::path::Path) -> Option<(String, Vec<String>)> {
+    let content = std::fs::read_to_string(shim).ok()?;
+    let dir = shim.parent()?;
+    // Primer token entrecomillado que apunte a node_modules y termine en .exe o .js = el target.
+    let mut raw: Option<String> = None;
+    for line in content.lines() {
+        for tok in line.split('"') {
+            let low = tok.to_ascii_lowercase();
+            if low.contains("node_modules") && (low.ends_with(".exe") || low.ends_with(".js")) {
+                raw = Some(tok.to_string());
+                break;
+            }
+        }
+        if raw.is_some() {
+            break;
+        }
+    }
+    // %dp0% / %~dp0 = directorio del shim con separador final.
+    let dir_str = format!("{}\\", dir.to_string_lossy().trim_end_matches('\\'));
+    let resolved = raw?
+        .replace("%~dp0", &dir_str)
+        .replace("%dp0%", &dir_str)
+        .replace("\\\\", "\\");
+    let low = resolved.to_ascii_lowercase();
+    if low.ends_with(".exe") {
+        Some((resolved, vec![]))
+    } else if low.ends_with(".js") {
+        // correr con node (preferir el node.exe junto al shim; si no, el del PATH).
+        let node = dir.join("node.exe");
+        let node = if node.exists() {
+            node.to_string_lossy().into_owned()
+        } else {
+            "node".to_string()
+        };
+        Some((node, vec![resolved]))
+    } else {
+        None
+    }
+}
+
+// PATH real del usuario (resuelto vía login shell en macOS). Necesario porque una app lanzada
 // desde Finder/Applications hereda un PATH mínimo (sin nvm) y no encontraría claude/codex/node.
+// En Windows ese problema no existe: una app GUI ya hereda el PATH completo (sistema+usuario)
+// del registro, así que ahí basta con leer el PATH del proceso.
 static USER_PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 pub(crate) fn user_path() -> &'static str {
     USER_PATH.get_or_init(|| {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-        let out = std::process::Command::new(&shell)
-            .args(["-lic", "printf '__P__%s__E__' \"$PATH\""])
-            .output();
-        if let Ok(o) = out {
-            let s = String::from_utf8_lossy(&o.stdout);
-            if let (Some(a), Some(b)) = (s.find("__P__"), s.find("__E__")) {
-                if b > a + 5 {
-                    return s[a + 5..b].to_string();
+        #[cfg(windows)]
+        {
+            std::env::var("PATH").unwrap_or_default()
+        }
+        #[cfg(not(windows))]
+        {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            let out = std::process::Command::new(&shell)
+                .args(["-lic", "printf '__P__%s__E__' \"$PATH\""])
+                .output();
+            if let Ok(o) = out {
+                let s = String::from_utf8_lossy(&o.stdout);
+                if let (Some(a), Some(b)) = (s.find("__P__"), s.find("__E__")) {
+                    if b > a + 5 {
+                        return s[a + 5..b].to_string();
+                    }
                 }
             }
+            std::env::var("PATH").unwrap_or_default()
         }
-        std::env::var("PATH").unwrap_or_default()
     })
 }
 
@@ -107,6 +203,17 @@ fn pty_spawn(
     let is_agent = argv.as_ref().map_or(false, |v| !v.is_empty());
     let mut cmd = match &argv {
         Some(av) if !av.is_empty() => {
+            // Windows: av[0] (claude/codex/opencode) es un shim de npm; resolvemos su binario real.
+            #[cfg(windows)]
+            let mut c = {
+                let (prog, prefix) = resolve_win_program(&av[0]);
+                let mut c = CommandBuilder::new(prog);
+                for p in &prefix {
+                    c.arg(p);
+                }
+                c
+            };
+            #[cfg(not(windows))]
             let mut c = CommandBuilder::new(&av[0]);
             for a in av.iter().skip(1) {
                 c.arg(a);
@@ -114,16 +221,26 @@ fn pty_spawn(
             c
         }
         _ => {
-            let shell = program
-                .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()));
-            let mut c = CommandBuilder::new(shell);
-            c.arg("-l"); // login shell
+            #[cfg(not(windows))]
+            let c = {
+                let shell = program
+                    .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()));
+                let mut c = CommandBuilder::new(shell);
+                c.arg("-l"); // login shell
+                c
+            };
+            #[cfg(windows)]
+            let c = {
+                // Windows no tiene login shells; usamos PowerShell (o el que pida el frontend).
+                let shell = program.unwrap_or_else(|| "powershell.exe".into());
+                CommandBuilder::new(shell)
+            };
             c
         }
     };
     let cwd_str = cwd
         .clone()
-        .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()));
+        .unwrap_or_else(|| home_dir().to_string_lossy().into_owned());
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
@@ -134,10 +251,19 @@ fn pty_spawn(
         // padre, u otras) hace que claude NO persista su transcript en disco →
         // rompe el --resume. Con este whitelist, la sesión se guarda y se puede resumir.
         cmd.env_clear();
-        for k in [
+        #[cfg(not(windows))]
+        let keys: &[&str] = &[
             "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE",
             "LC_MESSAGES", "TMPDIR", "SSH_AUTH_SOCK", "COLORTERM",
-        ] {
+        ];
+        #[cfg(windows)]
+        let keys: &[&str] = &[
+            // Mínimo para que claude/codex/node funcionen y encuentren ~/.claude en Windows.
+            "PATH", "PATHEXT", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "USERNAME",
+            "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "SystemRoot", "SystemDrive",
+            "ComSpec", "windir", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "COLORTERM",
+        ];
+        for k in keys {
             if let Ok(v) = std::env::var(k) {
                 cmd.env(k, v);
             }
@@ -347,6 +473,7 @@ fn worker_launch(
     state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
         id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
         router_id: router_id.clone(), cwd: cwd.clone(), ws_root: cwd.clone(), branch: None,
+        dead: false,
     });
     Ok(AgentLaunch {
         agent_id,
@@ -394,6 +521,7 @@ fn spawn_profile_worker(
         id: agent_id.clone(), engine: engine.clone(),
         name: name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| agent_id.clone()),
         router_id: router_id.clone(), cwd: agent_cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
+        dead: false,
     });
     Ok(AgentLaunch {
         agent_id,
@@ -413,7 +541,7 @@ fn spawn_profile_worker(
 fn register_worker(state: State<'_, ControlState>, id: String, engine: String, name: String, router_id: String, cwd: String) {
     state.workers.lock().unwrap().insert(
         id.clone(),
-        control::WorkerInfo { id, engine, name, router_id, cwd: cwd.clone(), ws_root: cwd, branch: None },
+        control::WorkerInfo { id, engine, name, router_id, cwd: cwd.clone(), ws_root: cwd, branch: None, dead: false },
     );
 }
 
@@ -432,12 +560,45 @@ fn answer_user(state: State<'_, ControlState>, question_id: String, answer: Stri
 }
 
 #[tauri::command]
-fn unregister_worker(state: State<'_, ControlState>, id: String) {
-    let info = state.workers.lock().unwrap().remove(&id);
-    // si el worker tenía worktree, lo limpiamos (descarta lo no mergeado — el usuario fue avisado).
-    if let Some(w) = info {
-        if w.branch.is_some() {
-            worktree::remove(&w.ws_root, &w.cwd);
+fn unregister_worker(app: AppHandle, state: State<'_, ControlState>, id: String) {
+    // El PTY del worker murió. NO borramos su worktree: preservamos su trabajo para que el router
+    // pueda revisarlo/mergearlo o recuperarlo (antes lo descartábamos con --force → pérdida silenciosa).
+    // Lo marcamos muerto (sigue en el roster para review/merge) y avisamos al router.
+    let (router, name, was_alive) = {
+        let mut workers = state.workers.lock().unwrap();
+        match workers.get_mut(&id) {
+            Some(w) => {
+                let was_alive = !w.dead;
+                w.dead = true;
+                (w.router_id.clone(), w.name.clone(), was_alive)
+            }
+            None => return, // no es un worker del roster (ej. el propio router) → nada que hacer
+        }
+    };
+    if !was_alive {
+        return; // ya estaba marcado muerto (evita doble notificación)
+    }
+    // Notificar al router que su delegado murió (inyección en su PTY, como un mensaje del túnel).
+    let target = if router.is_empty() {
+        state.router_id.lock().unwrap().clone()
+    } else {
+        Some(router)
+    };
+    if let Some(target) = target {
+        let payload = format!(
+            "Mensaje de sistema: ⚠️ El worker \"{name}\" ({id}) terminó su proceso. Su trabajo quedó \
+             PRESERVADO — revisalo con review_worker y mergealo si corresponde, o re-delegá la tarea a \
+             un worker nuevo. No le mandes mensajes: ya no está vivo."
+        );
+        let mgr = app.state::<PtyManager>();
+        if mgr.write(&target, &payload) {
+            let app2 = app.clone();
+            let target2 = target.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(350));
+                let mgr = app2.state::<PtyManager>();
+                mgr.write(&target2, "\r");
+            });
         }
     }
 }
@@ -449,12 +610,19 @@ fn unregister_worker(state: State<'_, ControlState>, id: String) {
 #[tauri::command]
 fn merge_worker(state: State<'_, ControlState>, id: String) -> serde_json::Value {
     let info = state.workers.lock().unwrap().get(&id).cloned();
-    let (ws_root, wt, branch) = match info {
-        Some(w) if w.branch.is_some() => (w.ws_root, w.cwd, w.branch.unwrap()),
+    let (ws_root, wt, branch, dead) = match info {
+        Some(w) if w.branch.is_some() => (w.ws_root, w.cwd, w.branch.unwrap(), w.dead),
         _ => return serde_json::json!({ "ok": false, "error": "el worker no tiene worktree (workspace no-git o restaurado)" }),
     };
     match worktree::merge(&ws_root, &wt, &branch) {
-        Ok(_) => serde_json::json!({ "ok": true, "branch": branch }),
+        Ok(_) => {
+            // Worker muerto ya integrado → recién ACÁ limpiamos su worktree y lo sacamos del roster.
+            if dead {
+                worktree::remove(&ws_root, &wt);
+                state.workers.lock().unwrap().remove(&id);
+            }
+            serde_json::json!({ "ok": true, "branch": branch })
+        }
         Err(conflicts) => serde_json::json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
     }
 }
@@ -591,12 +759,15 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
 // Abre otra ventana (comparte proceso: túnel/PTY globales; cada ventana maneja sus workspaces).
 fn open_new_window(app: &AppHandle) {
     let label = format!("win-{}", uuid::Uuid::new_v4().simple());
-    let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title("HyprDesk")
-        .inner_size(1400.0, 900.0)
+        .inner_size(1400.0, 900.0);
+    // titleBarStyle / hiddenTitle solo existen en macOS; en Windows/Linux no aplican.
+    #[cfg(target_os = "macos")]
+    let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true)
-        .build();
+        .hidden_title(true);
+    let _ = builder.build();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -605,10 +776,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::default())
-        .manage(changes::WatchState::default())
         .manage(Mutex::new(System::new_all()))
         .setup(|app| {
             workspace::ensure_root();
+            // Recursos (MCP bundleado + roles). En la app empaquetada viven bajo el resource dir;
+            // en dev, `res_file` cae al `resources/` del crate si esto no existe.
+            if let Ok(dir) = app.path().resource_dir() {
+                engines::set_res_dir(dir.join("resources"));
+            }
             let state = control::start(app.handle().clone());
             app.manage(state);
             build_menu(app)?;
@@ -631,9 +806,6 @@ pub fn run() {
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
             touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
-            changes::watch_workspace, changes::unwatch_workspace, changes::git_status, changes::git_diff, changes::git_branch,
-            changes::git_commit, changes::git_push, changes::git_pull, changes::git_branches, changes::git_checkout,
-            changes::git_merge_branch, changes::git_sync_state, changes::git_diff_text,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,
             browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close

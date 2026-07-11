@@ -3,6 +3,7 @@
 // con su rol, su autonomía y su manejo de sesión (claude setea el id; codex/opencode
 // generan uno que hay que CAPTURAR luego para poder resumir).
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -18,7 +19,7 @@ struct AgentSession {
 }
 
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()))
+    crate::home_dir()
 }
 
 // Busca el .jsonl de sesión de codex más nuevo (creado tras `since`) cuyo cwd coincida,
@@ -129,21 +130,44 @@ pub struct LaunchSpec {
     pub session_id: Option<String>, // conocido de antemano (claude); None si se captura
 }
 
-fn manifest() -> &'static str {
-    env!("CARGO_MANIFEST_DIR")
+// Directorio de recursos: el MCP bundleado (self-contained) + los roles. Lo setea la app al
+// arrancar (apuntando al resource dir de Tauri, que funciona en la app empaquetada); si no está
+// seteado (dev), caemos al `resources/` junto al crate, que `pnpm build:mcp` genera.
+static RES_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_res_dir(dir: PathBuf) {
+    let _ = RES_DIR.set(dir);
+}
+
+fn res_file(name: &str) -> Result<PathBuf, String> {
+    if let Some(base) = RES_DIR.get() {
+        let p = base.join(name);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join(name);
+    if dev.exists() {
+        return Ok(dev);
+    }
+    Err(format!("no encuentro el recurso {name} (¿corriste `pnpm build:mcp`?)"))
+}
+
+// Quita el prefijo UNC `\\?\` que canonicalize agrega en Windows: node/codex no saben cargar
+// rutas `\\?\E:\…` (las malinterpretan como `C:\?\E:\…`). En Unix es un no-op.
+fn strip_unc(p: PathBuf) -> String {
+    let s = p.to_string_lossy().to_string();
+    s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
 }
 
 pub fn mcp_script() -> Result<String, String> {
-    std::fs::canonicalize(format!("{}/../mcp/hyprdesk-mcp.mjs", manifest()))
-        .map_err(|e| format!("no encuentro hyprdesk-mcp.mjs: {e}"))
-        .map(|p| p.to_string_lossy().to_string())
+    let abs = std::fs::canonicalize(res_file("hyprdesk-mcp.mjs")?).map_err(|e| e.to_string())?;
+    Ok(strip_unc(abs))
 }
 
 pub fn role_text(role: &str) -> Result<String, String> {
     let file = if role == "router" { "router-role.md" } else { "worker-role.md" };
-    let p = std::fs::canonicalize(format!("{}/../mcp/{file}", manifest()))
-        .map_err(|e| format!("no encuentro {file}: {e}"))?;
-    std::fs::read_to_string(p).map_err(|e| e.to_string())
+    std::fs::read_to_string(res_file(file)?).map_err(|e| e.to_string())
 }
 
 // Env del MCP hyprdesk para un agente (base + extras por rol).
@@ -209,7 +233,8 @@ fn opencode_config(agent_id: &str, role_txt: &str, env: &[(String, String)], ask
 fn session_exists(engine: &str, cwd: &str, id: &str) -> bool {
     match engine {
         "claude" => {
-            let escaped = cwd.replace('/', "-");
+            // claude escapa el cwd reemplazando separadores y `:` por `-` (en Windows: C:\a\b → C--a-b).
+            let escaped = cwd.replace(|c| matches!(c, '/' | '\\' | ':'), "-");
             home()
                 .join(".claude/projects")
                 .join(&escaped)
@@ -247,6 +272,23 @@ fn with_persona(base: String, persona: Option<&str>) -> String {
     }
 }
 
+// Skills SIEMPRE activas para todo agente (router y worker, cualquier motor). Hoy: Ponytail
+// (eficiencia de tokens). Se leen de `resources/skills/` y se anexan al rol. Best-effort: si
+// falta el archivo, seguimos sin skill (no rompe el lanzamiento del agente).
+fn with_skills(role_txt: String) -> String {
+    let mut out = role_txt;
+    for skill in ["ponytail.md"] {
+        if let Ok(p) = res_file(&format!("skills/{skill}")) {
+            if let Ok(txt) = std::fs::read_to_string(p) {
+                if !txt.trim().is_empty() {
+                    out = format!("{out}\n\n=== SKILL SIEMPRE ACTIVA ===\n\n{}", txt.trim());
+                }
+            }
+        }
+    }
+    out
+}
+
 // Rol base + memoria del workspace (solo router): lo que el router guardó en sesiones anteriores se
 // le re-inyecta acá para que retome con contexto. Los workers no tienen memoria persistente.
 fn role_with_memory(role: &str, cwd: &str) -> Result<String, String> {
@@ -281,7 +323,7 @@ pub fn build_agent(
     let env = mcp_env(port, agent_id, role, cwd, router_id);
     let ask = crate::settings::ask_permission(); // modo "preguntar" vs auto (bypass)
     // Rol final = base + memoria (router) + persona (perfil). Se compone una vez acá.
-    let role_txt = with_persona(role_with_memory(role, cwd)?, opts.persona);
+    let role_txt = with_skills(with_persona(role_with_memory(role, cwd)?, opts.persona));
     match engine {
         "claude" => build_claude(agent_id, &role_txt, &env, resume_id, task, opts, ask),
         "codex" => build_codex(&role_txt, cwd, &env, resume_id, task, opts, ask),
@@ -372,11 +414,17 @@ fn build_codex(
         argv.push("-m".to_string());
         argv.push(m.to_string());
     }
+    // codex normaliza la ruta del proyecto a minúsculas en Windows (case-insensitive); la trust key
+    // debe matchear o vuelve a pedir el prompt de confianza. En Unix el path es case-sensitive.
+    #[cfg(windows)]
+    let trust_key = cwd.to_lowercase();
+    #[cfg(not(windows))]
+    let trust_key = cwd.to_string();
     let mut cfgs = vec![
         "mcp_servers.hyprdesk.command=node".to_string(),
         format!("mcp_servers.hyprdesk.args=[{:?}]", mcp),
         // marcar el cwd como confiable para evitar el prompt de trust
-        format!("projects.{cwd:?}.trust_level=\"trusted\""),
+        format!("projects.{trust_key:?}.trust_level=\"trusted\""),
         // el rol como INSTRUCCIONES (contexto/developer), no como turno de usuario. Valor raw:
         // codex intenta parsear como TOML, falla (prosa multilínea) y lo usa como string literal.
         format!("developer_instructions={role_txt}"),

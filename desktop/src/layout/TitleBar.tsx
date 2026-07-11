@@ -13,7 +13,7 @@ const THEME_ICON = {
   hc: <g><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" /><path d="M8 2a6 6 0 010 12z" fill="currentColor" /></g>,
 };
 
-export function TitleBar({ stats, glm, branch }: { stats: SysStats | null; glm: GlmUsage | null; branch: string | null }) {
+export function TitleBar({ stats, glm }: { stats: SysStats | null; glm: GlmUsage | null }) {
   const current = useSessionStore((s) => s.sessions.find((x) => x.meta.id === s.currentId) ?? null);
   const togglePalette = useUiStore((s) => s.togglePalette);
   const theme = useThemeStore((s) => s.theme);
@@ -35,7 +35,6 @@ export function TitleBar({ stats, glm, branch }: { stats: SysStats | null; glm: 
         <span className="titlebar__app">HyprDesk</span>
         <span className="titlebar__sep">·</span>
         <span className="titlebar__ws">{current?.meta.name ?? ""}</span>
-        {branch && <span className="titlebar__branch" title="rama git"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.6" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.6" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.6v4.8M5.6 4h3.2a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>{branch}</span>}
       </div>
       <div className="titlebar__side titlebar__side--right">
         <span className="stat stat--live" title="agentes / tiles"><span className="dot" /> {current?.terms.length ?? 0}</span>

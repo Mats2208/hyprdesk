@@ -8,8 +8,7 @@ use std::path::PathBuf;
 fn memory_path(ws: &str) -> PathBuf {
     let mut h = DefaultHasher::new();
     ws.hash(&mut h);
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
+    crate::home_dir()
         .join("HyprDesk/.memory")
         .join(format!("{:016x}.md", h.finish()))
 }

@@ -2,14 +2,10 @@
 // Con zustand usamos get() para leer estado fresco dentro de las acciones (adiós al juego de refs).
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { GitEntry, WsChanges } from "../ChangesPanel";
 import type { WorkspaceMeta } from "./../WorkspaceManager";
 import type { AgentLaunch, Profile, SavedState, Stage, Term, WsSession } from "../types";
 import { HOSTS, MAX_TILES, savedStateOf, tileFromLaunch } from "./sessionModel";
 import { useUiStore } from "./uiStore";
-
-// timers de debounce del git status por carpeta (no reactivo → fuera del estado).
-const gitTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 // Revive una sesión guardada: relanza router + workers con --resume, recrea tiles de archivo/navegador.
 async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Promise<WsSession> {
@@ -51,7 +47,6 @@ type SessionState = {
   sessions: WsSession[];
   currentId: string | null;
   closing: string[];
-  changesByWs: Record<string, WsChanges>;
   previewsByWs: Record<string, string[]>;
 
   current: () => WsSession | null;
@@ -63,12 +58,10 @@ type SessionState = {
   openWorkspace: (meta: WorkspaceMeta) => Promise<void>;
   closeWorkspace: (wsId: string) => Promise<void>;
   startRouter: (engine: string) => Promise<void>;
-  startWatching: (folder: string) => void;
 
   addTerminal: () => void;
   setActive: (id: string) => void;
   openFile: (path: string) => void;
-  openDiff: (relPath: string) => Promise<void>;
   openBrowser: (url?: string) => void;
   closeTerminal: (id: string) => void;
   toggleMax: (id: string) => void;
@@ -83,7 +76,6 @@ type SessionState = {
 
   addWorkerTile: (routerId: string, tile: Term) => void;
   setTileSession: (agentId: string, sessionId: string) => void;
-  addWatchedChange: (root: string, path: string, kind: string) => void;
   addPreview: (folder: string, url: string) => void;
 };
 
@@ -92,7 +84,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   sessions: [],
   currentId: null,
   closing: [],
-  changesByWs: {},
   previewsByWs: {},
 
   current: () => get().sessions.find((s) => s.meta.id === get().currentId) ?? null,
@@ -119,17 +110,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ? await buildRestoredSession(meta, saved)
       : { meta, terms: [], routerId: null, activeId: "", routerWidth: 50, maxId: null, needsRouter: true, launchError: null, profiles: saved?.profiles ?? [] };
     set((st) => ({ sessions: [...st.sessions.filter((s) => s.meta.id !== meta.id), session], currentId: meta.id, stage: "ide" }));
-    get().startWatching(meta.folder);
   },
 
   closeWorkspace: async (wsId) => {
     const s = get().sessions.find((x) => x.meta.id === wsId);
     if (s && !s.needsRouter) {
       await invoke("save_workspace", { folder: s.meta.folder, state: JSON.stringify(savedStateOf(s)) }).catch(() => {});
-    }
-    if (s) {
-      invoke("unwatch_workspace", { folder: s.meta.folder }).catch(() => {});
-      set((st) => { const n = { ...st.changesByWs }; delete n[s.meta.folder]; return { changesByWs: n }; });
     }
     const rest = get().sessions.filter((x) => x.meta.id !== wsId);
     const nextCurrent = get().currentId === wsId ? (rest[0]?.meta.id ?? null) : get().currentId;
@@ -150,15 +136,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  startWatching: (folder) => {
-    invoke("watch_workspace", { folder }).catch(() => {});
-    invoke<GitEntry[]>("git_status", { cwd: folder })
-      .then((git) => set((st) => ({ changesByWs: { ...st.changesByWs, [folder]: { git, watched: st.changesByWs[folder]?.watched ?? [] } } })))
-      .catch(() => {});
-  },
-
   addTerminal: () => {
-    const t: Term = { id: crypto.randomUUID(), title: HOSTS[Math.floor(Math.random() * HOSTS.length)], role: "worker" };
+    const cwd = get().current()?.meta.folder; // abrir en el workspace, no en el home del usuario
+    const t: Term = { id: crypto.randomUUID(), title: HOSTS[Math.floor(Math.random() * HOSTS.length)], role: "worker", cwd };
     get().updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
   },
 
@@ -173,20 +153,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const t: Term = { id: crypto.randomUUID(), title: name, role: "worker", kind: "file", filePath: path };
       return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
     });
-  },
-
-  openDiff: async (relPath) => {
-    const cur = get().current();
-    if (!cur) return;
-    try {
-      const patch = await invoke<string>("git_diff_text", { cwd: cur.meta.folder, path: relPath });
-      const name = relPath.split("/").pop() || relPath;
-      get().updateCurrent((s) => {
-        if (s.terms.length >= MAX_TILES) return s;
-        const t: Term = { id: crypto.randomUUID(), title: `Δ ${name}`, role: "worker", kind: "diff", filePath: `${cur.meta.folder}/${relPath}`, diff: { patch } };
-        return { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null };
-      });
-    } catch { /* sin diff */ }
   },
 
   openBrowser: (url) => {
@@ -286,21 +252,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setTileSession: (agentId, sessionId) => set((st) => ({
     sessions: st.sessions.map((s) => ({ ...s, terms: s.terms.map((t) => (t.id === agentId ? { ...t, sessionId } : t)) })),
   })),
-
-  addWatchedChange: (root, path, kind) => {
-    set((st) => {
-      const cur = st.changesByWs[root] ?? { git: [], watched: [] };
-      const watched = [{ path, kind }, ...cur.watched.filter((w) => w.path !== path)].slice(0, 200);
-      return { changesByWs: { ...st.changesByWs, [root]: { git: cur.git, watched } } };
-    });
-    clearTimeout(gitTimers[root]);
-    gitTimers[root] = setTimeout(async () => {
-      try {
-        const git = await invoke<GitEntry[]>("git_status", { cwd: root });
-        set((st) => ({ changesByWs: { ...st.changesByWs, [root]: { git, watched: st.changesByWs[root]?.watched ?? [] } } }));
-      } catch { /* no repo */ }
-    }, 400);
-  },
 
   addPreview: (folder, url) => set((st) => {
     const list = st.previewsByWs[folder] ?? [];

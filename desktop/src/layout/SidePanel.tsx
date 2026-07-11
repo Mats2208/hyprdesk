@@ -1,6 +1,7 @@
-// Panel lateral: conmuta entre Workspaces / Agentes (Sidebar) / Archivos / Cambios según uiStore.panel.
+// Panel lateral: conmuta entre Workspaces / Agentes (Sidebar) / Archivos según uiStore.panel.
 import { Sidebar } from "../Sidebar";
 import { WorkspacesPanel } from "../WorkspacesPanel";
+import { FilesPanel } from "./FilesPanel";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 
@@ -16,6 +17,10 @@ export function SidePanel() {
 
   if (panel === "workspaces") {
     return <WorkspacesPanel activeId={current?.meta.id ?? undefined} onSwitch={openWorkspace} />;
+  }
+
+  if (panel === "files") {
+    return <FilesPanel folder={current?.meta.folder ?? null} onOpenFile={useSessionStore.getState().openFile} />;
   }
 
   const agents = current
