@@ -44,11 +44,6 @@ export function useAppEffects() {
     if (stage === "ide" && sessions.length === 0) useSessionStore.getState().setStage("workspaces");
   }, [sessions, stage]);
 
-  // Menú nativo (Archivo/Editar/Ver): solo dentro de un proyecto. En el home/onboarding estorba.
-  useEffect(() => {
-    invoke("set_menu_visible", { visible: stage === "ide" }).catch(() => {});
-  }, [stage]);
-
   // si el tile activo desapareció, caer al router de esa sesión.
   useEffect(() => {
     const cur = useSessionStore.getState().current();

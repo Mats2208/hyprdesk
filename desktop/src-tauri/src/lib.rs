@@ -25,6 +25,7 @@ use control::ControlState;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use sysinfo::System;
+#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
@@ -764,7 +765,9 @@ fn set_menu_visible(window: tauri::Window, visible: bool) {
 }
 
 // Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
-// (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust.
+// (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust. Solo macOS: en
+// Windows/Linux la ventana es frameless y el menú lo dibuja el webview (barra de título custom).
+#[cfg(target_os = "macos")]
 fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     let h = app.handle();
     let settings_item = MenuItem::with_id(h, "settings", "Configuración…", true, Some("CmdOrCtrl+,"))?;
@@ -832,17 +835,15 @@ fn open_new_window(app: &AppHandle) {
     let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title("HyprDesk")
         .inner_size(1400.0, 900.0);
-    // titleBarStyle / hiddenTitle solo existen en macOS; en Windows/Linux no aplican.
+    // macOS: title bar overlay (traffic lights sobre el contenido). Windows/Linux: sin decoración
+    // (frameless) → la barra de título la dibuja el webview (estilo VS Code).
     #[cfg(target_os = "macos")]
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
-    let win = builder.build();
-    // Nace en el home → menú oculto (el frontend lo mostrará al entrar a un proyecto). macOS: global.
     #[cfg(not(target_os = "macos"))]
-    if let Ok(w) = &win {
-        let _ = w.hide_menu();
-    }
+    let builder = builder.decorations(false);
+    let _ = builder.build();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -861,12 +862,13 @@ pub fn run() {
             }
             let state = control::start(app.handle().clone());
             app.manage(state);
+            // macOS: menú global nativo (barra superior del sistema). Windows/Linux: ventana sin
+            // decoración → la barra de título (con menú custom + controles) la dibuja el webview.
+            #[cfg(target_os = "macos")]
             build_menu(app)?;
-            // El menú (Archivo/Editar/Ver) arranca oculto en Windows/Linux: en el home estorba, el
-            // frontend lo muestra al entrar a un proyecto (set_menu_visible). En macOS es global → queda.
             #[cfg(not(target_os = "macos"))]
             for (_, w) in app.webview_windows() {
-                let _ = w.hide_menu();
+                let _ = w.set_decorations(false);
             }
             Ok(())
         })

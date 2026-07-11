@@ -301,6 +301,15 @@ body {
   cursor: pointer; transition: all 0.15s;
 }
 .titlebar__icon:hover { color: var(--text); border-color: var(--hairline-2); }
+/* Windows/Linux frameless: sin el padding de traffic lights (izq) y controles flush a la derecha */
+.titlebar--custom { padding-left: 12px; padding-right: 0; }
+.wctl { display: flex; align-items: stretch; height: 100%; margin-left: 6px; flex: 0 0 auto; -webkit-app-region: no-drag; }
+.wctl__btn {
+  width: 44px; display: grid; place-items: center; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.wctl__btn:hover { background: var(--hover-2); color: var(--text); }
+.wctl__btn--close:hover { background: #e11d48; color: #fff; }
 
 /* tabs de workspaces abiertos (keep-alive) */
 .wstabs {
