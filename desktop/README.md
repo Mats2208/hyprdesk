@@ -1,40 +1,25 @@
-# HyprDesk — slice mínimo (terminal REAL en Tauri)
+# HyprDesk — app (Tauri v2 + React + Rust)
 
-Prueba de concepto de la pieza crítica: **una terminal de verdad embebida en una UI web**
-(el patrón que va a llevar todos los tiles del workspace estilo Hyprland).
+This folder is the HyprDesk desktop app. For the full overview, features,
+architecture and install instructions, see the **[root README](../README.md)**.
 
-## Las 3 capas
-
-```
-xterm.js (React)        ← la pantalla: dibuja y captura teclado
-   ↕  eventos / invoke
-portable-pty (Rust)     ← el PTY REAL del SO: acá corre tu shell de verdad
-   ↕
-tu shell ($SHELL -l)    ← podés correr ls, git, y hasta `claude` / `codex` adentro
-```
-
-- `src/TerminalTile.tsx` — componente xterm.js puenteado al backend.
-- `src-tauri/src/lib.rs` — manager de PTYs: `pty_spawn`, `pty_write`, `pty_resize`, `pty_kill`.
-- El texto viaja como base64 (bytes crudos) para no corromper UTF-8.
-
-## Correr
+## Dev
 
 ```bash
-cd desktop
-pnpm install          # (ya hecho)
-pnpm tauri dev        # abre la ventana de escritorio
+pnpm install
+pnpm tauri dev            # window with hot-reload (runs `build:mcp` first)
 ```
 
-Dentro de la terminal probá: `ls`, `git status`, o directamente `claude` / `codex` —
-corre el CLI REAL, con todos sus skills / MCP / comandos `!`, porque es una terminal real.
+- `pnpm exec tsc --noEmit` — frontend typecheck
+- `cd src-tauri && cargo check` — backend
+- `pnpm build:mcp` — bundle the MCP server + roles + skills into `src-tauri/resources/`
 
-## Por qué es la base de todo
+## Layout
 
-Cada tile del diseño final = una instancia de esto. Multiplicar tiles + reorganizar layout
-+ enchufar el harness (`../harness.mjs`) que abre tiles-worker = el workspace completo.
+- `src/` — frontend (React + xterm.js): `store/` · `hooks/` · `layout/` · `FileTile.tsx` (editor) · `commands/` · `theme/` · `settings/`
+- `src-tauri/src/` — Rust backend: PTYs + tunnel + engines + worktrees + file ops
+- `mcp/` — role-aware MCP server (`hyprdesk-mcp.mjs`), roles (`router-role.md` / `worker-role.md`), and always-on skills (`skills/`)
+- `scripts/build-mcp.mjs` — bundles the MCP (self-contained) so it needs no `node_modules` at runtime
 
-## Próximo
-
-1. Multiplicar tiles con layout dinámico (1 → 2 columnas → 2x2 → grilla).
-2. Estética Hyprland completa (wallpaper, sidebar widgets, animaciones de layout).
-3. El "router" abre tiles-worker vía el harness y los coordina por session_id.
+Cross-platform (macOS + Windows). Platform-specific code is gated behind `#[cfg(...)]`;
+the Unix path is kept identical to the original macOS behavior.
