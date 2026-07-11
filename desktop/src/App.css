@@ -969,7 +969,7 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .profrow__open:hover { background: var(--hover); }
 .profrow__dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
 .profrow__name { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.profrow__meta { margin-left: auto; font: 10px var(--font-mono); color: var(--faint); white-space: nowrap; }
+.profrow__meta { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font: 10px var(--font-mono); color: var(--faint); white-space: nowrap; }
 .profrow__del {
   flex: 0 0 auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
   border: none; background: transparent; color: var(--faint); cursor: pointer; opacity: 0; transition: all 0.15s;
@@ -989,7 +989,17 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .ca__error { font: 11px var(--font-mono); color: #f87171; line-height: 1.4; white-space: pre-wrap; }
 .ca__form { border-top: 1px solid var(--hairline); }
 .ca__row { display: flex; gap: 10px; }
-.ca__row .modal__field { flex: 1; }
+.ca__row .modal__field { flex: 1; min-width: 0; }
+/* Selector de motor con logos (reemplaza el <select>) */
+.ca__engines { display: flex; gap: 5px; }
+.ca__engine {
+  flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 6px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--bg);
+  color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.12s;
+}
+.ca__engine span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca__engine:hover { color: var(--text); border-color: var(--hairline-2); }
+.ca__engine--on { color: var(--router); border-color: var(--router); background: var(--router-soft); }
 .ca__colors { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
 .ca__color { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; transition: transform 0.12s; }
 .ca__color:hover { transform: scale(1.12); }

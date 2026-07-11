@@ -71,7 +71,10 @@ export function Sidebar({
             <button className="profrow__open" onClick={() => onLaunchProfile(p)} title={`Lanzar ${p.name}`}>
               <span className="profrow__dot" style={{ background: p.color }} />
               <span className="profrow__name">{p.name}</span>
-              <span className="profrow__meta">{p.engine}{p.model ? ` · ${p.model}` : ""}{p.effort ? ` · ${p.effort}` : ""}</span>
+              <span className="profrow__meta">
+                <EngineIcon engine={p.engine} size={13} />
+                {[p.model, p.effort].filter(Boolean).join(" · ")}
+              </span>
             </button>
             <button className="profrow__del" title="Eliminar perfil" onClick={() => onDeleteProfile(p.id)}>
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>

@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Profile, SkillInfo } from "./types";
 import { ModelPicker, type ModelCatalog as Catalog } from "./ModelPicker";
+import { EngineIcon } from "./EngineIcon";
+
+const ENGINES: { id: string; label: string }[] = [
+  { id: "claude", label: "Claude" }, { id: "codex", label: "Codex" }, { id: "opencode", label: "OpenCode" },
+];
 
 const COLORS = ["#34d399", "#60a5fa", "#c084fc", "#fbbf24", "#f87171", "#22d3ee", "#f472b6", "#a3e635"];
 
@@ -147,11 +152,20 @@ export function CreateAgentModal({
             <div className="modal__section ca__form">
               <label className="modal__field"><span>Nombre</span><input value={p.name} onChange={(e) => upd({ name: e.target.value })} /></label>
               <div className="ca__row">
-                <label className="modal__field"><span>Motor</span>
-                  <select value={p.engine} onChange={(e) => upd({ engine: e.target.value })}>
-                    <option value="claude">Claude</option><option value="codex">Codex</option><option value="opencode">OpenCode</option>
-                  </select>
-                </label>
+                <div className="modal__field"><span>Motor</span>
+                  <div className="ca__engines">
+                    {ENGINES.map((e) => (
+                      <button
+                        key={e.id} type="button" title={e.label}
+                        className={`ca__engine ${p.engine === e.id ? "ca__engine--on" : ""}`}
+                        onClick={() => upd({ engine: e.id })}
+                      >
+                        <EngineIcon engine={e.id} size={18} />
+                        <span>{e.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="modal__field"><span>Modelo</span>
                   <ModelPicker key={p.engine} engine={p.engine} catalog={cat} value={p.model || ""} onChange={(v) => upd({ model: v || undefined })} />
                 </label>
