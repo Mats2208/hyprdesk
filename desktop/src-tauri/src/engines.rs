@@ -455,6 +455,40 @@ fn build_claude(
     Ok(LaunchSpec { argv, env: vec![], inject_task: None, capture: false, session_id: Some(sid) })
 }
 
+// Claves de trust para codex. Codex resuelve un worktree a la RAÍZ del repo PRINCIPAL para el trust
+// (no al cwd del worktree) → un worker que corre en su worktree vuelve a pedir el prompt de confianza
+// aunque el cwd esté trusteado. Devolvemos ambas: el cwd y la raíz del repo. En Windows codex es
+// case-insensitive y usa backslashes → normalizamos (minúsculas + `\`); en Unix, tal cual.
+fn codex_trust_keys(cwd: &str) -> Vec<String> {
+    fn norm(p: String) -> String {
+        #[cfg(windows)]
+        {
+            p.replace('/', "\\").to_lowercase()
+        }
+        #[cfg(not(windows))]
+        {
+            p
+        }
+    }
+    let mut keys = vec![norm(cwd.to_string())];
+    // raíz del repo principal = parent de `--git-common-dir` (en un linked worktree apunta al repo main).
+    if let Some(out) = crate::hidden_command("git")
+        .args(["-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+    {
+        let common = String::from_utf8_lossy(&out.stdout);
+        if let Some(root) = std::path::Path::new(common.trim()).parent() {
+            let root = norm(root.to_string_lossy().into_owned());
+            if !root.is_empty() && !keys.contains(&root) {
+                keys.push(root);
+            }
+        }
+    }
+    keys
+}
+
 fn build_codex(
     role_txt: &str,
     cwd: &str,
@@ -494,21 +528,18 @@ fn build_codex(
         argv.push("-m".to_string());
         argv.push(m.to_string());
     }
-    // codex normaliza la ruta del proyecto a minúsculas en Windows (case-insensitive); la trust key
-    // debe matchear o vuelve a pedir el prompt de confianza. En Unix el path es case-sensitive.
-    #[cfg(windows)]
-    let trust_key = cwd.to_lowercase();
-    #[cfg(not(windows))]
-    let trust_key = cwd.to_string();
     let mut cfgs = vec![
         "mcp_servers.hyprdesk.command=node".to_string(),
         format!("mcp_servers.hyprdesk.args=[{:?}]", mcp),
-        // marcar el cwd como confiable para evitar el prompt de trust
-        format!("projects.{trust_key:?}.trust_level=\"trusted\""),
         // el rol como INSTRUCCIONES (contexto/developer), no como turno de usuario. Valor raw:
         // codex intenta parsear como TOML, falla (prosa multilínea) y lo usa como string literal.
         format!("developer_instructions={role_txt}"),
     ];
+    // Trust: marcamos como confiables el cwd Y la raíz del repo (ver codex_trust_keys) → así el prompt
+    // de confianza tampoco aparece en workers que corren en un worktree (codex trustea por repo raíz).
+    for tk in codex_trust_keys(cwd) {
+        cfgs.push(format!("projects.{tk:?}.trust_level=\"trusted\""));
+    }
     if let Some(e) = opts.effort {
         cfgs.push(format!("model_reasoning_effort=\"{e}\""));
     }
