@@ -26,7 +26,9 @@ async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Pro
   for (const t of saved.tiles.filter((x) => x.role === "worker" && (!x.kind || x.kind === "terminal") && x.sessionId)) {
     try {
       const w = await invoke<AgentLaunch>("worker_launch", {
-        engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId, cwd: meta.folder, routerId: rId || "router",
+        engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId,
+        // R4: restaurar al worker en SU worktree (si tenía) con su rama; ws_root = carpeta del ws.
+        cwd: t.cwd || meta.folder, routerId: rId || "router", wsRoot: meta.folder, branch: t.branch || null,
       });
       const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
       wt.name = t.name; wt.color = t.color;

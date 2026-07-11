@@ -27,7 +27,7 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type SysStats = { cpu: number; mem_used: number; mem_total: number };
 export type GlmUsage = { session?: number | null; weekly?: number | null };
 
-export type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string; name?: string; color?: string };
+export type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string; name?: string; color?: string; cwd?: string; branch?: string };
 export type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[]; profiles?: Profile[] };
 export type Stage = "workspaces" | "ide";
 export type TileStatus = "working" | "idle" | "exited";

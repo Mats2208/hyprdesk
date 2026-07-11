@@ -23,6 +23,7 @@ export function savedStateOf(s: WsSession): SavedState {
       .map((x) => ({
         id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId ?? "", title: x.title,
         kind: x.kind, filePath: x.filePath, url: x.url, name: x.name, color: x.color,
+        cwd: x.cwd, branch: x.branch, // R4: worktree/rama para restaurar al worker en su aislamiento
       })),
     profiles: s.profiles,
   };

@@ -478,14 +478,24 @@ fn worker_launch(
     engine: String,
     agent_id: String,
     session_id: String,
-    cwd: String,
+    cwd: String,                 // worktree del worker si tenía uno; si no, la carpeta del ws
     router_id: String,
+    ws_root: Option<String>,     // R4: raíz del workspace (para review/merge git); default = cwd
+    branch: Option<String>,      // R4: rama del worktree a restaurar (None si no-git)
 ) -> Result<AgentLaunch, String> {
+    // R4: si el worker tenía worktree pero ya no existe en disco (fue mergeado/limpiado), no
+    // podemos resumir ahí → caemos a la carpeta del ws sin rama. Si existe, resumimos en él.
+    let ws_root = ws_root.unwrap_or_else(|| cwd.clone());
+    let (cwd, branch) = match &branch {
+        Some(b) if std::path::Path::new(&cwd).is_dir() => (cwd, Some(b.clone())),
+        Some(_) => (ws_root.clone(), None), // worktree perdido → carpeta del ws
+        None => (cwd, None),
+    };
     let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None, &engines::AgentOpts::default())?;
-    // registrar en el roster (restore = sin worktree nuevo; sigue en la carpeta del ws)
+    // registrar en el roster con su worktree/rama restaurados (así review/merge funcionan tras reabrir)
     state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
         id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
-        router_id: router_id.clone(), cwd: cwd.clone(), ws_root: cwd.clone(), branch: None,
+        router_id: router_id.clone(), cwd: cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
         dead: false,
     });
     Ok(AgentLaunch {
@@ -497,7 +507,7 @@ fn worker_launch(
         capture: spec.capture,
         session_id: spec.session_id,
         cwd,
-        branch: None,
+        branch,
     })
 }
 
