@@ -750,6 +750,18 @@ fn copy_clipboard(text: String) -> Result<(), String> {
     cb.set_text(text).map_err(|e| e.to_string())
 }
 
+// Muestra/oculta la barra de menú de la ventana (Windows/Linux): en el home estorba, se muestra al
+// entrar a un proyecto. En macOS el menú es global (barra superior del sistema), así que no-op.
+#[tauri::command]
+fn set_menu_visible(window: tauri::Window, visible: bool) {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = if visible { window.show_menu() } else { window.hide_menu() };
+    }
+    #[cfg(target_os = "macos")]
+    let _ = (window, visible);
+}
+
 // Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
 // (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust.
 fn build_menu(app: &tauri::App) -> tauri::Result<()> {
@@ -824,7 +836,12 @@ fn open_new_window(app: &AppHandle) {
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
-    let _ = builder.build();
+    let win = builder.build();
+    // Nace en el home → menú oculto (el frontend lo mostrará al entrar a un proyecto). macOS: global.
+    #[cfg(not(target_os = "macos"))]
+    if let Ok(w) = &win {
+        let _ = w.hide_menu();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -844,6 +861,12 @@ pub fn run() {
             let state = control::start(app.handle().clone());
             app.manage(state);
             build_menu(app)?;
+            // El menú (Archivo/Editar/Ver) arranca oculto en Windows/Linux: en el home estorba, el
+            // frontend lo muestra al entrar a un proyecto (set_menu_visible). En macOS es global → queda.
+            #[cfg(not(target_os = "macos"))]
+            for (_, w) in app.webview_windows() {
+                let _ = w.hide_menu();
+            }
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -861,7 +884,7 @@ pub fn run() {
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, list_skills,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, set_menu_visible, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,
