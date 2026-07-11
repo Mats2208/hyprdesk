@@ -30,6 +30,9 @@ export type AgentLaunch = {
 export type Rect = { x: number; y: number; w: number; h: number };
 export type SysStats = { cpu: number; mem_used: number; mem_total: number };
 export type GlmUsage = { session?: number | null; weekly?: number | null };
+// Consumo de un agente de suscripción (Codex/Claude): % USADO del ciclo de 5h y semanal. Misma
+// forma que GlmUsage. null en cada campo si no aplica; el objeto es null si no hay login/dato.
+export type AgentUsage = { session?: number | null; weekly?: number | null };
 
 export type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string; name?: string; color?: string; cwd?: string; branch?: string };
 export type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[]; profiles?: Profile[] };

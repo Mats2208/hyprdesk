@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Mutex;
 
+mod agent_usage;
 mod browser;
 mod control;
 mod engines;
@@ -887,6 +888,7 @@ pub fn run() {
             touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, set_menu_visible, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
+            agent_usage::codex_usage, agent_usage::claude_usage,
             usage::usage_today,
             browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close
         ])

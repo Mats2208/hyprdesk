@@ -14,14 +14,14 @@ import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 
 export function Shell() {
-  const { stats, glm } = useSystemStats();
+  const { stats, glm, codex, claude } = useSystemStats();
   const sessions = useSessionStore((s) => s.sessions);
   const currentId = useSessionStore((s) => s.currentId);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
   return (
     <div className="ide">
-      <TitleBar stats={stats} glm={glm} />
+      <TitleBar stats={stats} glm={glm} codex={codex} claude={claude} />
       <WorkspaceTabs />
       <WorktreeNotice />
 
