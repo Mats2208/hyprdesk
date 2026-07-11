@@ -297,9 +297,19 @@ fn role_with_memory(role: &str, cwd: &str) -> Result<String, String> {
         return Ok(base);
     }
     match crate::memory::read(cwd) {
-        Some(mem) => Ok(format!(
-            "{base}\n\n--- MEMORIA DE ESTE WORKSPACE (la mantenés vos con save_memory) ---\n\n{mem}"
-        )),
+        Some(mut mem) => {
+            // Cap de costo: la memoria se inyecta en CADA sesión del router. Si creció demasiado,
+            // la recortamos al inyectar (el archivo queda intacto) para no inflar el contexto base.
+            const MAX: usize = 12_000;
+            if mem.len() > MAX {
+                let cut = mem.char_indices().nth(MAX).map(|(i, _)| i).unwrap_or(mem.len());
+                mem.truncate(cut);
+                mem.push_str("\n\n… (memoria recortada — mantenela concisa con save_memory)");
+            }
+            Ok(format!(
+                "{base}\n\n--- MEMORIA DE ESTE WORKSPACE (la mantenés vos con save_memory) ---\n\n{mem}"
+            ))
+        }
         None => Ok(base),
     }
 }
