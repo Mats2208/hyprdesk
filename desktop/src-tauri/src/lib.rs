@@ -456,7 +456,8 @@ fn router_launch(
     // El túnel sigue resolviendo el literal "router" vía este router_id del hub.
     let agent_id = format!("router-{}", uuid::Uuid::new_v4());
     let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None, &engines::AgentOpts::default())?;
-    *state.router_id.lock().unwrap() = Some(agent_id.clone());
+    // R3: registrar el router con el cwd de SU workspace (hub por-workspace, sin singletons globales).
+    state.routers.lock().unwrap().insert(agent_id.clone(), cwd.clone());
     Ok(AgentLaunch {
         agent_id,
         engine,
@@ -591,8 +592,10 @@ fn unregister_worker(app: AppHandle, state: State<'_, ControlState>, id: String)
         return; // ya estaba marcado muerto (evita doble notificación)
     }
     // Notificar al router que su delegado murió (inyección en su PTY, como un mensaje del túnel).
+    // El router_id del worker es workspace-correcto (R3); fallback al único router vivo si viniera vacío.
     let target = if router.is_empty() {
-        state.router_id.lock().unwrap().clone()
+        let map = state.routers.lock().unwrap();
+        if map.len() == 1 { Some(map.keys().next().unwrap().clone()) } else { None }
     } else {
         Some(router)
     };
@@ -697,12 +700,6 @@ fn paste_clipboard() -> Result<(Option<String>, Option<String>), String> {
         }
     }
     Ok((None, cb.get_text().ok()))
-}
-
-// Setea la carpeta del workspace activo (el hub la usa como cwd de los workers).
-#[tauri::command]
-fn set_active_workspace(state: State<'_, ControlState>, folder: String) {
-    *state.active_cwd.lock().unwrap() = Some(folder);
 }
 
 // Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
@@ -816,7 +813,7 @@ pub fn run() {
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, set_active_workspace, rename_workspace, delete_workspace, paste_clipboard,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,

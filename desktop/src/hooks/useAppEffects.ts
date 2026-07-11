@@ -1,5 +1,5 @@
 // Efectos "de pegamento" que antes vivían sueltos en App.tsx: autosave, registro de perfiles en el hub,
-// cwd activo, auto-cierre del toast, animación de cierre de tiles, y fallbacks de stage/tile activo.
+// auto-cierre del toast, animación de cierre de tiles, y fallbacks de stage/tile activo.
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { savedStateOf } from "../store/sessionModel";
@@ -26,12 +26,6 @@ export function useAppEffects() {
       }).catch(() => {});
     }
   }, [sessions]);
-
-  // cwd "activo" del backend apuntando al workspace visible (fallback del túnel).
-  useEffect(() => {
-    const cur = useSessionStore.getState().current();
-    if (cur) invoke("set_active_workspace", { folder: cur.meta.folder }).catch(() => {});
-  }, [currentId]);
 
   // auto-guardar el estado de cada sesión (debounce).
   useEffect(() => {

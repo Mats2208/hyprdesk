@@ -46,8 +46,10 @@ pub struct ProfileInfo {
 #[derive(Clone)]
 pub struct ControlState {
     pub port: u16,
-    pub router_id: Arc<Mutex<Option<String>>>,
-    pub active_cwd: Arc<Mutex<Option<String>>>, // carpeta del workspace abierto
+    // R3: hub por-workspace. Antes había singletons globales (router_id/active_cwd) que se pisaban
+    // con varios workspaces vivos. Ahora un mapa router_id → cwd del workspace: cada router lleva su
+    // propia carpeta, y el destino "router" de un mensaje se resuelve vía el worker emisor.
+    pub routers: Arc<Mutex<HashMap<String, String>>>, // router_id → cwd del workspace
     pub workers: Arc<Mutex<HashMap<String, WorkerInfo>>>, // workers vivos (para list_workers)
     pub profiles: Arc<Mutex<HashMap<String, Vec<ProfileInfo>>>>, // perfiles por router_id (para list_profiles)
     pub questions: Arc<Mutex<HashMap<String, std::sync::mpsc::SyncSender<String>>>>, // ask_user pendientes
@@ -103,8 +105,7 @@ pub fn start(app: AppHandle) -> ControlState {
         .expect("el control server no expuso puerto IP");
     let state = ControlState {
         port,
-        router_id: Arc::new(Mutex::new(None)),
-        active_cwd: Arc::new(Mutex::new(None)),
+        routers: Arc::new(Mutex::new(HashMap::new())),
         workers: Arc::new(Mutex::new(HashMap::new())),
         profiles: Arc::new(Mutex::new(HashMap::new())),
         questions: Arc::new(Mutex::new(HashMap::new())),
@@ -133,8 +134,7 @@ fn json_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
 }
 
 fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state: ControlState) {
-    let router_id = &state.router_id;
-    let active_cwd = &state.active_cwd;
+    let routers = &state.routers;
     let workers = &state.workers;
     let profiles = &state.profiles;
     let questions = &state.questions;
@@ -240,11 +240,11 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 Err(_) => { let _ = req.respond(Response::from_string("bad json").with_status_code(400)); return; }
             };
             let worker_id = uuid::Uuid::new_v4().to_string();
-            // El router que spawnea manda su id y el cwd de SU workspace. Con varios
-            // workspaces vivos no podemos usar un active_cwd global; caemos a él solo
-            // como último recurso.
-            let router = parsed.router.clone().unwrap_or_else(|| {
-                router_id.lock().unwrap().clone().unwrap_or_else(|| "router".into())
+            // El router que spawnea manda su id y el cwd de SU workspace (R3). Fallback si no
+            // vino el id: si hay UN solo router vivo, es ese; si no, "router".
+            let router = parsed.router.clone().filter(|r| !r.is_empty()).unwrap_or_else(|| {
+                let map = routers.lock().unwrap();
+                if map.len() == 1 { map.keys().next().unwrap().clone() } else { "router".into() }
             });
             // Si el router pidió un PERFIL (por id o nombre), lo resolvemos → motor/modelo/effort/persona/color.
             let profile = parsed.profile.as_ref().and_then(|pid| {
@@ -259,11 +259,13 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 .map(|p| p.engine.clone())
                 .or(parsed.engine.clone())
                 .unwrap_or_else(|| "claude".into());
+            // ws_root = cwd que mandó el router; fallback al cwd registrado de ESE router (R3,
+            // por-workspace, no un global); último recurso, el home.
             let ws_root = parsed
                 .cwd
                 .clone()
                 .filter(|c| !c.is_empty())
-                .or_else(|| active_cwd.lock().unwrap().clone())
+                .or_else(|| routers.lock().unwrap().get(&router).cloned())
                 .unwrap_or_else(|| crate::home_dir().to_string_lossy().into_owned());
             // Si el ws es git → worker en su propio worktree/rama (aislamiento). Si no → comparte carpeta.
             let (cwd, branch) = match crate::worktree::create(&ws_root, &worker_id) {
@@ -381,9 +383,15 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 Ok(m) => m,
                 Err(_) => { let _ = req.respond(Response::from_string("bad json").with_status_code(400)); return; }
             };
-            // Resolver el pty destino: "router" → router_id; si no, el id tal cual (= pty id).
+            // Resolver el pty destino. "router" es ambiguo con varios workspaces (R3): lo resolvemos
+            // vía el worker EMISOR → su router_id (workspace-correcto). Si el emisor no es un worker
+            // conocido, caemos a: el único router vivo, si hay uno solo. Si no, el id tal cual.
             let target = if msg.to == "router" {
-                router_id.lock().unwrap().clone()
+                workers.lock().unwrap().get(&msg.from).map(|w| w.router_id.clone())
+                    .or_else(|| {
+                        let map = routers.lock().unwrap();
+                        if map.len() == 1 { Some(map.keys().next().unwrap().clone()) } else { None }
+                    })
             } else {
                 Some(msg.to.clone())
             };
