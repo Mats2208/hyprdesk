@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Profile } from "./types";
+import type { Profile, SkillInfo } from "./types";
 
 const COLORS = ["#34d399", "#60a5fa", "#c084fc", "#fbbf24", "#f87171", "#22d3ee", "#f472b6", "#a3e635"];
 
@@ -17,10 +17,16 @@ function catalogText(c: Catalog | null): string {
   esa lista (formato "provider/model"). opencode NO usa "effort" → effort=null.`;
 }
 
-function buildPrompt(desc: string, cat: Catalog | null): string {
+function buildPrompt(desc: string, cat: Catalog | null, skillNames: string[]): string {
+  const skillsLine = skillNames.length
+    ? `\n- "skills": array (posiblemente vacío) con los nombres de skills de DOMINIO que le convienen a
+  este agente. Elegí SOLO de esta lista (exactos, no inventes): ${skillNames.join(", ")}. Si ninguna
+  aplica, usá []. No incluyas "ponytail" (ya va siempre).`
+    : "";
+  const skillsField = skillNames.length ? `, "skills": string[]` : "";
   return `Sos un configurador de agentes de IA para HyprDesk (un orquestador de agentes de código).
 Dada la descripción de abajo, devolvé SOLO un objeto JSON válido (sin markdown, sin \`\`\`, sin texto extra) con EXACTAMENTE este shape:
-{"name": string corto (2-4 palabras), "engine": "claude"|"codex"|"opencode", "model": string|null, "effort": "low"|"medium"|"high"|null, "persona": string (instrucciones detalladas en 2da persona: rol, arquitectura, endpoints/reglas específicas, criterios de calidad), "color": string hex "#rrggbb", "rules": {"canMerge": "always"|"ask"|"never"}}
+{"name": string corto (2-4 palabras), "engine": "claude"|"codex"|"opencode", "model": string|null, "effort": "low"|"medium"|"high"|null, "persona": string (instrucciones detalladas en 2da persona: rol, arquitectura, endpoints/reglas específicas, criterios de calidad), "color": string hex "#rrggbb", "rules": {"canMerge": "always"|"ask"|"never"}${skillsField}}
 
 ${catalogText(cat)}
 
@@ -29,7 +35,7 @@ Reglas:
   un modelo que no está en la lista, elegí el más parecido de la lista (NO inventes strings).
 - "effort" solo aplica a codex; para claude y opencode usá null.
 - La "persona" debe ser detallada y accionable, no genérica.
-- Si el usuario menciona merge/push a git, reflejalo en rules.canMerge Y explícitamente en la persona.
+- Si el usuario menciona merge/push a git, reflejalo en rules.canMerge Y explícitamente en la persona.${skillsLine}
 
 Descripción del usuario:
 """${desc}"""
@@ -54,7 +60,7 @@ const CloseIcon = () => (
 
 // Perfil en blanco para el modo manual (sin IA).
 function blankProfile(): Profile {
-  return { id: crypto.randomUUID(), name: "", engine: "claude", model: undefined, effort: undefined, persona: "", color: COLORS[0], rules: { canMerge: "ask" } };
+  return { id: crypto.randomUUID(), name: "", engine: "claude", model: undefined, effort: undefined, persona: "", color: COLORS[0], rules: { canMerge: "ask" }, skills: [] };
 }
 
 export function CreateAgentModal({
@@ -71,8 +77,10 @@ export function CreateAgentModal({
   const [error, setError] = useState<string | null>(null);
   const [p, setP] = useState<Profile | null>(null);
   const [cat, setCat] = useState<Catalog | null>(null);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
 
   useEffect(() => { invoke<Catalog>("list_models").then(setCat).catch(() => {}); }, []);
+  useEffect(() => { invoke<SkillInfo[]>("list_skills").then(setSkills).catch(() => {}); }, []);
 
   // Cambiar de modo: manual arranca con un perfil en blanco (form directo); IA vuelve al describir.
   const switchMode = (m: "ai" | "manual") => {
@@ -85,8 +93,11 @@ export function CreateAgentModal({
     if (!desc.trim() || gen) return;
     setGen(true); setError(null);
     try {
-      const raw = await invoke<string>("run_assistant", { prompt: buildPrompt(desc, cat) });
+      const skillNames = skills.map((s) => s.name);
+      const raw = await invoke<string>("run_assistant", { prompt: buildPrompt(desc, cat, skillNames) });
       const o = parseProfile(raw);
+      // solo aceptamos skills que existan de verdad (la IA a veces inventa)
+      const picked = Array.isArray(o.skills) ? o.skills.filter((s: unknown) => typeof s === "string" && skillNames.includes(s)) : [];
       setP({
         id: crypto.randomUUID(),
         name: o.name || "Agente",
@@ -96,6 +107,7 @@ export function CreateAgentModal({
         persona: o.persona || "",
         color: /^#[0-9a-f]{6}$/i.test(o.color || "") ? o.color : COLORS[0],
         rules: { canMerge: o.rules?.canMerge || "ask" },
+        skills: picked,
       });
     } catch (e) {
       setError("No pude generar el perfil. Revisá el motor asistente en Configuración. " + String(e));
@@ -149,6 +161,23 @@ export function CreateAgentModal({
                 </label>
               </div>
               <label className="modal__field"><span>Persona / instrucciones</span><textarea value={p.persona} rows={6} onChange={(e) => upd({ persona: e.target.value })} /></label>
+              {skills.length > 0 && (
+                <div className="modal__field"><span>Skills de dominio</span>
+                  <div className="ca__skills">
+                    {skills.map((s) => {
+                      const on = (p.skills || []).includes(s.name);
+                      return (
+                        <button
+                          key={s.name} type="button" title={s.summary}
+                          className={`ca__skill ${on ? "ca__skill--on" : ""}`}
+                          onClick={() => upd({ skills: on ? (p.skills || []).filter((x) => x !== s.name) : [...(p.skills || []), s.name] })}
+                        >{s.name}</button>
+                      );
+                    })}
+                  </div>
+                  <div className="modal__hint">Se inyectan en este agente al lanzarlo (además de Ponytail y las default-on).</div>
+                </div>
+              )}
               <div className="ca__row">
                 <label className="modal__field"><span>Puede mergear a git</span>
                   <select value={p.rules?.canMerge || "ask"} onChange={(e) => upd({ rules: { canMerge: e.target.value as any } })}>

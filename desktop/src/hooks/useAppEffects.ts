@@ -21,7 +21,7 @@ export function useAppEffects() {
         routerId: s.routerId,
         profiles: s.profiles.map((p) => ({
           id: p.id, name: p.name, engine: p.engine, model: p.model ?? null,
-          effort: p.effort ?? null, persona: p.persona, color: p.color ?? null,
+          effort: p.effort ?? null, persona: p.persona, color: p.color ?? null, skills: p.skills ?? [],
         })),
       }).catch(() => {});
     }

@@ -530,13 +530,15 @@ fn spawn_profile_worker(
     persona: Option<String>,
     task: Option<String>,
     name: Option<String>,
+    skills: Option<Vec<String>>,
 ) -> Result<AgentLaunch, String> {
     let agent_id = uuid::Uuid::new_v4().to_string();
+    let skills = skills.unwrap_or_default();
     let opts = engines::AgentOpts {
         model: model.as_deref(),
         effort: effort.as_deref(),
         persona: persona.as_deref(),
-        ..Default::default()
+        skills: &skills,
     };
     // ws git → worktree/rama aislada; si no → comparte la carpeta.
     let ws_root = cwd.clone();
@@ -701,6 +703,12 @@ fn delete_workspace(id: String) -> Result<(), String> {
     workspace::delete_workspace(&id)
 }
 
+// Skills de dominio disponibles (para el hub: selector de perfiles + toggles default-on en Settings).
+#[tauri::command]
+fn list_skills() -> Vec<engines::SkillInfo> {
+    engines::list_skills()
+}
+
 // Lee el portapapeles del SO (Cmd+V en un tile). Si hay una IMAGEN, la guarda como PNG en
 // temp y devuelve su ruta (los agentes leen rutas de imágenes). Si no, devuelve el texto.
 // Devuelve (ruta_imagen?, texto?). Necesario porque el webview no entrega imágenes por el
@@ -830,7 +838,7 @@ pub fn run() {
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, rename_workspace, delete_workspace, paste_clipboard,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,

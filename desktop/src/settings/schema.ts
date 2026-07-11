@@ -17,7 +17,7 @@ export type Field = {
   visibleWhen?: (get: (k: string) => string) => boolean;
 };
 
-export const CATEGORIES = ["Apariencia", "Terminal", "Agentes y permisos", "Proveedores y API keys", "Atajos"];
+export const CATEGORIES = ["Apariencia", "Terminal", "Agentes y permisos", "Skills", "Proveedores y API keys", "Atajos"];
 
 export const SCHEMA: Field[] = [
   // — Apariencia (scope theme: store de tema) —

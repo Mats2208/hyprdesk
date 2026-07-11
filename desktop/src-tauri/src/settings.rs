@@ -38,6 +38,9 @@ pub struct Settings {
     // API key de z.ai (GLM) para mostrar la cuota (5h/semanal) en el header. Opcional.
     #[serde(default, rename = "zaiApiKey")]
     pub zai_api_key: Option<String>,
+    // Skills de dominio "default-on": se inyectan en TODO worker automáticamente (el hub las gestiona).
+    #[serde(default, rename = "defaultSkills")]
+    pub default_skills: Vec<String>,
 }
 
 // Helper para engines: ¿los agentes deben PEDIR aprobación? (modo "ask")

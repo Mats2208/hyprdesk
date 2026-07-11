@@ -230,7 +230,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const l = await invoke<AgentLaunch>("spawn_profile_worker", {
         engine: profile.engine, cwd: cur.meta.folder, routerId: cur.routerId,
         model: profile.model || null, effort: profile.effort || null, persona: profile.persona || null,
-        task: task || null, name: profile.name || null,
+        task: task || null, name: profile.name || null, skills: profile.skills || null,
       });
       const t = tileFromLaunch(l, "worker", profile.name);
       t.name = profile.name; t.color = profile.color;

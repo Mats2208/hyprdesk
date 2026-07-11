@@ -41,6 +41,8 @@ pub struct ProfileInfo {
     pub persona: String,
     #[serde(default)]
     pub color: Option<String>,
+    #[serde(default)]
+    pub skills: Vec<String>, // skills de dominio fijas de este perfil (se inyectan al lanzarlo)
 }
 
 #[derive(Clone)]
@@ -237,11 +239,7 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
         }
         "/list_skills" => {
             // skills de dominio disponibles para que el router las elija al delegar (Ponytail no va acá)
-            let skills: Vec<serde_json::Value> = crate::engines::list_skills()
-                .into_iter()
-                .map(|(name, summary)| json!({ "name": name, "summary": summary }))
-                .collect();
-            let _ = req.respond(json_response(json!({ "skills": skills }).to_string()));
+            let _ = req.respond(json_response(json!({ "skills": crate::engines::list_skills() }).to_string()));
         }
         "/spawn_worker" => {
             let body = read_body(&mut req);
@@ -287,8 +285,10 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 Some(p) => (p.model.clone(), p.effort.clone(), Some(p.persona.clone())),
                 None => (None, None, None),
             };
-            // Skills de dominio que el router eligió para este worker (opt-in; Ponytail va igual).
-            let skills = parsed.skills.clone().unwrap_or_default();
+            // Skills de dominio para este worker: las fijas del perfil (si usó uno) + las que el
+            // router pidió en el spawn. Ponytail y las default-on se agregan solas en engines.
+            let mut skills = profile.as_ref().map(|p| p.skills.clone()).unwrap_or_default();
+            skills.extend(parsed.skills.clone().unwrap_or_default());
             let opts = crate::engines::AgentOpts {
                 model: p_model.as_deref(),
                 effort: p_effort.as_deref(),

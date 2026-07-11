@@ -5,11 +5,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { CATEGORIES, SCHEMA, type Field } from "./schema";
 import { ProvidersSection } from "./ProvidersSection";
 import { KeybindingsSection } from "./KeybindingsSection";
+import { SkillsSection } from "./SkillsSection";
 import { useThemeStore } from "../theme/theme";
 
-const SPECIAL = new Set(["Proveedores y API keys", "Atajos"]); // categorías con sección extra (no solo schema)
+const SPECIAL = new Set(["Skills", "Proveedores y API keys", "Atajos"]); // categorías con sección extra (no solo schema)
 
-type Settings = { assistant: { engine: string; model?: string | null; effort?: string | null }; permissionMode?: string; zaiApiKey?: string | null };
+type Settings = { assistant: { engine: string; model?: string | null; effort?: string | null }; permissionMode?: string; zaiApiKey?: string | null; defaultSkills?: string[] };
 type Backend = { assistantEngine: string; assistantModel: string; assistantEffort: string; permissionMode: string; zaiApiKey: string };
 const EMPTY: Backend = { assistantEngine: "claude", assistantModel: "", assistantEffort: "", permissionMode: "auto", zaiApiKey: "" };
 
@@ -17,18 +18,42 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState(CATEGORIES[0]);
   const [backend, setBackend] = useState<Backend>(EMPTY);
+  const [defaultSkills, setDefaultSkills] = useState<string[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const theme = useThemeStore();
 
+  // Refs con lo último de cada scope backend: el guardado (debounced) los lee al disparar, así no
+  // pisa campos que cambiaron en paralelo (ej. togglear una skill y cambiar otro ajuste juntos).
+  const backendRef = useRef(backend); backendRef.current = backend;
+  const skillsRef = useRef(defaultSkills); skillsRef.current = defaultSkills;
+
   useEffect(() => {
-    invoke<Settings>("load_settings").then((s) => setBackend({
-      assistantEngine: s.assistant?.engine ?? "claude",
-      assistantModel: s.assistant?.model ?? "",
-      assistantEffort: s.assistant?.effort ?? "",
-      permissionMode: s.permissionMode === "ask" ? "ask" : "auto",
-      zaiApiKey: s.zaiApiKey ?? "",
-    })).catch(() => {});
+    invoke<Settings>("load_settings").then((s) => {
+      setBackend({
+        assistantEngine: s.assistant?.engine ?? "claude",
+        assistantModel: s.assistant?.model ?? "",
+        assistantEffort: s.assistant?.effort ?? "",
+        permissionMode: s.permissionMode === "ask" ? "ask" : "auto",
+        zaiApiKey: s.zaiApiKey ?? "",
+      });
+      setDefaultSkills(s.defaultSkills ?? []);
+    }).catch(() => {});
   }, []);
+
+  // Guarda settings.json (debounced) reconstruyendo TODO el objeto backend desde los refs frescos.
+  const scheduleSave = () => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const b = backendRef.current;
+      const settings: Settings = {
+        assistant: { engine: b.assistantEngine, model: b.assistantModel.trim() || null, effort: b.assistantEffort.trim() || null },
+        permissionMode: b.permissionMode,
+        zaiApiKey: b.zaiApiKey.trim() || null,
+        defaultSkills: skillsRef.current,
+      };
+      invoke("save_settings", { settings }).catch(() => {});
+    }, 400);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -58,16 +83,16 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       return;
     }
     const next = { ...backend, [f.key]: val } as Backend;
+    backendRef.current = next; // que scheduleSave lea el valor recién puesto sin esperar el re-render
     setBackend(next);
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const settings: Settings = {
-        assistant: { engine: next.assistantEngine, model: next.assistantModel.trim() || null, effort: next.assistantEffort.trim() || null },
-        permissionMode: next.permissionMode,
-        zaiApiKey: next.zaiApiKey.trim() || null,
-      };
-      invoke("save_settings", { settings }).catch(() => {});
-    }, 400);
+    scheduleSave();
+  };
+
+  // Togglear una skill default-on: actualiza estado y persiste (preservando el resto de settings).
+  const onSkills = (next: string[]) => {
+    skillsRef.current = next;
+    setDefaultSkills(next);
+    scheduleSave();
   };
 
   // Campos visibles: por búsqueda (todas las categorías) o por categoría activa.
@@ -108,6 +133,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
                     <Control field={f} value={read(f.key)} onChange={(v) => write(f, v)} />
                   </div>
                 ))}
+                {c === "Skills" && <SkillsSection value={defaultSkills} onChange={onSkills} />}
                 {c === "Proveedores y API keys" && <ProvidersSection />}
                 {c === "Atajos" && <KeybindingsSection />}
               </section>

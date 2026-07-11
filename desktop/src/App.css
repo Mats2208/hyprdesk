@@ -886,6 +886,40 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .ca__color { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; transition: transform 0.12s; }
 .ca__color:hover { transform: scale(1.12); }
 .ca__color--on { border-color: var(--text); }
+
+/* chips de skills de dominio en el modal Crear agente */
+.ca__skills { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+.ca__skill {
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--surface-2);
+  color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.ca__skill:hover { color: var(--text); border-color: var(--hairline-2); }
+.ca__skill--on { color: var(--router); background: var(--router-soft); border-color: transparent; }
+
+/* hub de skills en Configuración (toggles default-on) */
+.skills { display: flex; flex-direction: column; gap: 2px; }
+.skills__row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border-radius: 7px;
+  cursor: pointer; transition: background 0.12s;
+  width: 100%; border: none; background: none; text-align: left; font: inherit; color: inherit;
+}
+.skills__row:hover { background: var(--surface-2); }
+.skills__row--fixed { cursor: default; opacity: 0.75; }
+.skills__row--fixed:hover { background: transparent; }
+.skills__check {
+  flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 5px;
+  border: 1.5px solid var(--hairline-2); display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: transparent; transition: all 0.12s;
+}
+.skills__check--on { background: var(--router); border-color: var(--router); color: #fff; }
+.skills__meta { display: flex; flex-direction: column; gap: 2px; }
+.skills__name { font-size: 13px; font-weight: 500; color: var(--text); }
+.skills__tag {
+  margin-left: 6px; font-style: normal; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.4px; color: var(--router); background: var(--router-soft); padding: 1px 6px; border-radius: 4px;
+}
+.skills__summary { font-size: 12px; color: var(--muted); }
+
 .ca__foot { gap: 10px; }
 .modal__ghost {
   padding: 9px 18px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--surface-2);

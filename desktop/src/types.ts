@@ -16,7 +16,11 @@ export type Term = {
 export type Profile = {
   id: string; name: string; engine: string; model?: string; effort?: string;
   persona: string; color: string; rules?: { canMerge?: "always" | "ask" | "never" };
+  skills?: string[]; // skills de dominio fijas del perfil (se inyectan al lanzarlo)
 };
+
+// Skill de dominio disponible (del hub): metadato para selectores y toggles.
+export type SkillInfo = { name: string; summary: string };
 
 export type AgentLaunch = {
   agentId: string; engine: string; argv: string[]; env: [string, string][];

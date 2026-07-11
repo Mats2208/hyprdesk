@@ -291,29 +291,47 @@ fn read_skill(stem: &str) -> Option<String> {
     if txt.is_empty() { None } else { Some(txt.to_string()) }
 }
 
-// Compone el rol con las skills: Ponytail SIEMPRE (todo agente, todo motor) + las de DOMINIO que
-// pidió el router al spawnear (`extra`, opt-in por worker). Best-effort: si falta un archivo,
+// Compone el rol con las skills. Ponytail va SIEMPRE (todo agente, todo motor). Las de DOMINIO son
+// solo para WORKERS: las "default-on" que el usuario marcó en settings + las `extra` que el router
+// pidió al spawnear (perfil o param `skills`). Dedup por stem. Best-effort: si falta un archivo,
 // seguimos sin esa skill (no rompe el lanzamiento).
-fn with_skills(role_txt: String, extra: &[String]) -> String {
+fn with_skills(role_txt: String, extra: &[String], role: &str) -> String {
+    use std::collections::HashSet;
     let mut out = role_txt;
+    let mut seen: HashSet<String> = HashSet::new();
     if let Some(txt) = read_skill("ponytail") {
         out = format!("{out}\n\n=== SKILL SIEMPRE ACTIVA ===\n\n{txt}");
+        seen.insert("ponytail".into());
     }
-    for name in extra {
+    // Skills de dominio: solo workers. Router queda con Ponytail (orquesta, no hace trabajo de dominio).
+    if role != "worker" {
+        return out;
+    }
+    let mut domain: Vec<String> = crate::settings::load_settings().default_skills; // default-on del usuario
+    domain.extend(extra.iter().cloned()); // + las que pidió el router para ESTE worker
+    for name in &domain {
         let stem = skill_stem(name);
-        if stem == "ponytail" || stem.is_empty() {
-            continue; // ponytail ya está; nombre vacío = basura
+        if stem.is_empty() || seen.contains(&stem) {
+            continue; // vacío/basura o ya inyectada
         }
         if let Some(txt) = read_skill(&stem) {
             out = format!("{out}\n\n=== SKILL DE DOMINIO ({stem}) ===\n\n{txt}");
+            seen.insert(stem);
         }
     }
     out
 }
 
-// Skills de DOMINIO disponibles (para que el router elija al delegar). Enumera `resources/skills/*.md`
-// menos Ponytail (siempre activa). Devuelve (stem, resumen = primera línea con texto, sin `#`/`>`).
-pub fn list_skills() -> Vec<(String, String)> {
+// Metadato de una skill de dominio para la UI / el router.
+#[derive(Serialize, Clone)]
+pub struct SkillInfo {
+    pub name: String,    // stem del archivo (frontend, backend, …)
+    pub summary: String, // primera línea con texto del .md
+}
+
+// Skills de DOMINIO disponibles (para el hub y para que el router elija al delegar). Enumera
+// `resources/skills/*.md` menos Ponytail (siempre activa). Ordenadas por nombre.
+pub fn list_skills() -> Vec<SkillInfo> {
     let dir = match res_file("skills") {
         Ok(d) => d,
         Err(_) => return Vec::new(),
@@ -325,7 +343,7 @@ pub fn list_skills() -> Vec<(String, String)> {
             if path.extension().and_then(|x| x.to_str()) != Some("md") {
                 continue;
             }
-            let stem = match path.file_stem().and_then(|x| x.to_str()) {
+            let name = match path.file_stem().and_then(|x| x.to_str()) {
                 Some(s) if s != "ponytail" => s.to_string(),
                 _ => continue,
             };
@@ -334,10 +352,10 @@ pub fn list_skills() -> Vec<(String, String)> {
                     .map(|l| l.trim_start_matches(['#', '>', ' ']).trim().to_string())
                     .find(|l| !l.is_empty()))
                 .unwrap_or_default();
-            out.push((stem, summary));
+            out.push(SkillInfo { name, summary });
         }
     }
-    out.sort();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
     out
 }
 
@@ -385,7 +403,7 @@ pub fn build_agent(
     let env = mcp_env(port, agent_id, role, cwd, router_id);
     let ask = crate::settings::ask_permission(); // modo "preguntar" vs auto (bypass)
     // Rol final = base + memoria (router) + persona (perfil). Se compone una vez acá.
-    let role_txt = with_skills(with_persona(role_with_memory(role, cwd)?, opts.persona), opts.skills);
+    let role_txt = with_skills(with_persona(role_with_memory(role, cwd)?, opts.persona), opts.skills, role);
     match engine {
         "claude" => build_claude(agent_id, &role_txt, &env, resume_id, task, opts, ask),
         "codex" => build_codex(&role_txt, cwd, &env, resume_id, task, opts, ask),
