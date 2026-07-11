@@ -12,6 +12,7 @@ async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Pro
   const next: Term[] = [];
   let rId: string | null = null;
   let err: string | null = null;
+  let restoreFailed = 0; // workers guardados que no se pudieron resumir (visibilidad al usuario)
   const routerTile = saved.tiles.find((t) => t.role === "router");
   if (routerTile) {
     try {
@@ -30,7 +31,10 @@ async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Pro
       const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
       wt.name = t.name; wt.color = t.color;
       next.push(wt);
-    } catch { /* worker que no resume, lo salteamos */ }
+    } catch { restoreFailed++; }
+  }
+  if (restoreFailed > 0) {
+    useUiStore.getState().setToast(`⚠️ ${restoreFailed} worker(s) no se pudieron restaurar (sesión no encontrada)`);
   }
   for (const t of saved.tiles.filter((x) => x.kind === "browser")) {
     next.push({ id: t.id, title: t.title, role: "worker", kind: t.kind, url: t.url });
@@ -229,7 +233,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const t = tileFromLaunch(l, "worker", profile.name);
       t.name = profile.name; t.color = profile.color;
       get().updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
-    } catch { /* error de lanzamiento */ }
+    } catch (e) { useUiStore.getState().setToast(`No pude lanzar "${profile.name}": ${String(e)}`); }
   },
 
   launchTeam: async (selected, goal) => {

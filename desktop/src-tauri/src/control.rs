@@ -291,7 +291,10 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                     );
                     let _ = req.respond(json_response(json!({ "workerId": worker_id }).to_string()));
                 }
-                Err(e) => { let _ = req.respond(Response::from_string(e).with_status_code(500)); }
+                Err(e) => {
+                    let _ = app.emit("tunnel-error", format!("El router no pudo crear un worker: {e}"));
+                    let _ = req.respond(Response::from_string(e).with_status_code(500));
+                }
             }
         }
         "/list_profiles" => {
