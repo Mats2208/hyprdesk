@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { BrandMark } from "./BrandMark";
+import ambientSvg from "./assets/brand/ambient.svg?raw";
 
 export type WorkspaceMeta = { id: string; name: string; folder: string; lastOpened: number; managed?: boolean };
 
@@ -69,16 +71,11 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
 
   return (
     <div className="welcome">
+      <div className="welcome__ambient" aria-hidden dangerouslySetInnerHTML={{ __html: ambientSvg }} />
       <div className="welcome__inner">
         <header className="welcome__hero">
           <div className="welcome__logo">
-            <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
-              <path d="M16 16L7 8M16 16L26 9M16 16L15 27" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
-              <circle cx="16" cy="16" r="4.4" fill="currentColor" />
-              <circle cx="7" cy="8" r="2.6" fill="currentColor" />
-              <circle cx="26" cy="9" r="2.6" fill="currentColor" />
-              <circle cx="15" cy="27" r="2.6" fill="currentColor" />
-            </svg>
+            <BrandMark size={30} />
           </div>
           <div>
             <h1 className="welcome__name">HyprDesk</h1>

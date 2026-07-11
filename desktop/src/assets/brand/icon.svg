@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">HyprDesk orchestration mark</title>
+  <desc id="desc">A router connected to three workers.</desc>
+  <style>
+    .ink { fill: currentColor; stroke: currentColor; }
+    .line { fill: none; stroke: currentColor; stroke-linecap: square; stroke-linejoin: miter; }
+    .accent { fill: var(--hypr-accent, #5f819b); }
+  </style>
+  <!-- Set --hypr-accent: currentColor for a strict one-colour rendering. -->
+  <path class="line" stroke-width="3" d="M23 32H33M33 12V52M33 12H43M33 32H43M33 52H43"/>
+  <rect class="ink" x="7" y="22" width="16" height="20" rx="2" stroke-width="2"/>
+  <path class="accent" d="M12 27h6v3h-6zm0 7h6v3h-6zm0 7h6v3h-6z"/>
+  <rect class="ink" x="43" y="5" width="15" height="14" rx="1.5"/>
+  <rect class="ink" x="43" y="25" width="15" height="14" rx="1.5"/>
+  <rect class="ink" x="43" y="45" width="15" height="14" rx="1.5"/>
+  <path class="accent" d="M47 10h7v4h-7zm0 20h7v4h-7zm0 20h7v4h-7z"/>
+</svg>

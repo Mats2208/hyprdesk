@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HyprDesk brand assets</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #151515; color: #e7e7e7; font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+      header { max-width: 1200px; margin: 0 auto; padding: 28px 24px 20px; border-bottom: 1px solid #393939; }
+      h1 { font-size: 14px; font-weight: 600; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+      p { color: #909090; margin: 5px 0 0; }
+      main { display: grid; gap: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1200px; margin: 0 auto; background: #393939; }
+      .theme { min-height: 720px; overflow: hidden; padding: 28px; position: relative; background-color: var(--surface); color: var(--ink); }
+      .theme::before { background: url('./ambient.svg') center/cover; content: ''; inset: 0; opacity: .62; pointer-events: none; position: absolute; filter: var(--ambient-filter); }
+      .theme > * { position: relative; }
+      .dark { --surface: #1f1f1f; --ink: #f0f1f2; --ambient-filter: invert(1); }
+      .light { --surface: #fff; --ink: #202226; --ambient-filter: none; }
+      .label { border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent); display: flex; justify-content: space-between; margin-bottom: 32px; padding-bottom: 10px; }
+      .asset { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); margin-bottom: 18px; padding: 18px; }
+      .asset h2 { font-size: 11px; font-weight: 500; letter-spacing: .08em; margin: 0 0 16px; text-transform: uppercase; }
+      .icon-row { align-items: center; display: flex; gap: 22px; }
+      .icon { height: 72px; width: 72px; }
+      .icon.small { height: 32px; width: 32px; }
+      .dark .icon { filter: invert(1) hue-rotate(180deg) saturate(.65); }
+      .light .icon { filter: none; }
+      .sizes { color: color-mix(in srgb, currentColor 62%, transparent); display: flex; gap: 12px; align-items: center; }
+      .exports { align-items: end; display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+      .export { align-items: center; color: color-mix(in srgb, currentColor 58%, transparent); display: flex; flex-direction: column; font-size: 9px; gap: 5px; }
+      .export img { display: block; max-height: 46px; max-width: 46px; }
+      .ambient { background: url('./ambient.svg') center/cover; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); height: 170px; filter: var(--ambient-filter); margin: -1px; }
+      .grain { background-color: var(--surface); background-image: url('./grain.png'); border: 1px solid color-mix(in srgb, currentColor 18%, transparent); height: 90px; }
+      .note { color: color-mix(in srgb, currentColor 58%, transparent); font-size: 11px; margin-top: 10px; }
+      @media (max-width: 720px) { main { grid-template-columns: 1fr; } .theme { min-height: auto; } }
+    </style>
+  </head>
+  <body>
+    <header><h1>HyprDesk / Brand assets</h1><p>Router → worker system · graphite ink with contained steel-blue signal</p></header>
+    <main>
+      <section class="theme dark"><div class="label"><span>01 / DARK</span><span>#1F1F1F</span></div><div class="asset"><h2>App icon / SVG master + PNG exports</h2><div class="icon-row"><img class="icon" src="./icon.svg" alt="HyprDesk icon"><div class="sizes"><img class="icon small" src="./icon-32.png" alt=""><span>32px clarity check</span></div></div><div class="exports"><span class="export"><img src="./icon-512.png" alt="">512</span><span class="export"><img src="./icon-256.png" alt="">256</span><span class="export"><img src="./icon-128.png" alt="">128</span><span class="export"><img src="./icon-64.png" alt="">64</span><span class="export"><img src="./icon-32.png" alt="">32</span></div><div class="note">The master SVG inherits currentColor when inlined; set --hypr-accent: currentColor for mono.</div></div><div class="asset"><h2>Ambient blueprint</h2><div class="ambient"></div></div><div class="asset"><h2>Surface grain / 128px tile</h2><div class="grain"></div></div></section>
+      <section class="theme light"><div class="label"><span>02 / LIGHT</span><span>#FFFFFF</span></div><div class="asset"><h2>App icon / SVG master + PNG exports</h2><div class="icon-row"><img class="icon" src="./icon.svg" alt="HyprDesk icon"><div class="sizes"><img class="icon small" src="./icon-32.png" alt=""><span>32px clarity check</span></div></div><div class="exports"><span class="export"><img src="./icon-512.png" alt="">512</span><span class="export"><img src="./icon-256.png" alt="">256</span><span class="export"><img src="./icon-128.png" alt="">128</span><span class="export"><img src="./icon-64.png" alt="">64</span><span class="export"><img src="./icon-32.png" alt="">32</span></div><div class="note">Graphite architecture, with the steel-blue mark used only as a signal.</div></div><div class="asset"><h2>Ambient blueprint</h2><div class="ambient"></div></div><div class="asset"><h2>Surface grain / 128px tile</h2><div class="grain"></div></div></section>
+    </main>
+  </body>
+</html>

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { THEMES, THEME_LABEL, useThemeStore } from "../theme/theme";
 import { useUiStore } from "../store/uiStore";
+import { BrandMark } from "../BrandMark";
 
 const ENGINES = [
   { id: "claude", name: "Claude Code", note: "requerido — instalá y logueá `claude`" },
@@ -73,6 +74,7 @@ export function Welcome() {
   return (
     <div className="modal-overlay wel__overlay">
       <div className="wel">
+        <div className="wel__brand"><BrandMark size={22} /></div>
         <div className="wel__dots">
           {steps.map((_, i) => <span key={i} className={`wel__dot ${i === step ? "wel__dot--on" : ""}`} />)}
         </div>

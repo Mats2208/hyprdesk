@@ -3,6 +3,7 @@ import type { GlmUsage, SysStats } from "../types";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 import { THEME_LABEL, useThemeStore } from "../theme/theme";
+import { BrandMark } from "../BrandMark";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
@@ -32,6 +33,7 @@ export function TitleBar({ stats, glm }: { stats: SysStats | null; glm: GlmUsage
         )}
       </div>
       <div className="titlebar__title">
+        <BrandMark size={15} className="titlebar__mark" />
         <span className="titlebar__app">HyprDesk</span>
         <span className="titlebar__sep">·</span>
         <span className="titlebar__ws">{current?.meta.name ?? ""}</span>

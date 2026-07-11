@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <style>
+    .grid { fill: none; stroke: currentColor; stroke-width: 1; opacity: .10; shape-rendering: crispEdges; }
+    .contour { fill: none; stroke: currentColor; stroke-width: 1.25; opacity: .18; }
+    .route { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .24; stroke-linecap: square; stroke-linejoin: miter; }
+    .node { fill: currentColor; opacity: .34; }
+  </style>
+  <g class="grid">
+    <path d="M0 60H1440M0 180H1440M0 300H1440M0 420H1440M0 540H1440M0 660H1440M0 780H1440M0 840H1440"/>
+    <path d="M60 0V900M180 0V900M300 0V900M420 0V900M540 0V900M660 0V900M780 0V900M900 0V900M1020 0V900M1140 0V900M1260 0V900M1380 0V900"/>
+  </g>
+  <g class="contour">
+    <path d="M-64 510C104 434 204 432 318 493s209 70 332 4 243-81 362-10 193 73 324 13 187-70 252-111"/>
+    <path d="M-64 548c170-77 269-76 382-15s210 70 332 4 243-81 362-10 193 73 324 13 187-70 252-111"/>
+    <path d="M-64 586c170-77 269-76 382-15s210 70 332 4 243-81 362-10 193 73 324 13 187-70 252-111"/>
+    <path d="M-64 624c170-77 269-76 382-15s210 70 332 4 243-81 362-10 193 73 324 13 187-70 252-111"/>
+    <path d="M-64 662c170-77 269-76 382-15s210 70 332 4 243-81 362-10 193 73 324 13 187-70 252-111"/>
+  </g>
+  <g class="route">
+    <path d="M186 166h126v78h136m-136 0v92h136m-136-92v184h136"/>
+    <path d="M1004 232h130v-58h132m-132 58v90h132m-132-90v242h132"/>
+    <path d="M655 675h116v-62h128m-128 62v76h128m-128-76v212h128"/>
+  </g>
+  <g class="node">
+    <rect x="174" y="154" width="24" height="24" rx="2"/><rect x="448" y="232" width="18" height="18" rx="1"/><rect x="448" y="324" width="18" height="18" rx="1"/><rect x="448" y="416" width="18" height="18" rx="1"/>
+    <rect x="992" y="220" width="24" height="24" rx="2"/><rect x="1266" y="162" width="18" height="18" rx="1"/><rect x="1266" y="314" width="18" height="18" rx="1"/><rect x="1266" y="466" width="18" height="18" rx="1"/>
+    <rect x="643" y="663" width="24" height="24" rx="2"/><rect x="899" y="604" width="18" height="18" rx="1"/><rect x="899" y="742" width="18" height="18" rx="1"/><rect x="899" y="878" width="18" height="18" rx="1"/>
+  </g>
+</svg>
