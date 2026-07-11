@@ -46,6 +46,7 @@ export function TerminalTile({
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const [exited, setExited] = useState(false);
+  const [live, setLive] = useState<"working" | "idle">("idle"); // pulso del header: ¿está produciendo salida?
   const onDetectRef = useRef(onDetectUrl);
   onDetectRef.current = onDetectUrl;
   const onStatusRef = useRef(onStatus);
@@ -87,13 +88,11 @@ export function TerminalTile({
         if (e.payload.id !== id) return;
         const bytes = b64ToBytes(e.payload.data);
         term.write(bytes);
-        // estado: hay salida → "trabajando"; tras 1.5s sin salida → "idle".
-        const sfn = onStatusRef.current;
-        if (sfn) {
-          if (!busyRef.current) { busyRef.current = true; sfn(id, "working"); }
-          clearTimeout(idleTimerRef.current);
-          idleTimerRef.current = setTimeout(() => { busyRef.current = false; sfn(id, "idle"); }, 1500);
-        }
+        // estado: hay salida → "trabajando"; tras 1.5s sin salida → "idle". Alimenta el pulso del
+        // header (live) y el statusByTile global (onStatus) a la vez.
+        if (!busyRef.current) { busyRef.current = true; setLive("working"); onStatusRef.current?.(id, "working"); }
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = setTimeout(() => { busyRef.current = false; setLive("idle"); onStatusRef.current?.(id, "idle"); }, 1500);
         // autodetección de dev servers: buscar localhost:PUERTO en la salida (una vez por URL).
         // Importante: hay que SACAR los escapes ANSI del terminal antes de matchear, si no se
         // cuelan en la URL (colores/cursor codes pegados al texto → chips con basura).
@@ -119,7 +118,7 @@ export function TerminalTile({
         }
       });
       const u2 = await listen<string>("pty-exit", (e) => {
-        if (e.payload === id) { setExited(true); clearTimeout(idleTimerRef.current); onStatusRef.current?.(id, "exited"); }
+        if (e.payload === id) { setExited(true); setLive("idle"); busyRef.current = false; clearTimeout(idleTimerRef.current); onStatusRef.current?.(id, "exited"); }
       });
       unlisten = () => { u1(); u2(); };
       await invoke("pty_spawn", {
@@ -213,7 +212,7 @@ export function TerminalTile({
     <div className={cls} style={accent} onMouseDown={() => onFocus(id)}>
       <div className="tile__header" onDoubleClick={() => onToggleMax(id)}>
         <span
-          className={`tile__status ${exited ? "tile__status--exited" : isRouter ? "tile__status--router" : ""}`}
+          className={`tile__status ${exited ? "tile__status--exited" : isRouter ? "tile__status--router" : ""} ${!exited && live === "working" ? "tile__status--working" : ""}`}
           style={color && !isRouter && !exited ? { background: color } : undefined}
         />
         <span className="tile__title">{title}</span>

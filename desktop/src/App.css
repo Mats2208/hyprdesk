@@ -229,6 +229,14 @@ body {
 .tile__status { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--faint); }
 .tile__status--router { background: var(--accent); }
 .tile__status--exited { background: var(--hairline-2); }
+/* pulso mientras el agente produce salida (toma el color del propio dot) */
+.tile__status--working { position: relative; }
+.tile__status--working::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; background-color: inherit;
+  animation: tile-pulse 1.6s ease-out infinite; pointer-events: none;
+}
+@keyframes tile-pulse { 0% { transform: scale(1); opacity: 0.55; } 70%, 100% { transform: scale(2.8); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tile__status--working::after { animation: none; } }
 
 /* badge sobrio: texto, sin pill de color */
 .tile__badge {
