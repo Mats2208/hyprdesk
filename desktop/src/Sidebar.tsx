@@ -44,13 +44,12 @@ export function Sidebar({
             <span className="agentrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "#8a8a92" }} />
             <span className="agentrow__name">{a.title}</span>
             {a.branch && <span className="agentrow__branch" title={a.branch}>⑂</span>}
+            {a.engine && <EngineIcon engine={a.engine} size={16} className="agentrow__eng" />}
             {a.role === "router" ? (
               <span className="agentrow__tag agentrow__tag--router">router</span>
-            ) : a.engine ? (
-              <EngineIcon engine={a.engine} size={16} className="agentrow__eng" />
-            ) : (
+            ) : !a.engine ? (
               <span className="agentrow__tag">worker</span>
-            )}
+            ) : null}
           </button>
         ))}
       </div>

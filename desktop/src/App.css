@@ -529,13 +529,14 @@ body {
 .selector__sub { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .selector__agents { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .agent-btn {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 11px;
+  padding: 13px 16px; border-radius: 6px;
   border: 1px solid var(--hairline-2); background: var(--surface-2);
   color: var(--text); cursor: pointer; transition: all 0.15s ease; text-align: left;
 }
-.agent-btn:hover:not(:disabled) { border-color: rgba(59, 158, 255, 0.5); background: rgba(59, 158, 255, 0.06); }
+.agent-btn:hover:not(:disabled) { border-color: var(--router); background: var(--router-soft); }
 .agent-btn__name { font-size: 14px; font-weight: 600; }
+.agent-btn__go { margin-left: auto; }
 .agent-btn__go { font: 12px var(--font-mono); color: var(--router); }
 .agent-btn--soon { opacity: 0.5; cursor: not-allowed; }
 .agent-btn__soon { font: 11px var(--font-mono); color: var(--faint); }
