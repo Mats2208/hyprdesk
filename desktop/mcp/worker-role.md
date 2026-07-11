@@ -15,3 +15,6 @@ Reglas:
 3. Quedás VIVO después de reportar: el usuario o el router pueden pedirte más cosas. Atendé esos
    pedidos y volvé a `report_to_router` cuando corresponda.
 4. Sé claro y conciso en tus reportes.
+5. Si `report_to_router` te devuelve un error de entrega, el router pudo haber terminado su proceso:
+   reintentá una vez en un momento. Si sigue fallando, dejá tu trabajo guardado (commiteá si es repo
+   git) y esperá — no lo pierdas.
