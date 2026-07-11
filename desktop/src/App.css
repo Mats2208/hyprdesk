@@ -12,13 +12,14 @@
   --muted: #969aa3;
   --faint: #71757e;
   --header: #a6abb4;      /* headers de sección uppercase */
-  /* Acento: azul-acero, SOLO para estados (focus / link / selección / botón primario) */
-  --accent: #3b9eff;
-  --accent-hover: #62b0ff;
-  --router: var(--accent);                 /* identidad router → acento sobrio, no verde */
-  --router-soft: rgba(59, 158, 255, 0.12);
+  /* Acento: azul-acero de la marca (== el router del app icon #5f819b), SOLO para estados
+     (focus / link / selección / botón primario). Sobrio, no el azul brillante anterior. */
+  --accent: #5f819b;
+  --accent-hover: #7396b0;
+  --router: var(--accent);                 /* identidad router → señal de marca */
+  --router-soft: rgba(95, 129, 155, 0.16);
   --sel: #26282d;                          /* hover de lista */
-  --sel-active: rgba(59, 158, 255, 0.14);  /* selección activa (azul sutil) */
+  --sel-active: rgba(95, 129, 155, 0.18);  /* selección activa (acero sutil) */
   --hover: rgba(255, 255, 255, 0.04);
   --hover-2: rgba(255, 255, 255, 0.068);
   --glow: transparent;                     /* sin glows */
@@ -51,12 +52,12 @@
   --muted: #5c616a;
   --faint: #878c94;
   --header: #666b73;
-  --accent: #005fb8;
-  --accent-hover: #0067c0;
+  --accent: #3f6885;                       /* acero de marca, un paso más oscuro para contraste en claro */
+  --accent-hover: #4a769a;
   --router: var(--accent);
-  --router-soft: rgba(0, 95, 184, 0.10);
+  --router-soft: rgba(63, 104, 133, 0.12);
   --sel: #e6e8ec;
-  --sel-active: rgba(0, 95, 184, 0.12);
+  --sel-active: rgba(63, 104, 133, 0.14);
   --hover: rgba(0, 0, 0, 0.038);
   --hover-2: rgba(0, 0, 0, 0.06);
   --glow: transparent;
@@ -269,7 +270,7 @@ body {
   font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 7px; align-items: center;
   white-space: nowrap; pointer-events: none;
 }
-.titlebar__mark { color: var(--router); margin-right: 1px; flex: 0 0 auto; }
+.titlebar__mark { color: var(--text); margin-right: 1px; flex: 0 0 auto; }
 .titlebar__app { color: var(--text-bright); font-weight: 600; letter-spacing: -0.01em; }
 .titlebar__ws { color: var(--text); }
 .titlebar__sep { color: var(--faint); }
@@ -514,7 +515,7 @@ body {
 .welcome__hero { display: flex; align-items: center; gap: 16px; margin-bottom: 42px; }
 .welcome__logo {
   width: 52px; height: 52px; flex: 0 0 auto; display: grid; place-items: center;
-  border-radius: 8px; color: var(--accent);
+  border-radius: 8px; color: var(--text-bright);
   background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--hairline-2); box-shadow: inset 0 1px 0 var(--edge-hi);
 }
@@ -1114,7 +1115,7 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 }
 .wel__brand {
   width: 40px; height: 40px; margin: 0 auto 16px; display: grid; place-items: center;
-  border-radius: 8px; color: var(--router);
+  border-radius: 8px; color: var(--text-bright);
   background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--hairline-2); box-shadow: inset 0 1px 0 var(--edge-hi);
 }

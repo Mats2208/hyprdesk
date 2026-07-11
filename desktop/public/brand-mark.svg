@@ -1,13 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <g stroke="#3b9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 16H16.5"/>
-    <path d="M16.5 7V25"/>
-    <path d="M16.5 7H21M16.5 16H21M16.5 25H21"/>
-  </g>
-  <rect x="3.2" y="11" width="8.8" height="10" rx="1.6" fill="#3b9eff"/>
-  <g fill="#3b9eff">
-    <rect x="21" y="3.6" width="7.4" height="6.8" rx="1.3"/>
-    <rect x="21" y="12.6" width="7.4" height="6.8" rx="1.3"/>
-    <rect x="21" y="21.6" width="7.4" height="6.8" rx="1.3"/>
+  <!-- favicon: mini del app icon (tile grafito + router acero + workers off-white), self-contained -->
+  <rect x="1" y="1" width="30" height="30" rx="7.5" fill="#16181c"/>
+  <g transform="translate(4 4) scale(0.75)">
+    <path d="M16 11V17 M6.75 17H25.25 M6.75 17V21.5 M16 17V21.5 M25.25 17V21.5"
+      stroke="#f2f4f7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="11.5" y="3" width="9" height="8" rx="2.2" fill="#5f819b"/>
+    <rect x="3" y="21.5" width="7.5" height="7" rx="1.8" fill="#f2f4f7"/>
+    <rect x="12.25" y="21.5" width="7.5" height="7" rx="1.8" fill="#f2f4f7"/>
+    <rect x="21.5" y="21.5" width="7.5" height="7" rx="1.8" fill="#f2f4f7"/>
   </g>
 </svg>
