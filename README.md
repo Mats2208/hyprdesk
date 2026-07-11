@@ -35,11 +35,14 @@
 ## Showcase
 
 <p align="center">
-  <img src="docs/router-workers.png" alt="A router delegating to workers in parallel — each agent in its own live terminal" width="820"/>
+  <img src="docs/router-workers.png" alt="A router delegating to five workers in parallel — each agent in its own live terminal" width="900"/>
 </p>
-<p align="center"><sub>A router delegating to workers in parallel — each agent runs in its own live terminal, reporting back over the local A2A tunnel.</sub></p>
+<p align="center"><sub>One router (Claude) delegating in parallel to four workers — <strong>backend</strong>, <strong>frontend</strong>, <strong>tests</strong> (Claude) and <strong>visuals</strong> (Codex) — each in its own live terminal on an isolated git worktree, reporting back over the local A2A tunnel. The visuals worker is Codex because image generation is routed to the engine that can do it.</sub></p>
 
-> **Note:** the UI was recently redesigned to a **premium, near-monochrome theme** (inspired by VS Code's *Dark Modern*). The screenshot above shows the multi-agent grid concept; fresh screenshots of the new look are on the way.
+<p align="center">
+  <img src="docs/home.png" alt="HyprDesk home — create or open a workspace" width="900"/>
+</p>
+<p align="center"><sub>The home: create a workspace or open an existing folder. Premium, near-monochrome UI (dark / light / high-contrast), frameless VS Code-style title bar.</sub></p>
 
 ---
 
