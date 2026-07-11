@@ -61,7 +61,7 @@ export function TitleBar({ stats, glm, codex, claude }: {
       <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
       <UsageChip engine="claude" label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} />
       <UsageChip engine="codex" label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} />
-      <UsageChip label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} />
+      <UsageChip engine="glm" label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} />
     </>
   );
 
