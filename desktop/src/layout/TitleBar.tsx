@@ -1,5 +1,7 @@
-// Barra de título: stats (CPU/RAM + cuota GLM/Codex/Claude), nombre del workspace + rama, contador
-// de tiles y botón de comandos.
+// Barra de título (frameless en Windows/Linux). Layout: marca a la izquierda · menú (custom en
+// Win/Linux) · tools (CPU/RAM + consumo Claude/Codex/GLM) que colapsan en un ☰ cuando no hay
+// espacio · a la derecha contador de tiles, tema, comandos y controles de ventana.
+import { useEffect, useRef, useState } from "react";
 import type { AgentUsage, SysStats } from "../types";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
@@ -42,22 +44,42 @@ export function TitleBar({ stats, glm, codex, claude }: {
   const togglePalette = useUiStore((s) => s.togglePalette);
   const theme = useThemeStore((s) => s.theme);
   const cycle = useThemeStore((s) => s.cycleTheme);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [moreOpen]);
+
+  // Las mismas stats se muestran inline (barra ancha) o apiladas en el dropdown del ☰ (barra angosta).
+  const statEls = (
+    <>
+      <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
+      <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
+      <UsageChip engine="claude" label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} />
+      <UsageChip engine="codex" label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} />
+      <UsageChip label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} />
+    </>
+  );
 
   return (
     <div className={`titlebar ${isMac ? "" : "titlebar--custom"}`}>
-      {!isMac && <TitleMenu />}
-      <div className="titlebar__side">
-        <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
-        <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
-        <UsageChip engine="claude" label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} />
-        <UsageChip engine="codex" label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} />
-        <UsageChip label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} />
-      </div>
-      <div className="titlebar__title">
-        <BrandMark size={15} className="titlebar__mark" />
-        <span className="titlebar__app">HyprDesk</span>
-        <span className="titlebar__sep">·</span>
-        <span className="titlebar__ws">{current?.meta.name ?? ""}</span>
+      <div className="titlebar__left">
+        <div className="titlebar__brand">
+          <BrandMark size={16} className="titlebar__mark" />
+          <span className="titlebar__app">HyprDesk</span>
+        </div>
+        {!isMac && <TitleMenu />}
+        <div className="titlebar__tools">{statEls}</div>
+        <div className="titlebar__more" ref={moreRef}>
+          <button className={`titlebar__icon ${moreOpen ? "titlebar__icon--on" : ""}`} title="Sistema y consumo" onClick={() => setMoreOpen((o) => !o)}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+          </button>
+          {moreOpen && <div className="titlebar__moredrop">{statEls}</div>}
+        </div>
       </div>
       <div className="titlebar__side titlebar__side--right">
         <span className="stat stat--live" title="agentes / tiles"><span className="dot" /> {current?.terms.length ?? 0}</span>

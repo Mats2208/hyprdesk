@@ -270,24 +270,31 @@ body {
   padding: 0 12px 0 82px; border-bottom: 1px solid var(--hairline); background: var(--surface);
   -webkit-app-region: drag; /* mover la ventana desde el titlebar (traffic lights overlay a la izq) */
 }
-.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow: hidden; z-index: 1; }
-.titlebar__side--right { flex: 0 0 auto; justify-content: flex-end; overflow: visible; }
-/* HITBOX de arrastre: la barra entera arrastra; solo lo interactivo es no-drag (antes __side entero
-   era no-drag → casi nada se podía arrastrar). Las stats/chips son spans → arrastrables. */
+/* Lado izquierdo (marca · menú · tools) crece y encoge; el derecho es fijo. */
+.titlebar__left { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; z-index: 1; }
+.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; z-index: 1; }
+.titlebar__side--right { justify-content: flex-end; }
+.titlebar__brand { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+.titlebar__mark { color: var(--text); flex: 0 0 auto; }
+.titlebar__app { color: var(--text-bright); font-weight: 600; font-size: 12.5px; letter-spacing: -0.01em; }
+/* tools (CPU/RAM + consumo): inline en barra ancha; se clippean con su propio overflow, y por debajo
+   del breakpoint colapsan al ☰ (titlebar__more). El overflow NO va en __left para no cortar dropdowns. */
+.titlebar__tools { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.titlebar__more { position: relative; display: none; flex: 0 0 auto; }
+.titlebar__moredrop {
+  position: absolute; top: 100%; left: 0; margin-top: 3px; z-index: 60; min-width: 190px;
+  display: flex; flex-direction: column; gap: 5px; padding: 8px;
+  background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 6px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+}
+.titlebar__moredrop .stat { justify-content: flex-start; }
+@media (max-width: 1300px) {
+  .titlebar__tools { display: none; }
+  .titlebar__more { display: flex; }
+}
+/* HITBOX de arrastre: la barra entera arrastra; solo lo interactivo es no-drag. Stats/chips son spans. */
 .titlebar button, .titlebar input, .titlebar select, .titlebar .tmenu, .titlebar .wctl { -webkit-app-region: no-drag; }
 .titlebar .stat { flex: 0 0 auto; white-space: nowrap; }
-/* responsive: el título centrado (absoluto) se solapa con los chips en ventana angosta → ocultarlo */
-@media (max-width: 1040px) { .titlebar__title { display: none; } }
-/* título REALMENTE centrado en la ventana (independiente del padding de los traffic lights) */
-.titlebar__title {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; gap: 7px; align-items: center;
-  white-space: nowrap; pointer-events: none;
-}
-.titlebar__mark { color: var(--text); margin-right: 1px; flex: 0 0 auto; }
-.titlebar__app { color: var(--text-bright); font-weight: 600; letter-spacing: -0.01em; }
-.titlebar__ws { color: var(--text); }
-.titlebar__sep { color: var(--faint); }
+.titlebar__icon--on { color: var(--text); border-color: var(--hairline-2); background: var(--hover-2); }
 .titlebar__branch {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 7px; border-radius: 5px;
   font: 500 11px var(--font-mono); color: var(--muted);
