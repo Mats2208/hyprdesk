@@ -13,6 +13,18 @@ Toda vista que trae datos tiene **loading, vacío, error y con-datos**. Implemen
 "empty" y el "error" no son opcionales. Un spinner infinito o una pantalla en blanco ante un fallo
 es un bug, no un detalle.
 
+## Gusto y restraint (nada de "AI slop")
+El objetivo es que se vea **diseñado**, no "generado". Los tells de default-de-LLM restan calidad:
+- **Nada de emojis decorativos** en el chrome (headers de stats, labels, títulos, botones). Se leen
+  como slop. Si necesitás iconografía, usá **iconos SVG** consistentes (un set, un peso) — o nada.
+- **Paleta acotada** (2-3 colores + neutros); nada de gradientes arcoíris, glows fuertes ni sombras
+  exageradas. Jerarquía por **tamaño/peso/espaciado**, no por adornos.
+- **Escala tipográfica y de espaciado coherente** (un sistema, no valores al azar). Alineación prolija.
+- **Si tenés una skill / plugin / comando nativo de UI-UX, USALO** — da un resultado más pulido que
+  improvisar. No entregues un look mediocre teniendo la herramienta para uno excelente.
+- Antes de decidir el look, tené en mente una **referencia real** (un producto que admirás) y apuntá
+  a ese nivel; sobrio y confiado gana a recargado.
+
 ## No negociable
 - **Accesibilidad**: HTML semántico, labels en los inputs, foco visible, navegable por teclado,
   contraste suficiente. `<div onClick>` no es un botón.
