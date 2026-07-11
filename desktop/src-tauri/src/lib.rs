@@ -846,6 +846,13 @@ fn open_new_window(app: &AppHandle) {
     let _ = builder.build();
 }
 
+// Abre otra ventana desde el frontend (menú custom "Nueva ventana"). En macOS el menú nativo ya
+// llama a open_new_window vía on_menu_event; esto es el equivalente para el menú custom del webview.
+#[tauri::command]
+fn new_window(app: AppHandle) {
+    open_new_window(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -887,7 +894,7 @@ pub fn run() {
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, set_menu_visible, list_skills,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, set_menu_visible, new_window, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             agent_usage::codex_usage, agent_usage::claude_usage,

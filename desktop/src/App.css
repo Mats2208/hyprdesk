@@ -310,6 +310,27 @@ body {
 }
 .wctl__btn:hover { background: var(--hover-2); color: var(--text); }
 .wctl__btn--close:hover { background: #e11d48; color: #fff; }
+/* Menú custom del titlebar (Archivo/Editar/Ver/Ventana) — estilo VS Code */
+.tmenu { display: flex; align-items: stretch; height: 100%; margin-right: 8px; flex: 0 0 auto; -webkit-app-region: no-drag; }
+.tmenu__group { position: relative; display: flex; }
+.tmenu__title {
+  border: none; background: transparent; color: var(--muted); font-size: 12.5px; padding: 0 9px;
+  cursor: pointer; height: 100%; transition: background 0.1s, color 0.1s; white-space: nowrap;
+}
+.tmenu__title:hover, .tmenu__title--on { background: var(--hover-2); color: var(--text); }
+.tmenu__drop {
+  position: absolute; top: 100%; left: 0; min-width: 224px; z-index: 60; margin-top: 1px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 6px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+}
+.tmenu__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%;
+  border: none; background: transparent; color: var(--text); font-size: 12.5px; text-align: left;
+  padding: 6px 9px; border-radius: 4px; cursor: pointer;
+}
+.tmenu__item:hover { background: var(--router-soft); color: var(--router); }
+.tmenu__hint { color: var(--faint); font: 11px var(--font-mono); }
+.tmenu__sep { height: 1px; background: var(--hairline); margin: 4px 6px; }
 
 /* tabs de workspaces abiertos (keep-alive) */
 .wstabs {

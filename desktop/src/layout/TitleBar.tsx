@@ -7,6 +7,7 @@ import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 import { THEME_LABEL, useThemeStore } from "../theme/theme";
 import { BrandMark } from "../BrandMark";
+import { TitleMenu } from "./TitleMenu";
 import { hk, isMac } from "../platform";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
@@ -43,6 +44,7 @@ export function TitleBar({ stats, glm, codex, claude }: {
 
   return (
     <div className={`titlebar ${isMac ? "" : "titlebar--custom"}`}>
+      {!isMac && <TitleMenu />}
       <div className="titlebar__side">
         <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
         <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
