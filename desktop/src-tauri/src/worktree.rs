@@ -11,7 +11,7 @@ pub struct Worktree {
 
 // Corre git en `cwd` con el PATH real del usuario. None si falla.
 fn git(cwd: &str, args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new("git")
+    let out = crate::hidden_command("git")
         .args(args)
         .current_dir(cwd)
         .env("PATH", crate::user_path())

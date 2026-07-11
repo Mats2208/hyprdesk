@@ -85,7 +85,7 @@ pub async fn glm_usage() -> Option<GlmUsage> {
 }
 
 fn fetch_glm(key: &str) -> Option<GlmUsage> {
-    let out = std::process::Command::new("curl")
+    let out = crate::hidden_command("curl")
         .args([
             "-s", "--max-time", "8",
             "-H", &format!("Authorization: {key}"),
@@ -136,7 +136,7 @@ pub struct ModelCatalog {
 #[tauri::command]
 pub async fn list_models() -> ModelCatalog {
     tauri::async_runtime::spawn_blocking(|| {
-        let opencode = std::process::Command::new("opencode")
+        let opencode = crate::hidden_command("opencode")
             .arg("models")
             .env("PATH", crate::user_path())
             .output()
@@ -209,7 +209,7 @@ fn run_cli(a: &Assistant, prompt: &str) -> Result<String, String> {
         other => return Err(format!("motor asistente desconocido: {other}")),
     };
 
-    let output = std::process::Command::new(bin)
+    let output = crate::hidden_command(bin)
         .args(&args)
         .env("PATH", crate::user_path())
         .output()

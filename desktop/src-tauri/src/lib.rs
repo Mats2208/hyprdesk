@@ -146,6 +146,21 @@ pub(crate) fn user_path() -> &'static str {
     })
 }
 
+// Spawnea un proceso hijo (git, curl, opencode…) desde una GUI sin consola. En Windows, sin el
+// flag CREATE_NO_WINDOW cada hijo de subsistema-consola abre una ventana CMD que parpadea ~1-2s
+// (da la impresión de que la app "hace cosas raras"). Este helper la evita. En Unix es un
+// passthrough exacto de Command::new — comportamiento idéntico al original.
+pub(crate) fn hidden_command<S: AsRef<std::ffi::OsStr>>(program: S) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut c = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    c
+}
+
 // Una sesión de terminal viva.
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
@@ -727,6 +742,14 @@ fn paste_clipboard() -> Result<(Option<String>, Option<String>), String> {
     Ok((None, cb.get_text().ok()))
 }
 
+// Copia texto al portapapeles del SO. La usa la terminal (Ctrl+C con selección / Ctrl+Shift+C):
+// xterm no copia solo, y en el webview el clipboard API es poco fiable, así que pasamos por arboard.
+#[tauri::command]
+fn copy_clipboard(text: String) -> Result<(), String> {
+    let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    cb.set_text(text).map_err(|e| e.to_string())
+}
+
 // Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
 // (que lo mapea a las acciones ya existentes); "new-window" se maneja en Rust.
 fn build_menu(app: &tauri::App) -> tauri::Result<()> {
@@ -838,7 +861,7 @@ pub fn run() {
             router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, list_skills,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             usage::usage_today,

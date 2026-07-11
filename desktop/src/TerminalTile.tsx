@@ -137,28 +137,54 @@ export function TerminalTile({
     });
     ro.observe(host);
 
-    // Cmd/Ctrl+V: leemos el portapapeles del SO vía Rust. Si hay IMAGEN, inyectamos su RUTA
-    // (los agentes leen rutas de imágenes); si hay texto, lo inyectamos. (El webview no entrega
-    // imágenes por el evento paste del DOM, por eso lo hacemos así.)
+    const isMac = navigator.userAgent.toLowerCase().includes("mac");
+
+    // Pegar: leemos el portapapeles del SO vía Rust. Si hay IMAGEN, inyectamos su RUTA (los agentes
+    // leen rutas de imágenes); si hay texto, lo inyectamos. (El webview no entrega imágenes por el
+    // evento paste del DOM, por eso lo hacemos por Rust/arboard.)
+    const doPaste = async () => {
+      try {
+        const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
+        if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
+        else if (text) await invoke("pty_write", { id, data: text });
+      } catch { /* ignore */ }
+    };
+    // Copiar: xterm no copia solo. Copiamos la selección vía Rust/arboard.
+    const doCopy = () => {
+      const sel = term.getSelection();
+      if (sel) invoke("copy_clipboard", { text: sel }).catch(() => {});
+      term.clearSelection();
+    };
+
+    // Teclado: Ctrl/Cmd+V (y Ctrl+Shift+V) pegan. Copiar = Ctrl+Shift+C, o Ctrl/Cmd+C SOLO si hay
+    // selección (si no, dejamos pasar el Ctrl+C para que sea SIGINT/interrupt, como toda terminal).
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "v") {
-        (async () => {
-          try {
-            const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
-            if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
-            else if (text) await invoke("pty_write", { id, data: text });
-          } catch { /* ignore */ }
-        })();
-        return false; // que xterm no procese el paste nativo
+      if (e.type !== "keydown") return true;
+      if (!(e.metaKey || e.ctrlKey)) return true;
+      const k = e.key.toLowerCase();
+      if (k === "v") { doPaste(); return false; }
+      if (k === "c") {
+        const wantsCopy = e.shiftKey || (isMac ? e.metaKey : e.ctrlKey);
+        if (wantsCopy && term.hasSelection()) { doCopy(); return false; }
+        return true; // sin selección → Ctrl+C pasa como interrupt
       }
       return true;
     });
+
+    // Click derecho (estilo Windows Terminal): si hay selección la copia; si no, pega.
+    const onCtx = (e: MouseEvent) => {
+      e.preventDefault();
+      if (term.hasSelection()) doCopy();
+      else doPaste();
+    };
+    host.addEventListener("contextmenu", onCtx);
 
     return () => {
       ro.disconnect();
       themeUnsub();
       onData.dispose();
       unlisten?.();
+      host.removeEventListener("contextmenu", onCtx);
       clearTimeout(idleTimerRef.current);
       invoke("pty_kill", { id });
       term.dispose();
