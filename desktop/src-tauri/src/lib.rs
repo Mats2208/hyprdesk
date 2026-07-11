@@ -457,7 +457,13 @@ fn router_launch(
     let agent_id = format!("router-{}", uuid::Uuid::new_v4());
     let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None, &engines::AgentOpts::default())?;
     // R3: registrar el router con el cwd de SU workspace (hub por-workspace, sin singletons globales).
-    state.routers.lock().unwrap().insert(agent_id.clone(), cwd.clone());
+    // Un workspace tiene UN router activo: al relanzar (reopen/resume) evictamos el router previo de
+    // ESA carpeta, así el mapa no crece sin límite por sesión y la heurística "único router" sigue útil.
+    {
+        let mut map = state.routers.lock().unwrap();
+        map.retain(|_, v| v != &cwd);
+        map.insert(agent_id.clone(), cwd.clone());
+    }
     Ok(AgentLaunch {
         agent_id,
         engine,
