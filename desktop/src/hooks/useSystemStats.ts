@@ -1,5 +1,6 @@
-// Pollers presentacionales del titlebar: stats de sistema (2s) y cuotas GLM/Codex/Claude (3min).
-import { useEffect, useState } from "react";
+// Pollers presentacionales del titlebar: stats de sistema (2s) y cuotas GLM/Codex/Claude (3min, o al
+// tocar un chip vía refreshUsage).
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentUsage, GlmUsage, SysStats } from "../types";
 
@@ -19,17 +20,18 @@ export function useSystemStats() {
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    const tick = () => {
-      invoke<GlmUsage | null>("glm_usage").then((g) => { if (alive) setGlm(g); }).catch(() => {});
-      invoke<AgentUsage | null>("codex_usage").then((c) => { if (alive) setCodex(c); }).catch(() => {});
-      invoke<AgentUsage | null>("claude_usage").then((c) => { if (alive) setClaude(c); }).catch(() => {});
-    };
-    tick();
-    const iv = setInterval(tick, 180000);
-    return () => { alive = false; clearInterval(iv); };
+  // Refetch de las cuotas (usado por el poll de 3min y por el clic en un chip).
+  const refreshUsage = useCallback(() => {
+    invoke<GlmUsage | null>("glm_usage").then(setGlm).catch(() => {});
+    invoke<AgentUsage | null>("codex_usage").then(setCodex).catch(() => {});
+    invoke<AgentUsage | null>("claude_usage").then(setClaude).catch(() => {});
   }, []);
 
-  return { stats, glm, codex, claude };
+  useEffect(() => {
+    refreshUsage();
+    const iv = setInterval(refreshUsage, 180000);
+    return () => clearInterval(iv);
+  }, [refreshUsage]);
+
+  return { stats, glm, codex, claude, refreshUsage };
 }

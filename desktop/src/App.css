@@ -301,6 +301,9 @@ body {
   background: var(--surface-2); border: 1px solid var(--hairline);
 }
 .stat--usage .stat__v { color: var(--text); }
+/* chips de consumo: clickables para refetch inmediato → no-drag + cursor + hover */
+.stat--usage { -webkit-app-region: no-drag; cursor: pointer; border-radius: 4px; transition: background 0.12s; }
+.stat--usage:hover { background: var(--hover); }
 .titlebar__cmd {
   display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
   background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 5px; padding: 4px 8px 4px 10px;
