@@ -530,6 +530,7 @@ fn spawn_profile_worker(
         model: model.as_deref(),
         effort: effort.as_deref(),
         persona: persona.as_deref(),
+        ..Default::default()
     };
     // ws git → worktree/rama aislada; si no → comparte la carpeta.
     let ws_root = cwd.clone();

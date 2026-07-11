@@ -52,11 +52,15 @@ if (ROLE === "router") {
           .string()
           .optional()
           .describe("Nombre corto del worker por su DOMINIO (ej. 'frontend', 'backend', 'QA') — para identificarlo después con list_workers. Con perfil, se usa el nombre del perfil."),
+        skills: z
+          .array(z.string())
+          .optional()
+          .describe("Skills de DOMINIO a inyectar en el worker (mirá list_skills). Ponytail va siempre, no la incluyas. Ej: para una tarea de UI, ['frontend']. Solo nombres que devuelva list_skills."),
       },
     },
-    async ({ task, profile, engine, name }) => {
+    async ({ task, profile, engine, name, skills }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD });
+        const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD, skills });
         return ok(`Worker "${profile || name || engine || "claude"}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
@@ -82,6 +86,30 @@ if (ROLE === "router") {
         return ok(`Perfiles del usuario (${list.length}):\n${lines}\n\nDelegá con spawn_worker({ profile: "<id o nombre>", task }).`);
       } catch (e) {
         return err(`Error listando perfiles: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_skills",
+    {
+      title: "Listar las skills de dominio disponibles para los workers",
+      description:
+        "Devuelve las skills de DOMINIO (frontend, backend, testing, etc.) que podés inyectar en un worker al " +
+        "delegarle una tarea, vía spawn_worker({ skills: [...] }). Ponytail va SIEMPRE en todos, no aparece acá. " +
+        "Consultá esto antes de delegar: si el dominio de la tarea calza con una skill, pasala en spawn_worker " +
+        "para que el worker arranque con esa guía. Terminología según motor: 'skill' en claude/opencode, 'plugin' en codex.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const r = await post("/list_skills", {});
+        const list = r.skills || [];
+        if (!Array.isArray(list) || list.length === 0) return ok("No hay skills de dominio instaladas (solo Ponytail, que ya va siempre).");
+        const lines = list.map((s) => `- ${s.name}${s.summary ? ` — ${s.summary}` : ""}`).join("\n");
+        return ok(`Skills de dominio disponibles (${list.length}):\n${lines}\n\nInyectalas al delegar: spawn_worker({ task, skills: ["<name>"] }).`);
+      } catch (e) {
+        return err(`Error listando skills: ${e.message}`);
       }
     }
   );

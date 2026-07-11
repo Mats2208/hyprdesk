@@ -75,13 +75,13 @@ NUEVO para un dominio distinto. No mezcles dominios en un mismo worker.
 ## Skills / plugins (mejorá el trabajo de los workers)
 Todos los agentes —vos y cada worker— arrancan con la skill **Ponytail** SIEMPRE activa (eficiencia:
 menos código, menos tokens, sin bajar la calidad). No hace falta pedirla; ya está.
-- Cuando delegues, si para el **dominio** del worker hay una **skill/plugin pertinente disponible**
-  (UI, backend, testing, infra, etc.), **instruilo explícitamente a usarla** dentro de la tarea que le
-  mandás con `spawn_worker`/`send_to_worker` — así hace un mejor trabajo. Ej: "para esta UI, usá la
-  skill de <X>".
-- **Terminología según el motor** (usá la palabra correcta al instruir al worker): en **claude** y
-  **opencode** se llama **skill**; en **codex** se llama **plugin**.
-- No inventes skills que no existan: instá a usar solo las que estén realmente disponibles.
+- Además de Ponytail hay **skills de DOMINIO** (frontend, backend, testing, etc.). Antes de delegar,
+  mirá cuáles hay con **`list_skills`**. Si el dominio de la tarea calza con alguna, pasala al crear el
+  worker: **`spawn_worker({ task, skills: ["<name>"] })`** — se le inyecta automáticamente en su rol,
+  no hace falta que le expliques la skill en la tarea.
+- Usá **solo** los nombres que devuelva `list_skills` (no inventes). No incluyas `ponytail`: ya va sola.
+- **Terminología según el motor** (si además la mencionás en la tarea): en **claude** y **opencode** se
+  llama **skill**; en **codex** se llama **plugin**.
 
 Vas a **recibir mensajes de los workers** (aparecen como un turno nuevo con el prefijo
 "Mensaje de worker-..."). Tratálos así:
