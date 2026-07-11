@@ -10,9 +10,12 @@ export function StatusBar() {
   const openBrowser = useSessionStore((s) => s.openBrowser);
   const openPanel = useUiStore((s) => s.openPanel);
 
+  const statusByTile = useUiStore((s) => s.statusByTile);
   const workers = current ? current.terms.filter((t) => t.role === "worker") : [];
   const curPreviews = current ? previewsByWs[current.meta.folder] ?? [] : [];
   const branchCount = current ? current.terms.filter((t) => t.branch).length : 0;
+  // agentes produciendo salida ahora mismo (proxy de "trabajando"): status del túnel por tile.
+  const workingCount = current ? current.terms.filter((t) => statusByTile[t.id] === "working").length : 0;
 
   return (
     <div className="statusbar">
@@ -21,6 +24,12 @@ export function StatusBar() {
           <span className="dot dot--router" />
           {workers.length}<span className="sb-chip__u">w</span> · {sessions.length}<span className="sb-chip__u">ws</span>
         </span>
+        {workingCount > 0 && (
+          <button className="sb-chip sb-chip--working" title="agentes produciendo salida ahora" onClick={() => openPanel("agents")}>
+            <span className="sb-chip__pulse" />
+            {workingCount}<span className="sb-chip__u">trabajando</span>
+          </button>
+        )}
         {branchCount > 0 && (
           <button className="sb-chip sb-chip--purple" title="workers en ramas aisladas (worktrees)" onClick={() => openPanel("agents")}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5.5v5M5.5 4h3a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
