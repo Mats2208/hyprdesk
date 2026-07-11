@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { hk } from "./platform";
 
 // El router llamó a ask_user() y está BLOQUEADO esperando la respuesta del usuario.
 // Este modal recoge la respuesta y la manda al backend (answer_user) para destrabarlo.
@@ -38,7 +39,7 @@ export function AskUserModal({
           rows={3}
         />
         <div className="askuser__foot">
-          <span className="askuser__hint">⌘↵ para responder · el router está esperando</span>
+          <span className="askuser__hint">{hk("↵")} para responder · el router está esperando</span>
           <button className="askuser__send" onClick={send} disabled={!text.trim()}>Responder</button>
         </div>
       </div>

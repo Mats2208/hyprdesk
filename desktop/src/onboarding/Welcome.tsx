@@ -3,6 +3,7 @@ import { useState } from "react";
 import { THEMES, THEME_LABEL, useThemeStore } from "../theme/theme";
 import { useUiStore } from "../store/uiStore";
 import { BrandMark } from "../BrandMark";
+import { hk } from "../platform";
 
 const ENGINES = [
   { id: "claude", name: "Claude Code", note: "requerido — instalá y logueá `claude`" },
@@ -54,7 +55,7 @@ export function Welcome() {
       title: "Elegí tu apariencia",
       body: (
         <>
-          <p>Podés cambiarla luego en Configuración (⌘,).</p>
+          <p>Podés cambiarla luego en Configuración ({hk(",")}).</p>
           <div className="wel__themes">
             {THEMES.map((t) => (
               <button key={t} className={`wel__theme ${theme === t ? "wel__theme--on" : ""}`} onClick={() => setTheme(t)}>

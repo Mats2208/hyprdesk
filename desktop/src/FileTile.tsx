@@ -4,6 +4,7 @@
 // Cargar: read_file · Guardar (⌘/Ctrl+S): write_file.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { hk } from "./platform";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
   drawSelection, dropCursor,
@@ -136,7 +137,7 @@ export function FileTile({ id, title, filePath, active, canClose, maximized, hid
         <span className="tile__badge tile__badge--file">FILE</span>
         <span className="tile__title">{title}{dirty && <span className="tile__dirty" title="Sin guardar"> ●</span>}</span>
         <span className="tile__controls">
-          <button className="tctl" title="Guardar (⌘S)" onClick={(e) => { e.stopPropagation(); void doSave(); }}>
+          <button className="tctl" title={`Guardar (${hk("S")})`} onClick={(e) => { e.stopPropagation(); void doSave(); }}>
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2h6l2 2v6H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M4 2v3h3M4 8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
           </button>
           <button className="tctl" title={maximized ? "Restaurar" : "Maximizar"} onClick={(e) => { e.stopPropagation(); onToggleMax(id); }}>

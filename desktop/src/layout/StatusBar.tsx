@@ -1,6 +1,7 @@
 // Barra de estado: workers/ws · cambios · ramas · previews de localhost · atajos.
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
+import { hk } from "../platform";
 
 export function StatusBar() {
   const sessions = useSessionStore((s) => s.sessions);
@@ -40,8 +41,8 @@ export function StatusBar() {
       </div>
 
       <div className="statusbar__group statusbar__group--right">
-        <span className="sb-keys" title="⌘K comandos · ⌘B panel · ⌘T terminal · ⌘←→ foco">
-          <kbd>⌘K</kbd><kbd>⌘B</kbd><kbd>⌘T</kbd>
+        <span className="sb-keys" title={`${hk("K")} comandos · ${hk("B")} panel · ${hk("T")} terminal · ${hk("←")}${hk("→")} foco`}>
+          <kbd>{hk("K")}</kbd><kbd>{hk("B")}</kbd><kbd>{hk("T")}</kbd>
         </span>
       </div>
     </div>

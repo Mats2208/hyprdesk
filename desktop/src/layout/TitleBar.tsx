@@ -5,6 +5,7 @@ import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 import { THEME_LABEL, useThemeStore } from "../theme/theme";
 import { BrandMark } from "../BrandMark";
+import { hk } from "../platform";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
@@ -58,7 +59,7 @@ export function TitleBar({ stats, glm, codex, claude }: {
         <button className="titlebar__icon" onClick={cycle} title={`Tema: ${THEME_LABEL[theme]} (clic para cambiar)`}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">{THEME_ICON[theme]}</svg>
         </button>
-        <button className="titlebar__cmd" onClick={togglePalette}>Comandos <kbd>⌘K</kbd></button>
+        <button className="titlebar__cmd" onClick={togglePalette}>Comandos <kbd>{hk("K")}</kbd></button>
       </div>
     </div>
   );

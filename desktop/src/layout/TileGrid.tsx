@@ -8,6 +8,7 @@ import type { Term, WsSession } from "../types";
 import { computeLayout } from "../store/sessionModel";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
+import { hk } from "../platform";
 
 export function TileGrid({ session: s }: { session: WsSession }) {
   const currentId = useSessionStore((st) => st.currentId);
@@ -95,7 +96,7 @@ export function TileGrid({ session: s }: { session: WsSession }) {
         <div className="divider" style={{ left: `${s.routerWidth}%` }} onMouseDown={startDrag} title="Arrastrá para ajustar el router" />
       )}
 
-      <button className="fab" title="Terminal manual (⌘T)" onClick={addTerminal}>
+      <button className="fab" title={`Terminal manual (${hk("T")})`} onClick={addTerminal}>
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
           <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
