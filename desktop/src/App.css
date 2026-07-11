@@ -492,18 +492,24 @@ body {
 .welcome {
   height: 100vh; overflow: auto; display: flex; align-items: center; justify-content: center;
   padding: 56px 40px 40px;
-  position: relative; isolation: isolate; background: var(--bg);
+  position: relative; isolation: isolate;
+  /* leve elevación hacia arriba-centro para que no se lea "apagado" (sin glow-blob, es estructural) */
+  background: radial-gradient(145% 95% at 50% -8%, var(--surface), var(--bg) 58%);
 }
 /* Backdrop estructural (blueprint de codex): grid + contornos + diagramas de ruteo, monocromo,
    teñido por currentColor y enmascarado para desvanecerse hacia los bordes → aire, no wallpaper. */
 .welcome__ambient {
   position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
-  color: var(--faint); opacity: 0.55;
-  -webkit-mask-image: radial-gradient(130% 100% at 50% 30%, #000 32%, transparent 74%);
-  mask-image: radial-gradient(130% 100% at 50% 30%, #000 32%, transparent 74%);
+  color: var(--muted); opacity: 0.8;
+  -webkit-mask-image: radial-gradient(135% 105% at 50% 28%, #000 38%, transparent 78%);
+  mask-image: radial-gradient(135% 105% at 50% 28%, #000 38%, transparent 78%);
+  animation: ambient-breathe 14s ease-in-out infinite;
 }
 .welcome__ambient svg { width: 100%; height: 100%; display: block; }
-:root[data-theme="hc"] .welcome__ambient { opacity: 0.28; }
+:root[data-theme="hc"] .welcome__ambient { opacity: 0.4; }
+/* respiración muy lenta y sutil — da algo de vida sin distraer (respeta reduce-motion) */
+@keyframes ambient-breathe { 0%, 100% { opacity: 0.66; } 50% { opacity: 0.86; } }
+@media (prefers-reduced-motion: reduce) { .welcome__ambient { animation: none; } }
 .welcome__inner { width: 100%; max-width: 860px; }
 .welcome__hero { display: flex; align-items: center; gap: 16px; margin-bottom: 42px; }
 .welcome__logo {

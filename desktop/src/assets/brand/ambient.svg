@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
   <style>
-    .grid { fill: none; stroke: currentColor; stroke-width: 1; opacity: .10; shape-rendering: crispEdges; }
-    .contour { fill: none; stroke: currentColor; stroke-width: 1.25; opacity: .18; }
-    .route { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .24; stroke-linecap: square; stroke-linejoin: miter; }
-    .node { fill: currentColor; opacity: .34; }
+    .grid { fill: none; stroke: currentColor; stroke-width: 1; opacity: .13; shape-rendering: crispEdges; }
+    .contour { fill: none; stroke: currentColor; stroke-width: 1.25; opacity: .2; }
+    .route { fill: none; stroke: #5f819b; stroke-width: 1.6; opacity: .5; stroke-linecap: square; stroke-linejoin: miter; }
+    .node { fill: #5f819b; opacity: .7; }
   </style>
   <g class="grid">
     <path d="M0 60H1440M0 180H1440M0 300H1440M0 420H1440M0 540H1440M0 660H1440M0 780H1440M0 840H1440"/>
