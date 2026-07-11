@@ -6,6 +6,7 @@ import { CATEGORIES, SCHEMA, type Field } from "./schema";
 import { ProvidersSection } from "./ProvidersSection";
 import { KeybindingsSection } from "./KeybindingsSection";
 import { SkillsSection } from "./SkillsSection";
+import { ModelPicker, type ModelCatalog } from "../ModelPicker";
 import { useThemeStore } from "../theme/theme";
 
 const SPECIAL = new Set(["Skills", "Proveedores y API keys", "Atajos"]); // categorías con sección extra (no solo schema)
@@ -19,6 +20,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   const [cat, setCat] = useState(CATEGORIES[0]);
   const [backend, setBackend] = useState<Backend>(EMPTY);
   const [defaultSkills, setDefaultSkills] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const theme = useThemeStore();
 
@@ -38,6 +40,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       });
       setDefaultSkills(s.defaultSkills ?? []);
     }).catch(() => {});
+    invoke<ModelCatalog>("list_models").then(setCatalog).catch(() => {});
   }, []);
 
   // Guarda settings.json (debounced) reconstruyendo TODO el objeto backend desde los refs frescos.
@@ -130,7 +133,12 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
                   <div key={f.key} className="settings__field">
                     <div className="settings__flabel">{f.label}</div>
                     {f.description && <div className="settings__fdesc">{f.description}</div>}
-                    <Control field={f} value={read(f.key)} onChange={(v) => write(f, v)} />
+                    {f.key === "assistantModel" ? (
+                      <ModelPicker key={backend.assistantEngine} engine={backend.assistantEngine} catalog={catalog}
+                        value={read("assistantModel")} onChange={(v) => write(f, v)} cls="settings__input" />
+                    ) : (
+                      <Control field={f} value={read(f.key)} onChange={(v) => write(f, v)} />
+                    )}
                   </div>
                 ))}
                 {c === "Skills" && <SkillsSection value={defaultSkills} onChange={onSkills} />}

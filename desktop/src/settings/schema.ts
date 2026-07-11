@@ -38,7 +38,7 @@ export const SCHEMA: Field[] = [
     description: "El CLI que HyprDesk usa para SUS features de IA (generar perfiles, consultas). No es para escribir código.",
     options: [{ value: "claude", label: "Claude Code" }, { value: "codex", label: "Codex" }, { value: "opencode", label: "OpenCode" }] },
   { key: "assistantModel", label: "Modelo del asistente", category: "Agentes y permisos", type: "text", scope: "backend",
-    description: "Modelo específico para el asistente. Vacío = default del CLI.", placeholder: "default del CLI" },
+    description: "Modelo del asistente (según el motor de arriba: los de Claude, Codex u OpenCode). Vacío = default del CLI.", placeholder: "default del CLI" },
   { key: "assistantEffort", label: "Effort del asistente", category: "Agentes y permisos", type: "select", scope: "backend",
     description: "Solo aplica a Codex.", options: [{ value: "", label: "default" }, { value: "low", label: "low" }, { value: "medium", label: "medium" }, { value: "high", label: "high" }],
     visibleWhen: (get) => get("assistantEngine") === "codex" },

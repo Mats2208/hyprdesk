@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Profile, SkillInfo } from "./types";
+import { ModelPicker, type ModelCatalog as Catalog } from "./ModelPicker";
 
 const COLORS = ["#34d399", "#60a5fa", "#c084fc", "#fbbf24", "#f87171", "#22d3ee", "#f472b6", "#a3e635"];
-
-type Catalog = { claude: string[]; codex: string[]; opencode: string[] };
 
 function catalogText(c: Catalog | null): string {
   const oc = c?.opencode?.length ? c.opencode.join(", ") : "(no disponible — no elijas opencode)";
@@ -153,7 +152,9 @@ export function CreateAgentModal({
                     <option value="claude">Claude</option><option value="codex">Codex</option><option value="opencode">OpenCode</option>
                   </select>
                 </label>
-                <label className="modal__field"><span>Modelo</span><input value={p.model || ""} onChange={(e) => upd({ model: e.target.value || undefined })} placeholder="default" /></label>
+                <label className="modal__field"><span>Modelo</span>
+                  <ModelPicker key={p.engine} engine={p.engine} catalog={cat} value={p.model || ""} onChange={(v) => upd({ model: v || undefined })} />
+                </label>
                 <label className="modal__field"><span>Effort</span>
                   <select value={p.effort || ""} onChange={(e) => upd({ effort: e.target.value || undefined })}>
                     <option value="">—</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
