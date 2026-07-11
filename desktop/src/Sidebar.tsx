@@ -1,4 +1,5 @@
 import type { Profile } from "./types";
+import { EngineIcon } from "./EngineIcon";
 
 // Panel lateral de agentes: roster (router + workers vivos) + perfiles del workspace.
 export type AgentStatus = "working" | "idle" | "exited";
@@ -45,8 +46,10 @@ export function Sidebar({
             {a.branch && <span className="agentrow__branch" title={a.branch}>⑂</span>}
             {a.role === "router" ? (
               <span className="agentrow__tag agentrow__tag--router">router</span>
+            ) : a.engine ? (
+              <EngineIcon engine={a.engine} size={16} className="agentrow__eng" />
             ) : (
-              <span className="agentrow__tag">{a.engine || "worker"}</span>
+              <span className="agentrow__tag">worker</span>
             )}
           </button>
         ))}

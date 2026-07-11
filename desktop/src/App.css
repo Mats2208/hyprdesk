@@ -340,6 +340,9 @@ body {
 .tmenu__item:hover { background: var(--router-soft); color: var(--router); }
 .tmenu__hint { color: var(--faint); font: 11px var(--font-mono); }
 .tmenu__sep { height: 1px; background: var(--hairline); margin: 4px 6px; }
+/* Iconos de motor (logos oficiales): cuadrados 1:1 → contain sin deformar; máscara redondeada
+   uniforme + ring hairline para definir el borde (el de OpenCode es negro y si no se pierde). */
+.engicon { border-radius: 4px; object-fit: contain; flex: 0 0 auto; box-shadow: 0 0 0 1px var(--hairline); }
 
 /* tabs de workspaces abiertos (keep-alive) */
 .wstabs {

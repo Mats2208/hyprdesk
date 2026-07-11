@@ -5,6 +5,7 @@ import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 import { THEME_LABEL, useThemeStore } from "../theme/theme";
 import { BrandMark } from "../BrandMark";
+import { EngineIcon } from "../EngineIcon";
 import { TitleMenu } from "./TitleMenu";
 import { WindowControls } from "./WindowControls";
 import { hk, isMac } from "../platform";
@@ -12,11 +13,12 @@ import { hk, isMac } from "../platform";
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
 // Chip de cuota "5h X% · sem Y%" (% USADO). Se oculta si no hay dato (no logueado / API caído).
-function UsageChip({ label, title, u }: { label: string; title: string; u: AgentUsage | null }) {
+// Con `engine` muestra el logo del motor; si no, el label de texto (ej. GLM).
+function UsageChip({ label, engine, title, u }: { label: string; engine?: string; title: string; u: AgentUsage | null }) {
   if (!u || (u.session == null && u.weekly == null)) return null;
   return (
     <span className="stat stat--usage" title={title}>
-      <span className="stat__k">{label}</span>
+      {engine ? <EngineIcon engine={engine} size={15} /> : <span className="stat__k">{label}</span>}
       <span className="stat__v">
         {u.session != null ? `5h ${Math.round(u.session)}%` : ""}
         {u.session != null && u.weekly != null ? " · " : ""}
@@ -47,8 +49,8 @@ export function TitleBar({ stats, glm, codex, claude }: {
       <div className="titlebar__side">
         <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
         <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
-        <UsageChip label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} />
-        <UsageChip label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} />
+        <UsageChip engine="claude" label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} />
+        <UsageChip engine="codex" label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} />
         <UsageChip label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} />
       </div>
       <div className="titlebar__title">
