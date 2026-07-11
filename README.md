@@ -1,10 +1,12 @@
 <div align="center">
 
+<img src="desktop/src/assets/brand/readme-hero.png" alt="HyprDesk — router → workers" width="100%" />
+
 # HyprDesk
 
 **Orchestrate a team of AI coding agents on your desktop.** A **router** agent — the one you talk to — _leads_: it thinks, investigates, designs, writes the critical code, and **delegates execution** to **worker** agents, each in its own real terminal. They all talk over a **local bidirectional MCP tunnel** — **A2A (Agent-to-Agent) running on your machine**.
 
-[![Status](https://img.shields.io/badge/status-active%20development-3b9eff?style=flat-square)](https://github.com/Mats2208/hyprdesk)
+[![Status](https://img.shields.io/badge/status-active%20development-5f819b?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-000000?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
