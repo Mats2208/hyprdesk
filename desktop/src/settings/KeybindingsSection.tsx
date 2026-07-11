@@ -19,7 +19,7 @@ export function KeybindingsSection() {
   return (
     <div className="settings__field">
       <div className="settings__flabel">Atajos de teclado</div>
-      <div className="settings__fdesc">Clic en un atajo y presioná la nueva combinación (con ⌘/Ctrl). Esc para cancelar.</div>
+      <div className="settings__fdesc">Clic en un atajo y presioná la nueva combinación (con {/mac/i.test(navigator.userAgent) ? "⌘" : "Ctrl"}). Esc para cancelar.</div>
       <div className="keybinds">
         {Object.keys(bindings).map((id) => {
           const cmd = getCommand(id);

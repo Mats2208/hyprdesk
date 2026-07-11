@@ -26,8 +26,12 @@ export function resetBinding(id: string) {
   const o = overrides(); delete o[id]; localStorage.setItem(K, JSON.stringify(o));
 }
 
-// combo → etiqueta legible ("mod+t" → "⌘T").
-const SYM: Record<string, string> = { mod: "⌘", arrowright: "→", arrowleft: "←", arrowup: "↑", arrowdown: "↓", shift: "⇧", alt: "⌥" };
+// combo → etiqueta legible, según el SO: en mac glifos compactos ("mod+t" → "⌘T"), en Windows/Linux
+// texto con "+" ("mod+t" → "Ctrl+T"). El binding real es el mismo (mod = ⌘ en mac / Ctrl en el resto).
+const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
+const SYM: Record<string, string> = isMac
+  ? { mod: "⌘", shift: "⇧", alt: "⌥", arrowright: "→", arrowleft: "←", arrowup: "↑", arrowdown: "↓" }
+  : { mod: "Ctrl+", shift: "Shift+", alt: "Alt+", arrowright: "→", arrowleft: "←", arrowup: "↑", arrowdown: "↓" };
 export function comboLabel(c: Combo): string {
   return c.split("+").map((p) => SYM[p] ?? p.toUpperCase()).join("");
 }
