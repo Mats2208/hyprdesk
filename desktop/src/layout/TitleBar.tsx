@@ -1,13 +1,12 @@
 // Barra de título: stats (CPU/RAM + cuota GLM/Codex/Claude), nombre del workspace + rama, contador
 // de tiles y botón de comandos.
-import { useEffect, useMemo, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AgentUsage, SysStats } from "../types";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
 import { THEME_LABEL, useThemeStore } from "../theme/theme";
 import { BrandMark } from "../BrandMark";
 import { TitleMenu } from "./TitleMenu";
+import { WindowControls } from "./WindowControls";
 import { hk, isMac } from "../platform";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
@@ -66,35 +65,6 @@ export function TitleBar({ stats, glm, codex, claude }: {
         <button className="titlebar__cmd" onClick={togglePalette}>Comandos <kbd>{hk("K")}</kbd></button>
       </div>
       {!isMac && <WindowControls />}
-    </div>
-  );
-}
-
-// Controles de ventana (min/max/cerrar) para Windows/Linux frameless. En macOS los pone el SO.
-function WindowControls() {
-  const win = useMemo(() => getCurrentWindow(), []);
-  const [maxed, setMaxed] = useState(false);
-  useEffect(() => {
-    let un: (() => void) | undefined;
-    win.isMaximized().then(setMaxed).catch(() => {});
-    win.onResized(() => { win.isMaximized().then(setMaxed).catch(() => {}); }).then((f) => { un = f; });
-    return () => un?.();
-  }, [win]);
-  return (
-    <div className="wctl">
-      <button className="wctl__btn" title="Minimizar" onClick={() => void win.minimize()}>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5h6" stroke="currentColor" strokeWidth="1" /></svg>
-      </button>
-      <button className="wctl__btn" title={maxed ? "Restaurar" : "Maximizar"} onClick={() => void win.toggleMaximize()}>
-        {maxed ? (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="3" width="5" height="5" stroke="currentColor" strokeWidth="1" /><path d="M4 3V1.5h4.5V6H7" stroke="currentColor" strokeWidth="1" /></svg>
-        ) : (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="2" y="2" width="6" height="6" stroke="currentColor" strokeWidth="1" /></svg>
-        )}
-      </button>
-      <button className="wctl__btn wctl__btn--close" title="Cerrar" onClick={() => void win.close()}>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1" /></svg>
-      </button>
     </div>
   );
 }

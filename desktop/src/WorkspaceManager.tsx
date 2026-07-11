@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { BrandMark } from "./BrandMark";
+import { WindowControls } from "./layout/WindowControls";
+import { isMac } from "./platform";
 import ambientSvg from "./assets/brand/ambient.svg?raw";
 
 export type WorkspaceMeta = { id: string; name: string; folder: string; lastOpened: number; managed?: boolean };
@@ -72,6 +74,9 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
   return (
     <div className="welcome">
       <div className="welcome__ambient" aria-hidden dangerouslySetInnerHTML={{ __html: ambientSvg }} />
+      {/* Windows/Linux frameless: el home no tiene titlebar → franja de arrastre + controles flotantes. */}
+      {!isMac && <div className="home-caption" />}
+      {!isMac && <div className="home-wctl"><WindowControls /></div>}
       <div className="welcome__inner">
         <header className="welcome__hero">
           <div className="welcome__logo">

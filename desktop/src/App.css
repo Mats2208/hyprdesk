@@ -270,8 +270,14 @@ body {
   padding: 0 12px 0 82px; border-bottom: 1px solid var(--hairline); background: var(--surface);
   -webkit-app-region: drag; /* mover la ventana desde el titlebar (traffic lights overlay a la izq) */
 }
-.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 1; -webkit-app-region: no-drag; z-index: 1; }
-.titlebar__side--right { justify-content: flex-end; }
+.titlebar__side { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow: hidden; z-index: 1; }
+.titlebar__side--right { flex: 0 0 auto; justify-content: flex-end; overflow: visible; }
+/* HITBOX de arrastre: la barra entera arrastra; solo lo interactivo es no-drag (antes __side entero
+   era no-drag → casi nada se podía arrastrar). Las stats/chips son spans → arrastrables. */
+.titlebar button, .titlebar input, .titlebar select, .titlebar .tmenu, .titlebar .wctl { -webkit-app-region: no-drag; }
+.titlebar .stat { flex: 0 0 auto; white-space: nowrap; }
+/* responsive: el título centrado (absoluto) se solapa con los chips en ventana angosta → ocultarlo */
+@media (max-width: 1040px) { .titlebar__title { display: none; } }
 /* título REALMENTE centrado en la ventana (independiente del padding de los traffic lights) */
 .titlebar__title {
   position: absolute; left: 50%; transform: translateX(-50%);
@@ -310,6 +316,9 @@ body {
 }
 .wctl__btn:hover { background: var(--hover-2); color: var(--text); }
 .wctl__btn--close:hover { background: #e11d48; color: #fff; }
+/* Home frameless (Windows/Linux): franja de arrastre superior + controles de ventana flotantes */
+.home-caption { position: absolute; top: 0; left: 0; right: 0; height: 40px; -webkit-app-region: drag; z-index: 3; }
+.home-wctl { position: absolute; top: 0; right: 0; height: 40px; z-index: 4; }
 /* Menú custom del titlebar (Archivo/Editar/Ver/Ventana) — estilo VS Code */
 .tmenu { display: flex; align-items: stretch; height: 100%; margin-right: 8px; flex: 0 0 auto; -webkit-app-region: no-drag; }
 .tmenu__group { position: relative; display: flex; }
