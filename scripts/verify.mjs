@@ -44,21 +44,62 @@ ok(median >= 58, `60 fps (median ${median})`);
    the traffic" — so prove it: park in the tunnel, read the load at rest, drive a
    scroll burst, and assert the load RINGS UP and then SETTLES on its own. A looping
    animation would show no difference between the two. */
+/* TWO WAYS THIS MEASUREMENT LIES — it got BOTH wrong on the first attempt, failed the
+   assertion, and very nearly sent the scene worker off to "fix" a simulation that was
+   already correct. Worth writing down:
+
+   1. Scrolling in ONE direction walks the page OUT of the tunnel act, which drops `flow`
+      and takes the core's load down with it. So a hard scroll looked like it barely moved
+      the core — the harness was blaming the simulation for what the harness itself was
+      doing. Oscillate instead: the wheel keeps |velocity| high while the page stays put
+      inside the act.
+   2. The load PEAKS ~300ms AFTER the input stops — packets already on the wire keep
+      arriving and kicking the spring, which is exactly what a real queue does — and then
+      UNDERSHOOTS below rest, because it is underdamped. A single late sample can therefore
+      land anywhere on that curve. Sample continuously and take the PEAK.
+
+   And rest is deliberately non-zero: at flow = 1 the tunnel carries baseline traffic even
+   while the visitor sits still reading. Zero SCROLL is not zero traffic; zero FLOW is
+   (the hero measures load 0.00, 0 packets). So the assertion is about the SURGE. */
 const tunnelY = await p.evaluate(() => window.__shots().find((s) => s.name === 'tunnel').y);
-await p.evaluate((y) => window.__lenis.scrollTo(y, { immediate: true }), tunnelY);
-await p.waitForTimeout(2500);
+const park = async () => {
+  await p.evaluate((y) => window.__lenis.scrollTo(y, { immediate: true }), tunnelY);
+  await p.waitForTimeout(2600);
+};
+await park();
 const rest = await p.evaluate(() => window.__flow());
-for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, 200); await p.waitForTimeout(60); }
-await p.waitForTimeout(160);
-const burst = await p.evaluate(() => window.__flow());
-await p.evaluate((y) => window.__lenis.scrollTo(y, { immediate: true }), tunnelY);
-await p.waitForTimeout(2500);
+
+let peak = { load: 0, packets: 0, vel: 0 }, trough = Infinity;
+const sample = async () => {
+  const f = await p.evaluate(() => window.__flow());
+  if (f.load > peak.load) peak = f;
+  return f;
+};
+for (let i = 0; i < 14; i++) {                  // oscillate: fast wheel, page stays in the act
+  await p.mouse.wheel(0, i % 2 ? -260 : 260);
+  await p.waitForTimeout(55);
+  await sample();
+}
+/* Hands off, and watch it ALL the way down. This window has to be long enough: the load
+   keeps climbing for ~300ms after the input stops, and the undershoot doesn't arrive until
+   ~1.2s. Sampling for less than that misses the dip and libels the spring. */
+for (let i = 0; i < 30; i++) {
+  await p.waitForTimeout(90);                   // ~2.7s of ring-down
+  trough = Math.min(trough, (await sample()).load);
+}
+await park();
 const settled = await p.evaluate(() => window.__flow());
-console.log(`  core load: rest ${rest.load.toFixed(2)} → burst ${burst.load.toFixed(2)} → settled ${settled.load.toFixed(2)}`);
-ok(burst.load > rest.load * 1.15, 'the scroll IS the traffic (load rises on a burst)');
-ok(settled.load < burst.load, 'the load settles on its own (underdamped, not latched high)');
-ok(burst.packets > 0, `packets in flight (${burst.packets})`);
-ok([rest, burst, settled].every((f) => Number.isFinite(f.load) && Number.isFinite(f.vel)),
+
+console.log(`  core load: rest ${rest.load.toFixed(2)} → peak ${peak.load.toFixed(2)} → settled ${settled.load.toFixed(2)}  (ring-down trough ${trough.toFixed(2)})`);
+ok(peak.load > rest.load * 1.4, `the scroll IS the traffic (peak is ${(peak.load / rest.load).toFixed(2)}× rest)`);
+ok(settled.load < peak.load * 0.8, 'the load settles on its own (does not latch high)');
+/* A damped lerp can only approach rest from ONE side. Dipping BELOW rest on the way down
+   is the signature of a genuinely underdamped spring — this is what "not a loop" means,
+   and it is the single assertion that separates this page from a video. */
+ok(trough < rest.load, `underdamped: it undershoots rest on the ring-down (${trough.toFixed(2)} < ${rest.load.toFixed(2)})`);
+ok(rest.packets > 0 && peak.packets > 0,
+  `traffic at rest AND under load (${rest.packets} → ${peak.packets} packets)`);
+ok([rest, peak, settled].every((f) => Number.isFinite(f.load) && Number.isFinite(f.vel)),
   'the simulation never latched a NaN');
 
 /* the marquee must REACT to scroll velocity, not loop at a constant rate */
