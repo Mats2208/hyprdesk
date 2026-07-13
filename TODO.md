@@ -12,6 +12,8 @@ Things that are next, in rough priority order. The [Roadmap in the README](READM
 
 ## Latent traps (not urgent, will bite eventually)
 
+- [ ] **A WebGL context per terminal, even when hidden.** Every `TerminalTile` attaches `WebglAddon`. With 9 tiles per workspace and workspaces kept alive across tabs (all tiles stay mounted), 3 open workspaces = up to **27 contexts**; Chromium caps around 16 and force-loses the oldest. It degrades gracefully (we dispose and fall back to the DOM renderer) — but it means terminals **silently lose the GPU**, which is the very thing WebGL was added for. A hidden terminal needs no context at all: attach on show, dispose on hide.
+
 - [ ] **Windows argv ceiling.** The composed role travels on the **command line** (`claude --append-system-prompt`, `codex -c developer_instructions=`). `CreateProcess` cuts at ~32.767 chars. Today a worker sits at ~8 KB — comfortable. But a fat role + several default-on skills + a profile persona walks toward 12-15 KB, and it will fail **only on Windows, only with certain profiles**. (OpenCode is safe: it writes the role to a temp file.) The fix, when it's time, is to do what OpenCode does.
 - [ ] **A skill name that doesn't exist is ignored in silence.** `with_skills` is best-effort, so a playbook (or a router) naming a skill that isn't installed launches a worker with **nothing** — and nobody finds out. It should at least tell the router.
 
