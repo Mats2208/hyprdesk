@@ -14,5 +14,3 @@ desktop/src-tauri/gen/
 *.log
 .idea/
 
-# Landing 3D (WIP) — ver TODO.md. No entra al repo hasta que esté buena.
-web/
