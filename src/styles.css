@@ -1,0 +1,213 @@
+/* ══════════════════════════════════════════════════════════════
+   styles.css — BASELINE (router). Owned by: `style` worker.
+
+   Tokens + skeleton so the page runs while the team builds. style
+   worker: this is yours to take to Awwwards grade. Two things are
+   load-bearing, keep them:
+
+   1. The `>` child combinator on split headings (see §TRAP).
+   2. --router-x/y/d and --accent/--stage are written from JS every
+      frame. Don't rename them; CONTRACT.md §4.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #F2F1ED;
+  --fg: #111315;
+  --muted: #7C8288;
+  --line: rgba(17, 19, 21, 0.14);
+  --accent: #C2410C;
+  --stage: #F6E7DE;
+
+  /* written by main.js every frame — the halo tracks the router */
+  --router-x: 50vw;
+  --router-y: 50vh;
+  --router-d: 40vw;
+
+  --f-display: 'Outfit', system-ui, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --pad: clamp(20px, 4vw, 64px);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scrollbar-width: none; }
+html::-webkit-scrollbar { display: none; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-display);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  cursor: none;
+}
+@media (hover: none) { body { cursor: auto; } }
+
+/* ─── canvas + halo ─────────────────────────────────────────── */
+
+#gl { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
+
+.stage {
+  position: fixed; z-index: 0;
+  left: var(--router-x); top: var(--router-y);
+  width: var(--router-d); height: var(--router-d);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--stage);
+  filter: blur(2px);
+  transition: background 0.1s linear;
+  pointer-events: none;
+}
+
+.grain {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ─── cursor ────────────────────────────────────────────────── */
+
+.cursor, .cursor-ring {
+  position: fixed; top: 0; left: 0; z-index: 90; pointer-events: none;
+  border-radius: 50%; transform: translate(-50%, -50%);
+}
+.cursor { width: 6px; height: 6px; background: var(--accent); margin: -3px 0 0 -3px; }
+.cursor-ring { width: 34px; height: 34px; border: 1px solid var(--line); opacity: 0.3; margin: -17px 0 0 -17px; }
+@media (hover: none) { .cursor, .cursor-ring { display: none; } }
+
+/* ─── preloader ─────────────────────────────────────────────── */
+
+.preloader {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg); color: var(--fg);
+  display: grid; place-content: center; gap: 18px; justify-items: center;
+}
+.preloader__mark { font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
+.preloader__bar { width: 180px; height: 1px; background: var(--line); overflow: hidden; }
+.preloader__bar i { display: block; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: 0 50%; }
+.preloader__count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+/* ─── hud ───────────────────────────────────────────────────── */
+
+.hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px var(--pad);
+  mix-blend-mode: difference; color: #fff;
+}
+.hud__mark { font-weight: 700; letter-spacing: -0.02em; }
+.hud__mark b { font-weight: 400; opacity: 0.7; }
+.hud__nav { display: flex; gap: 22px; }
+.hud__nav a { color: inherit; text-decoration: none; font-size: 13px; opacity: 0.75; }
+.hud__meta { font-family: var(--f-mono); font-size: 11px; opacity: 0.6; }
+@media (max-width: 800px) { .hud__nav { display: none; } }
+
+/* ─── layout ────────────────────────────────────────────────── */
+
+main { position: relative; z-index: 10; pointer-events: none; }
+main a, main button, .card { pointer-events: auto; }
+
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 var(--pad); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; min-height: 100vh; }
+.act--flip .grid { direction: rtl; }
+.act--flip .grid > * { direction: ltr; }
+.col--product { pointer-events: none; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .col--product { display: none; }
+}
+
+section { position: relative; }
+
+/* ─── type ──────────────────────────────────────────────────── */
+
+.eyebrow {
+  display: block; font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+}
+
+.hero__title, .act__title, .outro__title {
+  font-weight: 800; letter-spacing: -0.035em; line-height: 0.95;
+}
+.hero__title { font-size: clamp(44px, 7.2vw, 108px); }
+.act__title, .outro__title { font-size: clamp(36px, 5vw, 76px); }
+
+/* TRAP — child combinator, NOT descendant. The splitter injects a
+   <span class="w"> per word; a descendant selector matches those too
+   (higher specificity than .w) → one word per line, long ones clipped
+   by .w{overflow:hidden}. Three projects, three times. */
+.hero__title > .line,
+.act__title > span,
+.outro__title > span { display: block; }
+.line--accent, .accent { color: var(--accent); }
+
+.hero__sub, .act__body {
+  margin-top: 24px; max-width: 46ch; font-size: clamp(15px, 1.15vw, 18px);
+  line-height: 1.6; color: var(--muted);
+}
+.hero__meta { display: flex; gap: 26px; margin-top: 34px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+/* the splitter's word mask */
+.w { display: inline-block; overflow: hidden; vertical-align: bottom; }
+.wi { display: inline-block; will-change: transform; }
+
+.specs { list-style: none; margin-top: 32px; border-top: 1px solid var(--line); }
+.specs li { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.specs b { font-weight: 600; }
+.specs span { color: var(--muted); font-family: var(--f-mono); font-size: 12px; }
+
+.scrollcue { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: grid; gap: 10px; justify-items: center; color: var(--muted); font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
+.scrollcue i { width: 1px; height: 40px; background: var(--line); }
+
+/* ─── engine picker ─────────────────────────────────────────── */
+
+.engines { display: flex; gap: 12px; margin-top: 34px; }
+.sw {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--sw); cursor: none; transition: box-shadow 0.25s;
+}
+.sw[aria-checked='true'] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--fg); }
+.engines__name { display: block; margin-top: 14px; font-weight: 600; }
+.engines__note { margin-top: 4px; font-size: 13px; color: var(--muted); max-width: 40ch; min-height: 2.6em; }
+
+/* ─── horizontal specs ──────────────────────────────────────── */
+
+.hsec { height: 100vh; display: flex; align-items: center; overflow: hidden; }
+.htrack { display: flex; gap: 28px; padding: 0 var(--pad); will-change: transform; }
+.card {
+  flex: 0 0 clamp(280px, 30vw, 420px); padding: 34px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+.card__n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.card h3 { margin: 18px 0 12px; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+.card h3 em { font-style: normal; color: var(--accent); }
+.card p { font-size: 14px; line-height: 1.55; color: var(--muted); }
+
+/* ─── outro ─────────────────────────────────────────────────── */
+
+.outro { padding-top: 80px; }
+.marquee { overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0; }
+.marquee__track { display: flex; white-space: nowrap; font-size: clamp(28px, 4vw, 56px); font-weight: 800; letter-spacing: -0.03em; opacity: 0.12; }
+
+.price { margin-top: 30px; display: flex; align-items: baseline; gap: 14px; }
+.price__n { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; }
+.price__note { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+.outro__cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.btn {
+  display: inline-block; padding: 14px 26px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--fg); text-decoration: none; font-size: 14px; font-weight: 600;
+}
+.btn--solid { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--ghost { color: var(--muted); }
+
+.foot { display: flex; justify-content: space-between; padding-top: 70px; padding-bottom: 34px; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+
+/* ─── reduced motion ────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  body { cursor: auto; }
+  .cursor, .cursor-ring, .scrollcue { display: none; }
+  .wi { transform: none !important; }
+}

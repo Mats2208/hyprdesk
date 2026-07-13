@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HyprDesk — One router. Three engines.</title>
+<meta name="description" content="A router agent that delegates to Claude, Codex and OpenCode over a local A2A tunnel. Real-time 3D, not a video." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<div class="preloader" id="preloader">
+  <div class="preloader__mark">HD</div>
+  <div class="preloader__bar"><i id="preloader-bar"></i></div>
+  <div class="preloader__count" id="count">00</div>
+</div>
+
+<!-- el halo: toma el color del engine activo y sigue al router por la pantalla -->
+<div class="stage" id="stage" aria-hidden="true"></div>
+
+<canvas id="gl"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="cursor" id="cursor" aria-hidden="true"></div>
+<div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+
+<header class="hud">
+  <span class="hud__mark">Hypr<b>Desk</b></span>
+  <nav class="hud__nav">
+    <a href="#act-engines" data-magnetic>Engines</a>
+    <a href="#act-orbit" data-magnetic>Orbit</a>
+    <a href="#act-tunnel" data-magnetic>Tunnel</a>
+    <a href="#act-worktrees" data-magnetic>Worktrees</a>
+  </nav>
+  <span class="hud__meta"><i id="hud-fps">—</i></span>
+</header>
+
+<main>
+
+  <!-- ░░ HERO ░░ -->
+  <section class="hero">
+    <div class="wrap grid hero__grid">
+      <div class="col col--text">
+        <span class="eyebrow" data-split>Local-first agent orchestration</span>
+        <h1 class="hero__title">
+          <span class="line" data-split>One router.</span>
+          <span class="line" data-split>Three engines.</span>
+          <span class="line line--accent" data-split>Zero handoff.</span>
+        </h1>
+        <p class="hero__sub" data-split>
+          HyprDesk runs a router agent that thinks, then delegates. Claude, Codex and
+          OpenCode work in parallel over a local A2A tunnel — on your machine, in your repo.
+        </p>
+        <div class="hero__meta">
+          <span data-split>3 engines</span>
+          <span data-split>Git worktrees</span>
+          <span data-split>No cloud relay</span>
+        </div>
+      </div>
+      <div class="col col--product"></div>
+    </div>
+    <div class="scrollcue"><i></i><span>Scroll</span></div>
+  </section>
+
+  <!-- ░░ 01 · ENGINES — el picker repinta la página ░░ -->
+  <section class="act" id="act-engines">
+    <div class="wrap grid">
+      <div class="col col--text">
+        <span class="eyebrow" data-split>01 — The engines</span>
+        <h2 class="act__title">
+          <span data-split>Routed by</span>
+          <span class="accent" data-split>capability.</span>
+        </h2>
+        <p class="act__body" data-split>
+          Not every model is good at everything. The router picks the engine that owns the
+          capability — deep reasoning, precise implementation, or a provider you already pay for.
+        </p>
+
+        <div class="engines" id="engines" role="radiogroup" aria-label="Pick an engine"></div>
+        <span class="engines__name" id="engine-name">Claude</span>
+        <p class="engines__note" id="engine-note"></p>
+      </div>
+      <div class="col col--product"></div>
+    </div>
+  </section>
+
+  <!-- ░░ 02 · ORBIT (el estudio se apaga: turno nocturno) ░░ -->
+  <section class="act act--flip" id="act-orbit">
+    <div class="wrap grid">
+      <div class="col col--product"></div>
+      <div class="col col--text">
+        <span class="eyebrow" data-split>02 — The orbit</span>
+        <h2 class="act__title">
+          <span data-split>They work</span>
+          <span class="accent" data-split>while you don't.</span>
+        </h2>
+        <p class="act__body" data-split>
+          Spawn a worker per domain and they run autonomously, in parallel. The lights go
+          down on the studio and the engines keep turning around the router.
+        </p>
+        <ul class="specs">
+          <li><b>Fan-out</b><span>One worker per domain</span></li>
+          <li><b>Isolation</b><span>Branch per worker</span></li>
+          <li><b>Report</b><span>Back to the router</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ 03 · TUNNEL — rayos X: se ven los paquetes adentro ░░ -->
+  <section class="act" id="act-tunnel">
+    <div class="wrap grid">
+      <div class="col col--text">
+        <span class="eyebrow" data-split>03 — The A2A tunnel</span>
+        <h2 class="act__title">
+          <span data-split>Your scroll</span>
+          <span class="accent" data-split>is the traffic.</span>
+        </h2>
+        <p class="act__body" data-split>
+          The shells go ghost and you see the packets: real messages moving router ↔ engine.
+          Throughput is a simulation driven by your scroll velocity — the core glows under load
+          and settles when you stop. Move fast and watch it flare.
+        </p>
+        <ul class="specs">
+          <li><b>Transport</b><span>Local A2A, no relay</span></li>
+          <li><b>Simulation</b><span>Spring–damper load</span></li>
+          <li><b>Input</b><span>Scroll velocity</span></li>
+        </ul>
+      </div>
+      <div class="col col--product"></div>
+    </div>
+  </section>
+
+  <!-- ░░ 04 · WORKTREES — el despiece ░░ -->
+  <section class="act act--flip" id="act-worktrees">
+    <div class="wrap grid">
+      <div class="col col--text">
+        <span class="eyebrow" data-split>04 — Worktrees</span>
+        <h2 class="act__title">
+          <span data-split>Parallel.</span>
+          <span class="accent" data-split>Never colliding.</span>
+        </h2>
+        <p class="act__body" data-split>
+          Each worker gets its own git worktree. Watch them separate: same objects you've been
+          orbiting, pulled apart onto their own branches — then merged back by the router.
+        </p>
+      </div>
+      <div class="col col--product"></div>
+    </div>
+  </section>
+
+  <!-- ░░ SPECS HORIZONTAL ░░ -->
+  <section class="hsec" id="specs">
+    <div class="htrack" id="htrack">
+      <article class="card" data-magnetic>
+        <span class="card__n">01</span>
+        <h3>Router <em>first</em></h3>
+        <p>The lead agent reads the code and designs the contract before anyone writes a line.</p>
+      </article>
+      <article class="card" data-magnetic>
+        <span class="card__n">02</span>
+        <h3>Three <em>engines</em></h3>
+        <p>Claude, Codex, OpenCode. Routed by capability, not by coin flip.</p>
+      </article>
+      <article class="card" data-magnetic>
+        <span class="card__n">03</span>
+        <h3>Worktree <em>isolation</em></h3>
+        <p>Every worker on its own branch. Reviewed, then merged. No blind merges.</p>
+      </article>
+      <article class="card" data-magnetic>
+        <span class="card__n">04</span>
+        <h3>Runs <em>local</em></h3>
+        <p>Your machine, your repo, your keys. The tunnel never leaves the box.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ░░ OUTRO ░░ -->
+  <section class="outro">
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee__track" id="marquee">
+        <span>HyprDesk — one router, three engines — delegate, review, merge —&nbsp;</span>
+        <span>HyprDesk — one router, three engines — delegate, review, merge —&nbsp;</span>
+      </div>
+    </div>
+
+    <div class="wrap grid outro__grid">
+      <div class="col col--text">
+        <span class="eyebrow" data-split>Available now</span>
+        <h2 class="outro__title">
+          <span data-split>Run the</span>
+          <span class="accent" data-split>whole team.</span>
+        </h2>
+        <div class="price">
+          <span class="price__n">Free</span>
+          <span class="price__note">Open source · bring your own keys</span>
+        </div>
+        <div class="outro__cta">
+          <a href="#" class="btn btn--solid" data-magnetic>Download</a>
+          <a href="#" class="btn" data-magnetic>Repository</a>
+          <a href="#" class="btn btn--ghost" data-magnetic id="btn-top">Back to top</a>
+        </div>
+      </div>
+      <div class="col col--product"></div>
+    </div>
+
+    <footer class="foot wrap">
+      <span>Real-time 3D — not a video</span>
+      <span>Three.js · GSAP · Lenis</span>
+      <span>2026</span>
+    </footer>
+  </section>
+
+</main>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
