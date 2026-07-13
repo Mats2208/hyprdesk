@@ -117,40 +117,57 @@ if (!COARSE && !REDUCED) {
    groupX < 0 → the flipped acts (.act--flip).
    ──────────────────────────────────────────────────────────── */
 
-/* Tuned against the real layout, not by feel. The rig normalizes to 3 units across
-   and the product must live inside ITS half of the grid, so every act is solved:
+/* Solved against the REAL rig, and against EVERY PHASE OF IT — not a lucky snapshot.
 
-       visibleWidth = 2 · camZ · tan(fov/2) · aspect          (aspect 1.6 = the tight case)
-       groupX − 1.5 ≥ +0.25     ← clears the text column (its right edge lands at ≈ x 0)
-       groupX + 1.5 ≤ visW/2    ← stays inside the frame
+   Two things the nominal "3 units across" hides:
 
-   Both bounds together force visW ≥ 6.8: a 3-unit rig can't be "closer" than ~42% of
-   the viewport and still respect the two-column grid. So the acts differentiate by
-   FOV (perspective), elevation and the story props — not by scale. The long lens on
-   `engines` (fov 25 @ camZ 10) is the product-beauty shot; the wide lens on `tunnel`
-   (fov 32 @ camZ 7.6) is the one you feel you're standing inside.
+   1. The rig breathes with the story. scene.js sizes the ring as
+      `rad = r·(1 + (1−orbit)·0.55) + split·1.5`, and `orbit: 0` means the engines are
+      DORMANT, FAR OUT. So the rig is widest exactly where the copy is loudest — the
+      hero (orbit 0.15) and worktrees (split 1, engines thrown onto their branches).
 
-   groupX sign follows the REAL rendered layout (measured, not assumed): product right,
-   except the two .act--flip acts — #act-orbit and #act-worktrees — where it goes left.
-   The sign is the layout: get it wrong and the 3D parks on top of its own copy.
+   2. The engines NEVER STOP ORBITING: `phase += dt · 0.12 · orbit`. A full revolution
+      at orbit 0.55 takes ~95 seconds, so any single measurement — or screenshot — samples
+      one arbitrary phase and proves nothing. Tuned on one phase, six of the seven acts
+      cropped an engine at some other phase, worst of them by 153px. What the frame has to
+      hold is the WORST CASE over the whole ring.
+
+   So each act is solved against the phase-swept footprint: every engine walked right
+   around its own ring, worst |x| taken. Half-widths, world units:
+
+       hero 2.57 · engines 2.35 · orbit 1.84 · tunnel 1.98 · worktrees 3.19 · outro 1.97
+
+   and then framed to sit inside its OWN column with air on both sides:
+
+       visW = 2 · camZ · tan(fov/2) · aspect      (aspect 1.6 = the tight case)
+       rig ≤ 44% of viewport width, centred on the product column
+
+   The camera sits far back because the object is genuinely big, not because the shot is
+   timid — 44% of the viewport is the same apparent size in every act. Losing a little
+   scale beats cropping an engine.
+
+   groupX sign follows the REAL rendered layout: product right, except the two
+   .act--flip acts (#act-orbit, #act-worktrees) where it goes left. Get the sign wrong
+   and the 3D parks on top of its own copy.
 
    rotY only ever decreases: the rig never rewinds, it keeps turning one way. */
 const POSE = {
-  hero:      { rotY: -0.45, camX: 0, camY: 1.90, camZ: 8.6,  ty: 0, fov: 30, groupX: 1.90,  groupY: 0, orbit: 0.15, wire: 0,    flow: 0,    xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.0, idleSpin: 1.00 },
+  // hero: the widest rig of all seven — the engines are dormant and thrown far out
+  hero:      { rotY: -0.45, camX: 0, camY: 3.00, camZ: 13.6, ty: 0, fov: 30, groupX: 2.83,   groupY: 0, orbit: 0.15, wire: 0,    flow: 0,    xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.0, idleSpin: 1.00 },
   // engines: long lens on the three shells — the picker lives here
-  engines:   { rotY: -1.15, camX: 0, camY: 2.30, camZ: 10.0, ty: 0, fov: 25, groupX: 1.85,  groupY: 0, orbit: 0.45, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.26, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
+  engines:   { rotY: -1.15, camX: 0, camY: 3.45, camZ: 15.0, ty: 0, fov: 25, groupX: 2.59,   groupY: 0, orbit: 0.45, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.26, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
   // orbit: FLIPPED (product left). Camera climbs to 23° so the ring READS as an orbit,
   // and the studio lights go OUT. The page turns with them.
-  orbit:     { rotY: -2.10, camX: 0, camY: 3.90, camZ: 9.2,  ty: 0, fov: 28, groupX: -1.85, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 1.7, idleSpin: 0.55 },
+  orbit:     { rotY: -2.10, camX: 0, camY: 4.41, camZ: 10.4,  ty: 0, fov: 28, groupX: -2.03, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 1.7, idleSpin: 0.55 },
   // tunnel: wide lens, closest camera, shells ghosted so the packets read. dark stays
   // LOW on purpose — a mid theme lerp is grey-on-grey and the copy dies.
-  tunnel:    { rotY: -2.75, camX: 0, camY: 1.70, camZ: 7.6,  ty: 0, fov: 32, groupX: 1.80,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 0.05, stageOp: 1,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.0, idleSpin: 0.35 },
-  // worktrees: flipped (product left). Pulled back — `split` throws the engines
-  // outward and the frame has to hold the explosion.
-  worktrees: { rotY: -3.60, camX: 0, camY: 2.70, camZ: 11.4, ty: 0, fov: 30, groupX: -2.40, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0.06, stageOp: 1,   shadowOp: 0.28, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
+  tunnel:    { rotY: -2.75, camX: 0, camY: 2.19, camZ: 9.8,  ty: 0, fov: 32, groupX: 2.19,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 0.05, stageOp: 1,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.0, idleSpin: 0.35 },
+  // worktrees: flipped (product left). `split` throws the engines onto their branches —
+  // the second-widest rig, so the frame is pulled back to hold the whole explosion.
+  worktrees: { rotY: -3.60, camX: 0, camY: 4.00, camZ: 16.9, ty: 0, fov: 30, groupX: -3.52, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0.06, stageOp: 1,   shadowOp: 0.28, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
   // specs: centred turntable behind the cards — a backdrop, so it may be small
   specs:     { rotY: -5.80, camX: 0, camY: 2.00, camZ: 12.6, ty: 0, fov: 32, groupX: 0,     groupY: 0, orbit: 0.90, wire: 0.70, flow: 0.45, xray: 0,   split: 0, dark: 0,    stageOp: 0.5, shadowOp: 0.22, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.70 },
-  outro:     { rotY: -8.90, camX: 0, camY: 1.70, camZ: 9.4,  ty: 0, fov: 30, groupX: 2.05,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 0.60, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.4, idleSpin: 1.00 },
+  outro:     { rotY: -8.90, camX: 0, camY: 1.88, camZ: 10.4,  ty: 0, fov: 30, groupX: 2.18,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 0.60, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.4, idleSpin: 1.00 },
 };
 
 /* PROPS is derived from the table on purpose: scrollVel / mouseX / mouseY
@@ -238,6 +255,14 @@ const smoothstep = (t) => t * t * (3 - 2 * t);
 const DESIGN_ASPECT = 1.6;
 const fit = () => Math.max(1, DESIGN_ASPECT / (innerWidth / innerHeight));
 
+/* Below 900px styles.css collapses the grid to ONE column and hides .col--product —
+   there is no product column left for the rig to sit in, so a groupX solved for a
+   two-column grid just hangs it half off the right edge, behind the copy. Centre it and
+   let it read as a backdrop. Same breakpoint as the CSS, and derived HERE: a media
+   listener writing S.groupX would be a second writer, which is the one thing this
+   architecture doesn't allow. */
+const SOLO = () => innerWidth <= 900;
+
 /** The ONE function that writes S's pose. Don't add a second one. */
 function poseFromScroll(y) {
   // reduced motion: the scene is PARKED in the hero pose. Still one writer, still every frame.
@@ -254,6 +279,7 @@ function poseFromScroll(y) {
   // re-derived from POSE every frame, so scaling in place can never accumulate
   const k = fit();
   if (k > 1) { S.camX *= k; S.camY *= k; S.camZ *= k; }
+  if (SOLO()) S.groupX = 0;   // one column: the rig centres and becomes the backdrop
 }
 
 /* ─── 5. Text splitter ──────────────────────────────────────── */
@@ -513,4 +539,6 @@ document.querySelectorAll('.hud__nav a').forEach((a) => {
 });
 
 window.__S = S;        // the harness checks S never latched a NaN (CONTRACT.md §7)
+window.__viewer = viewer;  // escape hatch (CONTRACT.md §1): lets a probe project the rig
+                           // to screen px and PROVE a frame doesn't crop, instead of eyeballing
 window.__ready = true;
