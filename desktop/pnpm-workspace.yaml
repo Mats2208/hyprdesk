@@ -1,10 +1,10 @@
-# El MCP (mcp/) es su propio paquete, con sus deps (@modelcontextprotocol/sdk + zod), y el build lo
-# bundlea con esbuild a src-tauri/resources/. Sin declararlo acá, `pnpm install` no instalaba esas
-# deps: el build solo andaba en máquinas que ya las tenían de antes y un clone limpio fallaba.
-# Lo encontró el CI, que es exactamente para lo que está.
+# El cerebro del agente (agent/) es su propio paquete, con sus deps (@modelcontextprotocol/sdk +
+# zod), y el build lo bundlea con esbuild a src-tauri/resources/. Sin declararlo acá, `pnpm install`
+# no instalaba esas deps: el build solo andaba en máquinas que ya las tenían de antes y un clone
+# limpio fallaba. Lo encontró el CI, que es exactamente para lo que está.
 packages:
   - "."
-  - "mcp"
+  - "agent"
 
 allowBuilds:
   esbuild: true

@@ -130,7 +130,7 @@ pub struct LaunchSpec {
 
 // Directorio de recursos: el MCP bundleado (self-contained) + los roles. Lo setea la app al
 // arrancar (apuntando al resource dir de Tauri, que funciona en la app empaquetada); si no está
-// seteado (dev), caemos al `resources/` junto al crate, que `pnpm build:mcp` genera.
+// seteado (dev), caemos al `resources/` junto al crate, que `pnpm build:agent` genera.
 static RES_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_res_dir(dir: PathBuf) {
@@ -148,7 +148,7 @@ fn res_file(name: &str) -> Result<PathBuf, String> {
     if dev.exists() {
         return Ok(dev);
     }
-    Err(format!("no encuentro el recurso {name} (¿corriste `pnpm build:mcp`?)"))
+    Err(format!("no encuentro el recurso {name} (¿corriste `pnpm build:agent`?)"))
 }
 
 // Quita el prefijo UNC `\\?\` que canonicalize agrega en Windows: node/codex no saben cargar

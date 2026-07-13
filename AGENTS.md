@@ -38,7 +38,7 @@ If you touched terminals, sessions or agents, say which engines you tested with 
 | `desktop/src/layout/` | shell, tiles, panels, title bar |
 | `desktop/src/terminal/` | terminal keyboard protocol |
 | `desktop/src-tauri/src/` | Rust: PTYs (`lib.rs`), tunnel (`control.rs`), engines, worktrees, workspaces |
-| `desktop/mcp/` | the MCP server both router and workers connect to |
+| `desktop/agent/` | the agent's brain: the MCP server, the **roles** (always injected), the **skills** (domain, for a worker) and the **playbooks** (orchestration, loaded by the router) |
 | `docs/ARCHITECTURE.md` | **read this before touching the backend** |
 
 ## Conventions

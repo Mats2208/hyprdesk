@@ -150,7 +150,7 @@ flowchart TB
 
 - **Frontend** (`desktop/src/`): React + xterm.js. Modular — a zustand store (`store/`), hooks (`hooks/`), a layout shell (`layout/`: activity bar, side panel with file tree, tile grid, status bar), the file editor (`FileTile.tsx`, CodeMirror), a command registry (`commands/`), a theme-token system (`theme/`), schema-driven settings (`settings/`), and onboarding.
 - **Backend** (`desktop/src-tauri/src/`): Rust/Tauri — `lib.rs` (`PtyManager` + commands + Windows npm-shim resolution), `control.rs` (HTTP control server = tunnel hub + worker roster), `engines.rs` (per-engine adapters + model/effort/persona + MCP/skill injection), `worktree.rs` (isolation + merge), `memory.rs` (router memory), `fsops.rs` (file read/write/list for the in-app editor), `workspace.rs`, `settings.rs` (config + meta-agent + GLM quota), `browser.rs` (native webview).
-- **MCP** (`desktop/mcp/`): a *role-aware* stdio server exposing router vs worker tools — `spawn_worker`, `send_to_worker`, `list_workers`, `list_profiles`, `review_worker`, `merge_worker`, `ask_user`, `save_memory` (router) / `report_to_router`, `ask_router` (worker).
+- **MCP** (`desktop/agent/`): a *role-aware* stdio server exposing router vs worker tools — `spawn_worker`, `send_to_worker`, `list_workers`, `list_profiles`, `review_worker`, `merge_worker`, `ask_user`, `save_memory` (router) / `report_to_router`, `ask_router` (worker).
 
 ### How it delegates
 

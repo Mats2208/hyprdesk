@@ -65,7 +65,7 @@ Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before touching the backend 
 ```
 desktop/src/          React frontend — store/ (zustand) · layout/ · hooks/ · commands/ · terminal/
 desktop/src-tauri/    Rust backend — PTYs, the A2A tunnel, engine adapters, git worktrees, workspaces
-desktop/mcp/          the MCP server both router and workers connect to
+desktop/agent/        the agent's brain — MCP server · roles (always on) · skills (worker) · playbooks (router)
 cli/                  an earlier standalone prototype, kept for reference
 ```
 

@@ -44,7 +44,7 @@ Every agent is a real OS pseudo-terminal. `pty_spawn` opens one, runs the engine
 
 ## The tunnel (`control.rs`)
 
-A `tiny_http` server on `127.0.0.1:<random>`. The bundled MCP server (`desktop/mcp/`) is handed to every agent, and its tools POST here.
+A `tiny_http` server on `127.0.0.1:<random>`. The bundled MCP server (`desktop/agent/`) is handed to every agent, and its tools POST here.
 
 **Delivery is a keystroke.** Routing a message to an agent means *typing it into its PTY* — there is no side channel. Two consequences that look like bugs but aren't:
 

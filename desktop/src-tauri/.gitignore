@@ -6,5 +6,5 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 
-# Generado por `pnpm build:mcp` (MCP bundleado + roles copiados)
+# Generado por `pnpm build:agent` (MCP bundleado + roles copiados)
 /resources/

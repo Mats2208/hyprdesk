@@ -100,7 +100,7 @@ importers:
         specifier: ^7.0.4
         version: 7.3.6
 
-  mcp:
+  agent:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0

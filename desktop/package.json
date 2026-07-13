@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["mcp"],
+  "workspaces": ["agent"],
   "scripts": {
-    "build:mcp": "node scripts/build-mcp.mjs",
-    "dev": "node scripts/build-mcp.mjs && vite",
-    "build": "node scripts/build-mcp.mjs && tsc && vite build",
+    "build:agent": "node scripts/build-agent.mjs",
+    "dev": "node scripts/build-agent.mjs && vite",
+    "build": "node scripts/build-agent.mjs && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
