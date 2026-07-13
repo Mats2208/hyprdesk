@@ -51,3 +51,50 @@ pub fn write_atomic(path: &Path, content: &str) -> Result<(), String> {
     // En Windows fs::rename reemplaza el destino (MOVEFILE_REPLACE_EXISTING), igual que en Unix.
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // El bug: canonicalize() en Windows devuelve la forma verbatim, y ese prefijo rompía TODO lookup
+    // por string — claude escribe su transcript en E--proj y nosotros lo buscábamos en --?-E--proj.
+    #[test]
+    #[cfg(windows)]
+    fn saca_el_prefijo_verbatim_de_windows() {
+        let verbatim = concat!(r"\\", r"?\", r"E:\PROYECTOS\hyprdesk");
+        assert_eq!(strip_verbatim(verbatim), r"E:\PROYECTOS\hyprdesk");
+
+        let unc = concat!(r"\\", r"?\UNC\servidor\share");
+        assert_eq!(strip_verbatim(unc), r"\\servidor\share");
+
+        assert_eq!(strip_verbatim(r"C:\normal\path"), r"C:\normal\path", "una ruta normal no se toca");
+    }
+
+    // La clave del state file. Si no fuera estable entre corridas, cada reinicio perdería el estado.
+    #[test]
+    fn el_hash_es_estable_y_distingue() {
+        assert_eq!(hash_key("C:/a/b"), hash_key("C:/a/b"), "misma ruta → misma clave, siempre");
+        assert_ne!(hash_key("C:/a/b"), hash_key("C:/a/c"));
+        assert_eq!(hash_key("x").len(), 16);
+    }
+
+    // fs::write trunca: un lector concurrente veía el archivo vacío, lo parseaba como [] y ese []
+    // volvía a disco. Escribir a un temp y renombrar hace la operación indivisible.
+    #[test]
+    fn la_escritura_atomica_reemplaza_y_no_deja_basura() {
+        let dir = std::env::temp_dir().join(format!("hd-atomic-{}", uuid::Uuid::new_v4()));
+        let f = dir.join("sub").join("x.json");
+
+        write_atomic(&f, "primero").unwrap(); // crea los padres que falten
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "primero");
+
+        write_atomic(&f, "segundo").unwrap(); // reemplaza (en Windows también)
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "segundo");
+
+        let sobrantes: Vec<_> = std::fs::read_dir(f.parent().unwrap()).unwrap().flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "tmp")).collect();
+        assert!(sobrantes.is_empty(), "el .tmp no queda colgado");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

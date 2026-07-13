@@ -28,8 +28,46 @@ pub fn is_git_repo(cwd: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn worktrees_dir() -> PathBuf {
+    crate::home_dir().join("HyprDesk/.worktrees")
+}
+
 fn worktrees_root(ws: &str) -> PathBuf {
-    crate::home_dir().join("HyprDesk/.worktrees").join(crate::paths::hash_key(ws))
+    worktrees_dir().join(crate::paths::hash_key(ws))
+}
+
+// El hash NO se invierte, así que la carpeta lleva adentro a qué workspace pertenece. Sin esto, al
+// recolectar un huérfano no sabríamos en qué repo correr `git worktree prune` y le dejaríamos los
+// metadatos podridos. (Mismo criterio que el state file, que lleva su `folder`.)
+const WS_MARKER: &str = ".workspace";
+
+// GC de worktrees huérfanos. Una raíz cuyo workspace ya NO está en el índice es basura: el workspace
+// se borró, o su carpeta desapareció (list_workspaces poda esos). Se corre al arrancar.
+//
+// Solo borra raíces ENTERAS de workspaces muertos. Los worktrees de un workspace VIVO no se tocan
+// aunque su worker haya muerto: ese trabajo se preserva a propósito (es revisable y mergeable).
+pub fn gc_orphans() {
+    let Ok(entries) = std::fs::read_dir(worktrees_dir()) else { return };
+    let vivos: std::collections::HashSet<String> = crate::workspace::list_workspaces()
+        .iter()
+        .map(|w| crate::paths::hash_key(&w.folder))
+        .collect();
+
+    for e in entries.flatten() {
+        let p = e.path();
+        let Some(name) = p.file_name().and_then(|n| n.to_str()) else { continue };
+        if !p.is_dir() || vivos.contains(name) {
+            continue;
+        }
+        let ws = std::fs::read_to_string(p.join(WS_MARKER)).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&p);
+        // El repo puede seguir existiendo (borrar un workspace enlazado NO borra la carpeta del
+        // usuario): dejarle metadatos de worktrees que ya no están sería ensuciarle el repo.
+        let ws = ws.trim();
+        if !ws.is_empty() && std::path::Path::new(ws).is_dir() {
+            let _ = git(ws, &["worktree", "prune"]);
+        }
+    }
 }
 
 // Crea worktree + rama `hyprdesk/<short>` para el worker si el ws es git. None si no es git o falla.
@@ -41,6 +79,7 @@ pub fn create(ws: &str, worker_id: &str) -> Option<Worktree> {
     let branch = format!("hyprdesk/{short}");
     let root = worktrees_root(ws);
     let _ = std::fs::create_dir_all(&root);
+    let _ = std::fs::write(root.join(WS_MARKER), ws); // a quién pertenece (el hash no se invierte)
     let wt = root.join(worker_id);
     let wt_str = wt.to_string_lossy().to_string();
     git(ws, &["worktree", "add", &wt_str, "-b", &branch])?;
@@ -111,4 +150,31 @@ pub fn merge(ws: &str, worktree_path: &str, branch: &str) -> Result<(), Vec<Stri
         .collect();
     let _ = git(ws, &["merge", "--abort"]);
     Err(conflicts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // El GC tiene que ser QUIRÚRGICO: los worktrees de un workspace vivo se preservan a propósito
+    // (aunque su worker haya muerto, ese trabajo es revisable y mergeable). Solo se recolectan las
+    // raíces de workspaces que ya no existen — que es lo que se acumulaba para siempre.
+    #[test]
+    fn recolecta_solo_los_worktrees_de_workspaces_muertos() {
+        let _g = crate::workspace::tests::TempHome::new();
+        crate::workspace::ensure_root();
+
+        let vivo = crate::workspace::create_workspace("vivo").unwrap();
+        let raiz_viva = worktrees_root(&vivo.folder);
+        std::fs::create_dir_all(raiz_viva.join("worker-a")).unwrap();
+
+        // Una raíz cuyo workspace no está en el índice: el hash de una carpeta que no existe.
+        let raiz_huerfana = worktrees_dir().join(crate::paths::hash_key("C:/borrado/hace/meses"));
+        std::fs::create_dir_all(raiz_huerfana.join("worker-b")).unwrap();
+
+        gc_orphans();
+
+        assert!(raiz_viva.join("worker-a").is_dir(), "el trabajo de un workspace VIVO se preserva");
+        assert!(!raiz_huerfana.exists(), "la raíz huérfana se recolecta");
+    }
 }

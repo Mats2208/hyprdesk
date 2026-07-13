@@ -72,6 +72,13 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo clippy --all-targets -- -D warnings
 
+      # La capa de persistencia de workspaces destruyó un índice real en disco. Los tests corren en
+      # las DOS plataformas porque el bug que más duele (el prefijo verbatim \\?\) solo existe en
+      # Windows — un test que solo corre en Linux no lo habría visto nunca.
+      - name: tests
+        working-directory: desktop/src-tauri
+        run: cargo test --lib
+
       - name: cargo check
         working-directory: desktop/src-tauri
         run: cargo check --all-targets

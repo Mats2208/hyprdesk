@@ -786,6 +786,7 @@ pub fn run() {
         .manage(Mutex::new(System::new_all()))
         .setup(|app| {
             workspace::ensure_root();
+            worktree::gc_orphans(); // worktrees de workspaces que ya no existen (se acumulaban para siempre)
             // Recursos (MCP bundleado + roles). En la app empaquetada viven bajo el resource dir;
             // en dev, `res_file` cae al `resources/` del crate si esto no existe.
             if let Ok(dir) = app.path().resource_dir() {

@@ -341,3 +341,161 @@ pub fn touch_workspace(id: &str) {
         Ok(())
     });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests. Cada uno guarda la regresión de un bug que YA pagamos en producción — no hay
+// coberturas decorativas acá.
+//
+// Apuntamos HOME/USERPROFILE a un temp dir: root() deriva de home_dir(), así que los tests
+// nunca tocan el ~/HyprDesk real. El env es global al proceso y los tests corren en hilos, así
+// que se serializan con un mutex (y el guard restaura el valor original aunque el test paniquee).
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV: Mutex<()> = Mutex::new(());
+
+    pub struct TempHome {
+        _guard: MutexGuard<'static, ()>,
+        prev: Option<String>,
+        dir: PathBuf,
+    }
+
+    const HOME_VAR: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+
+    impl TempHome {
+        pub fn new() -> Self {
+            let guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            let dir = std::env::temp_dir().join(format!("hyprdesk-test-{}", uuid::Uuid::new_v4()));
+            fs::create_dir_all(&dir).unwrap();
+            let prev = std::env::var(HOME_VAR).ok();
+            std::env::set_var(HOME_VAR, &dir);
+            TempHome { _guard: guard, prev, dir }
+        }
+        // Una carpeta cualquiera del usuario (fuera de ~/HyprDesk) — el caso "workspace enlazado".
+        fn external(&self, name: &str) -> String {
+            let p = self.dir.join(name);
+            fs::create_dir_all(&p).unwrap();
+            p.to_string_lossy().to_string()
+        }
+    }
+
+    impl Drop for TempHome {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(HOME_VAR, v),
+                None => std::env::remove_var(HOME_VAR),
+            }
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    // EL bug: el índice del usuario apareció como `[]` con todas las carpetas intactas al lado.
+    // Una lectura que falla NO puede persistirse. Nunca.
+    #[test]
+    fn un_indice_corrupto_no_se_persiste_vacio() {
+        let h = TempHome::new();
+        ensure_root();
+        let ws = create_workspace("proyecto").unwrap();
+
+        fs::write(index_path(), "{ esto no es json }").unwrap();
+
+        // Se lee vacío (degrada), pero el archivo en disco queda INTACTO.
+        assert!(list_workspaces().is_empty(), "un índice ilegible se lee como vacío");
+        assert_eq!(
+            fs::read_to_string(index_path()).unwrap(),
+            "{ esto no es json }",
+            "PERO no se sobrescribe: el usuario perdería todos sus workspaces"
+        );
+
+        // Y un read-modify-write sobre esa lectura fallida tampoco lo pisa.
+        touch_workspace(&ws.id);
+        assert_eq!(fs::read_to_string(index_path()).unwrap(), "{ esto no es json }");
+        drop(h);
+    }
+
+    // El índice es una CACHÉ. Cada state file lleva su `folder`, así que se reconstruye solo.
+    #[test]
+    fn el_indice_se_reconstruye_desde_los_states() {
+        let h = TempHome::new();
+        ensure_root();
+        let a = create_workspace("alpha").unwrap();
+        save_state(&a.folder, r#"{"id":"x","name":"alpha","tiles":[]}"#).unwrap();
+
+        fs::remove_file(index_path()).unwrap(); // el índice se pierde entero
+        assert!(list_workspaces().is_empty());
+
+        ensure_root(); // dispara recover_index
+        let recuperados = list_workspaces();
+        assert_eq!(recuperados.len(), 1, "el workspace se recupera desde su state file");
+        assert_eq!(recuperados[0].folder, a.folder);
+        drop(h);
+    }
+
+    // state_path era una función del ÍNDICE. Cuando la lectura fallaba, un workspace enlazado se
+    // trataba como gestionado, su estado se buscaba donde no estaba, y abría VACÍO.
+    #[test]
+    fn el_estado_no_depende_del_indice() {
+        let h = TempHome::new();
+        ensure_root();
+        let externo = h.external("repo-del-usuario");
+        let ws = link_workspace(&externo, None).unwrap();
+        save_state(&ws.folder, r#"{"id":"y","name":"repo","tiles":[1]}"#).unwrap();
+
+        // Aunque el índice desaparezca, el estado se sigue encontrando: la ruta es pura.
+        fs::remove_file(index_path()).unwrap();
+        assert!(load_state(&ws.folder).is_some(), "el estado se encuentra sin índice");
+        drop(h);
+    }
+
+    // Una carpeta EXTERNA es del usuario. Borrar el workspace no puede borrarle el repo.
+    #[test]
+    fn borrar_un_workspace_enlazado_no_toca_la_carpeta_del_usuario() {
+        let h = TempHome::new();
+        ensure_root();
+        let externo = h.external("mi-repo-importante");
+        fs::write(PathBuf::from(&externo).join("codigo.rs"), "fn main() {}").unwrap();
+        let ws = link_workspace(&externo, None).unwrap();
+
+        delete_workspace(&ws.id).unwrap();
+
+        assert!(PathBuf::from(&externo).is_dir(), "la carpeta del usuario SIGUE AHÍ");
+        assert!(PathBuf::from(&externo).join("codigo.rs").is_file(), "y su código también");
+        assert!(list_workspaces().is_empty(), "pero sale del índice");
+        drop(h);
+    }
+
+    // Y el estado nunca se escribe adentro del repo del usuario.
+    #[test]
+    fn el_estado_no_ensucia_el_repo_del_usuario() {
+        let h = TempHome::new();
+        ensure_root();
+        let externo = h.external("repo");
+        let ws = link_workspace(&externo, None).unwrap();
+        save_state(&ws.folder, r#"{"id":"z","name":"repo","tiles":[]}"#).unwrap();
+
+        assert!(!PathBuf::from(&externo).join(".hyprdesk.json").exists(), "nada dentro del repo");
+        assert!(state_path(&ws.folder).is_file(), "el estado vive centralizado");
+        drop(h);
+    }
+
+    // El .hyprdesk.json viejo (que vivía DENTRO de la carpeta) se migra al store central.
+    #[test]
+    fn migra_el_estado_legacy_y_se_queda_con_el_mas_nuevo() {
+        let h = TempHome::new();
+        ensure_root();
+        let dir = root().join("viejo");
+        fs::create_dir_all(&dir).unwrap();
+        let folder = dir.to_string_lossy().to_string();
+        fs::write(dir.join(".hyprdesk.json"), r#"{"id":"legacy","name":"viejo","tiles":[7]}"#).unwrap();
+
+        ensure_root(); // dispara migrate_legacy
+
+        assert!(!dir.join(".hyprdesk.json").exists(), "el legacy se consume");
+        let s = load_state(&folder).expect("el estado migró al store central");
+        assert!(s.contains("legacy"), "y conserva el contenido");
+        assert_eq!(list_workspaces().len(), 1, "y el workspace aparece en el índice");
+        drop(h);
+    }
+}
