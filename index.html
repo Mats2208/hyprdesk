@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>HyprDesk — One router. Three engines.</title>
 <meta name="description" content="A router agent that delegates to Claude, Codex and OpenCode over a local A2A tunnel. Real-time 3D, not a video." />
+<!-- inline, so it costs no request and never 404s (a headed browser logs one otherwise) -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111315'/%3E%3Ccircle cx='16' cy='16' r='4.2' fill='%239FE3FF'/%3E%3Ccircle cx='16' cy='5.6' r='2.5' fill='%23D97757'/%3E%3Ccircle cx='25' cy='21.2' r='2.5' fill='%2310A37F'/%3E%3Ccircle cx='7' cy='21.2' r='2.5' fill='%237C5CFF'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -86,10 +88,13 @@
     </div>
   </section>
 
-  <!-- ░░ 02 · ORBIT (el estudio se apaga: turno nocturno) ░░ -->
+  <!-- ░░ 02 · ORBIT (the studio lights go out: the night shift) ░░
+       FLIPPED (product left). The flip is done by .act--flip alone — the DOM stays
+       in reading order [text, product]. Do NOT also reverse the DOM here: the two
+       cancel out, the act silently renders like a normal one, and POSE.orbit.groupX
+       parks the 3D on top of its own copy. One mechanism, not two. -->
   <section class="act act--flip" id="act-orbit">
     <div class="wrap grid">
-      <div class="col col--product"></div>
       <div class="col col--text">
         <span class="eyebrow" data-split>02 — The orbit</span>
         <h2 class="act__title">
@@ -106,6 +111,7 @@
           <li><b>Report</b><span>Back to the router</span></li>
         </ul>
       </div>
+      <div class="col col--product"></div>
     </div>
   </section>
 
