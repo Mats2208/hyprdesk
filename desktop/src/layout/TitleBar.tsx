@@ -11,6 +11,7 @@ import { EngineIcon } from "../EngineIcon";
 import { TitleMenu } from "./TitleMenu";
 import { WindowControls } from "./WindowControls";
 import { hk, isMac } from "../platform";
+import { dragWindow } from "./drag";
 
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
@@ -67,7 +68,7 @@ export function TitleBar({ stats, glm, codex, claude, onRefreshUsage }: {
   );
 
   return (
-    <div className={`titlebar ${isMac ? "" : "titlebar--custom"}`}>
+    <div className={`titlebar ${isMac ? "" : "titlebar--custom"}`} onMouseDown={dragWindow}>
       <div className="titlebar__left">
         <div className="titlebar__brand">
           <BrandMark size={16} className="titlebar__mark" />

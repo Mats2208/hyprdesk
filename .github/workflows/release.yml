@@ -1,0 +1,67 @@
+name: Build installers
+
+# A mano (workflow_dispatch) o al taguear una versión. No corre en cada push: un build de release
+# de Tauri tarda ~15 min por plataforma y no hace falta pagarlo por un cambio de README.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (Apple Silicon)
+            target: aarch64-apple-darwin
+          - os: macos-13
+            label: macOS (Intel)
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            label: Windows
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: install
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: build
+        working-directory: desktop
+        run: pnpm tauri build --target ${{ matrix.target }}
+
+      # Los bundles NO están firmados. En macOS eso significa que Gatekeeper los bloquea al primer
+      # intento: hay que abrirlos con clic derecho → Abrir. Firmarlos requiere una cuenta de
+      # desarrollador de Apple; hasta que exista, es honesto decirlo en vez de esconderlo.
+      - name: qué se produjo
+        shell: bash
+        working-directory: desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+        run: find . -maxdepth 2 -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec ls -lh {} \;
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hyprdesk-${{ matrix.target }}
+          path: |
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error

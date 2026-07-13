@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BrandMark } from "./BrandMark";
 import { WindowControls } from "./layout/WindowControls";
 import { isMac } from "./platform";
+import { dragWindow } from "./layout/drag";
 import { type WorkspaceMeta, useWorkspaces } from "./store/workspaces";
 import ambientSvg from "./assets/brand/ambient.svg?raw";
 
@@ -50,8 +51,11 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
   return (
     <div className="welcome">
       <div className="welcome__ambient" aria-hidden dangerouslySetInnerHTML={{ __html: ambientSvg }} />
-      {/* Windows/Linux frameless: el home no tiene titlebar → franja de arrastre + controles flotantes. */}
-      {!isMac && <div className="home-caption" />}
+      {/* Franja de arrastre del home (no tiene titlebar). En Windows/Linux la ventana es frameless y
+          además lleva los controles flotantes; en macOS los traffic lights son nativos, pero la franja
+          hace falta IGUAL: WKWebView ignora `-webkit-app-region`, así que sin esto no había forma de
+          mover la ventana desde el home. */}
+      <div className="home-caption" onMouseDown={dragWindow} />
       {!isMac && <div className="home-wctl"><WindowControls /></div>}
       <div className="welcome__inner">
         <header className="welcome__hero">
