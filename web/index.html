@@ -212,8 +212,34 @@
           <span class="price__note">Open source · bring your own keys</span>
         </div>
         <div class="outro__cta">
-          <a href="#" class="btn btn--solid" data-magnetic>Download</a>
-          <a href="#" class="btn" data-magnetic>Repository</a>
+          <!-- There is no installer to download: you clone it and run it. A button promising a
+               binary that doesn't exist would be a lie, so it opens the command instead. -->
+          <div class="get">
+            <button type="button" class="btn btn--solid get__btn" id="get-btn" data-magnetic
+                    aria-expanded="false" aria-controls="get-panel">
+              Download
+              <svg class="get__chev" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            <div class="get__panel" id="get-panel" role="group" aria-labelledby="get-btn" hidden>
+              <p class="get__lead">Clone it and run. You bring the engines.</p>
+
+              <div class="get__cmd">
+                <code>git clone https://github.com/Mats2208/hyprdesk.git</code>
+                <button type="button" class="get__copy" data-copy="git clone https://github.com/Mats2208/hyprdesk.git">Copy</button>
+              </div>
+              <div class="get__cmd">
+                <code>cd hyprdesk/desktop &amp;&amp; pnpm install &amp;&amp; pnpm tauri dev</code>
+                <button type="button" class="get__copy" data-copy="cd hyprdesk/desktop &amp;&amp; pnpm install &amp;&amp; pnpm tauri dev">Copy</button>
+              </div>
+
+              <p class="get__note">macOS &amp; Windows · Node 20+, Rust, and the agent CLIs you already pay for.</p>
+            </div>
+          </div>
+
+          <a href="https://github.com/Mats2208/hyprdesk" class="btn" data-magnetic target="_blank" rel="noopener">Repository</a>
           <a href="#" class="btn btn--ghost" data-magnetic id="btn-top">Back to top</a>
         </div>
       </div>

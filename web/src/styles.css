@@ -671,6 +671,62 @@ section { position: relative; }
 
 .outro__cta { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-5); }
 
+/* ── "Download" → the clone command ──────────────────────────────────────────
+   Everything here is built from the same tokens as the rest of the page, so it
+   follows the theme (and the engine picker's accent) without a second code path. */
+.get { position: relative; }
+.get__chev { margin-left: 0.6rem; transition: transform 0.2s ease; }
+.get__btn[aria-expanded='true'] .get__chev { transform: rotate(180deg); }
+
+.get__panel {
+  /* Opens UPWARD. This CTA lives at the foot of the page: dropping the panel below the button
+     pushed its bottom edge past the fold, so you had to scroll to read the command you just
+     asked for. */
+  position: absolute; z-index: 20; bottom: calc(100% + 0.6rem); left: 0;
+  width: min(34rem, calc(100vw - 2rem)); /* ancho = el comando más largo, entero: un comando cortado no se puede leer, y lo que no se lee no se pega */
+  padding: var(--s-3);
+  /* --bg, not a colour: the panel rides the theme (and goes dark with S.dark) for free. */
+  background: var(--bg); border: 1px solid var(--rule-strong); border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  display: flex; flex-direction: column; gap: 0.7rem;
+  animation: get-in 0.16s ease;
+}
+/* [hidden] loses to `display:flex` on specificity — without this the panel is always open. */
+.get__panel[hidden] { display: none; }
+/* The `to` is NOT optional. With `fill-mode: both` and only a `from`, the browser holds the
+   0% keyframe after the run and the panel stays at opacity 0 — open, laid out, and invisible. */
+@keyframes get-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .get__panel { animation: none; } }
+
+.get__lead { margin: 0; font-size: 0.95rem; color: var(--ink0); }
+.get__note { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--ink-3); }
+
+.get__cmd {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.6rem 0.6rem 0.6rem 0.8rem;
+  background: color-mix(in srgb, var(--ink0) 6%, transparent);
+  border: 1px solid var(--rule); border-radius: 7px;
+}
+.get__cmd code {
+  flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-family: var(--f-mono); font-size: 0.74rem; color: var(--ink0);
+}
+/* No `transition` on colour here, and no raw --muted: both are house rules from the top of this
+   file. --muted is 3.44:1 (fails AA), and every colour token is rewritten EVERY FRAME as the set
+   goes dark — a transition on top of one lags a frame behind the 3D scene forever. --ink-2 derives
+   from --ink0, so it tracks the theme and keeps its contrast; the state change is instant. */
+.get__copy {
+  flex: 0 0 auto; min-width: 4.4rem; padding: 0.42rem 0.7rem;
+  border: 1px solid var(--rule-strong); border-radius: 5px;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  font-family: var(--f-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.get__copy:hover, .get__copy:focus-visible { color: var(--accent-ink); border-color: var(--accent); }
+.get__copy[data-done] { color: var(--accent-ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
 /* Same rule as the cards: the wipe fills with the engine colour and the
    label goes to a literal #fff, in the same 400ms. Both endpoints stable. */
 .btn {

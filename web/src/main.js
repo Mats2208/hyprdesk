@@ -584,6 +584,56 @@ document.getElementById('btn-top')?.addEventListener('click', (ev) => {
   ev.preventDefault();
   lenis ? lenis.scrollTo(0, { duration: 2 }) : scrollTo(0, 0);
 });
+
+/* ── "Download" → the clone command ───────────────────────────────────────────
+   No installer exists, so the button hands you the command instead of lying about
+   a binary. Keyboard-complete: Escape closes and returns focus, a click outside
+   closes, and the trigger carries aria-expanded. */
+const getBtn = document.getElementById('get-btn');
+const getPanel = document.getElementById('get-panel');
+if (getBtn && getPanel) {
+  const setOpen = (open) => {
+    getPanel.hidden = !open;
+    getBtn.setAttribute('aria-expanded', String(open));
+  };
+
+  getBtn.addEventListener('click', () => setOpen(getPanel.hidden));
+
+  // Escape closes from anywhere inside; focus goes back to the trigger, not to the void.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !getPanel.hidden) { setOpen(false); getBtn.focus(); }
+  });
+
+  // Outside click. `closest` on the wrapper, so clicks INSIDE the panel don't close it
+  // mid-copy — which is exactly what a naive document listener would do.
+  document.addEventListener('pointerdown', (ev) => {
+    if (!getPanel.hidden && !ev.target.closest('.get')) setOpen(false);
+  });
+
+  for (const b of getPanel.querySelectorAll('.get__copy')) {
+    b.addEventListener('click', async () => {
+      const text = b.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Clipboard API needs a secure context and a permission. On a plain-http preview it
+        // throws — so we fall back rather than leaving the user with a dead button.
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      const was = b.textContent;
+      b.textContent = 'Copied';
+      b.dataset.done = '';
+      setTimeout(() => { b.textContent = was; delete b.dataset.done; }, 1400);
+    });
+  }
+}
 document.querySelectorAll('.hud__nav a').forEach((a) => {
   a.addEventListener('click', (ev) => {
     ev.preventDefault();
