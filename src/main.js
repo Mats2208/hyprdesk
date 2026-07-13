@@ -130,24 +130,23 @@ if (!COARSE && !REDUCED) {
    `engines` (fov 25 @ camZ 10) is the product-beauty shot; the wide lens on `tunnel`
    (fov 32 @ camZ 7.6) is the one you feel you're standing inside.
 
-   groupX sign follows the REAL rendered layout (measured, not assumed): the product
-   column is on the right everywhere EXCEPT #act-worktrees. #act-orbit carries
-   .act--flip AND a reversed DOM, so the two cancel and it renders like a normal act —
-   the skeleton's negative groupX would have parked the 3D on top of its copy.
+   groupX sign follows the REAL rendered layout (measured, not assumed): product right,
+   except the two .act--flip acts — #act-orbit and #act-worktrees — where it goes left.
+   The sign is the layout: get it wrong and the 3D parks on top of its own copy.
 
    rotY only ever decreases: the rig never rewinds, it keeps turning one way. */
 const POSE = {
   hero:      { rotY: -0.45, camX: 0, camY: 1.90, camZ: 8.6,  ty: 0, fov: 30, groupX: 1.90,  groupY: 0, orbit: 0.15, wire: 0,    flow: 0,    xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.0, idleSpin: 1.00 },
   // engines: long lens on the three shells — the picker lives here
   engines:   { rotY: -1.15, camX: 0, camY: 2.30, camZ: 10.0, ty: 0, fov: 25, groupX: 1.85,  groupY: 0, orbit: 0.45, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.26, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
-  // orbit: camera climbs to 23° so the ring READS as an orbit, and the studio lights
-  // go OUT. The page turns with them.
-  orbit:     { rotY: -2.10, camX: 0, camY: 3.90, camZ: 9.2,  ty: 0, fov: 28, groupX: 1.85,  groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 1.7, idleSpin: 0.55 },
+  // orbit: FLIPPED (product left). Camera climbs to 23° so the ring READS as an orbit,
+  // and the studio lights go OUT. The page turns with them.
+  orbit:     { rotY: -2.10, camX: 0, camY: 3.90, camZ: 9.2,  ty: 0, fov: 28, groupX: -1.85, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 1.7, idleSpin: 0.55 },
   // tunnel: wide lens, closest camera, shells ghosted so the packets read. dark stays
   // LOW on purpose — a mid theme lerp is grey-on-grey and the copy dies.
   tunnel:    { rotY: -2.75, camX: 0, camY: 1.70, camZ: 7.6,  ty: 0, fov: 32, groupX: 1.80,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 0.05, stageOp: 1,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.0, idleSpin: 0.35 },
-  // worktrees: the only genuinely flipped act (product left). Pulled back — `split`
-  // throws the engines outward and the frame has to hold the explosion.
+  // worktrees: flipped (product left). Pulled back — `split` throws the engines
+  // outward and the frame has to hold the explosion.
   worktrees: { rotY: -3.60, camX: 0, camY: 2.70, camZ: 11.4, ty: 0, fov: 30, groupX: -2.40, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0.06, stageOp: 1,   shadowOp: 0.28, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
   // specs: centred turntable behind the cards — a backdrop, so it may be small
   specs:     { rotY: -5.80, camX: 0, camY: 2.00, camZ: 12.6, ty: 0, fov: 32, groupX: 0,     groupY: 0, orbit: 0.90, wire: 0.70, flow: 0.45, xray: 0,   split: 0, dark: 0,    stageOp: 0.5, shadowOp: 0.22, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.70 },
@@ -226,16 +225,35 @@ ScrollTrigger.addEventListener('refresh', () => buildKeys(window.__triggers));
 
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
+/* The grid is two columns, so the binding constraint on framing is WIDTH — and visible
+   width scales with the ASPECT RATIO, which the POSE table can't know. Solved at 1.6;
+   in a narrower window (a 4:3 desktop, a short browser) the same numbers throw the rig
+   off the edge of its own column.
+
+   Dolly the camera back by exactly the deficit and the visible width comes back to the
+   design width: W = 2·(k·camZ)·tan(fov/2)·(A₀/k) = W₀. groupX is NOT scaled — the column
+   centre is a fraction of W, and W is now W₀ again, so the composition is the one that
+   was solved. Only the rig gets smaller, which is the whole point. camY rides along so
+   the elevation angle survives. */
+const DESIGN_ASPECT = 1.6;
+const fit = () => Math.max(1, DESIGN_ASPECT / (innerWidth / innerHeight));
+
 /** The ONE function that writes S's pose. Don't add a second one. */
 function poseFromScroll(y) {
   // reduced motion: the scene is PARKED in the hero pose. Still one writer, still every frame.
-  if (REDUCED) { for (const p of PROPS) S[p] = POSE.hero[p]; return; }
-  if (KEYS.length < 2 || !Number.isFinite(y)) return;   // Lenis can hand back NaN for a tick after a jump
-  let i = 0;
-  while (i < KEYS.length - 2 && y > KEYS[i + 1].y) i++;
-  const a = KEYS[i], b = KEYS[i + 1];
-  const t = smoothstep(gsap.utils.clamp(0, 1, (y - a.y) / Math.max(b.y - a.y, 1)));
-  for (const p of PROPS) S[p] = a.pose[p] + (b.pose[p] - a.pose[p]) * t;
+  if (REDUCED) {
+    for (const p of PROPS) S[p] = POSE.hero[p];
+  } else {
+    if (KEYS.length < 2 || !Number.isFinite(y)) return;   // Lenis can hand back NaN for a tick after a jump
+    let i = 0;
+    while (i < KEYS.length - 2 && y > KEYS[i + 1].y) i++;
+    const a = KEYS[i], b = KEYS[i + 1];
+    const t = smoothstep(gsap.utils.clamp(0, 1, (y - a.y) / Math.max(b.y - a.y, 1)));
+    for (const p of PROPS) S[p] = a.pose[p] + (b.pose[p] - a.pose[p]) * t;
+  }
+  // re-derived from POSE every frame, so scaling in place can never accumulate
+  const k = fit();
+  if (k > 1) { S.camX *= k; S.camY *= k; S.camZ *= k; }
 }
 
 /* ─── 5. Text splitter ──────────────────────────────────────── */
