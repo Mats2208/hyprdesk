@@ -13,10 +13,26 @@ director  src/main.js
 style     src/styles.css  (+ copy tweaks in index.html)
 ```
 
-`index.html`, `package.json`, `vite.config.js`, `scripts/shots.mjs`, `CONTRACT.md` and
-`README.md` belong to the **router**. Don't edit them (style may adjust copy text inside
-existing `index.html` elements — but never rename or remove an `id`, a `class`, a
-`[data-split]` or a `[data-magnetic]` hook, because main.js and styles.css both query them).
+`index.html`, `package.json`, `vite.config.js`, `scripts/*`, `CONTRACT.md` and `README.md`
+belong to the **router**. Don't edit them (style may adjust copy text inside existing
+`index.html` elements — but never rename or remove an `id`, a `class`, a `[data-split]`
+or a `[data-magnetic]` hook, because main.js and styles.css both query them).
+
+**`.shots/` is generated, and the router owns it.** Render it locally as often as you like
+— you should, it is the only way to see what you actually built — but **do not commit it**.
+Three workers committing binary renders of the same seven acts, each shot against their own
+branch's stale `main.js`, is a guaranteed add/add conflict on every merge (it has already
+cost two manual resolutions) *and* the images are misleading: a screenshot from a branch
+that lacks the other three layers is a picture of a page that does not exist. The router
+regenerates `.shots/` from integrated master, which is the only tree where the renders mean
+anything.
+
+**Ports.** `npm run preview` defaults to 4173 and several are already taken on this machine.
+Always pass `--port <n> --strictPort` with a port you picked, and pass the same URL to the
+harness. Without `--strictPort` Vite silently walks to the next free port, and without
+matching URLs the harness will happily screenshot **someone else's build** and report it
+green — the tell is act anchors coming back evenly spaced (the unpinned fallback) instead of
+at real pin positions. This has already happened once.
 
 ---
 
