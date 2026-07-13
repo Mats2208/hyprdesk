@@ -33,6 +33,26 @@
 
 ---
 
+## What it built, by itself
+
+**[→ hyprdesk landing page](https://mats2208.github.io/hyprdesk/)** — a scroll-driven WebGL site. **HyprDesk built it.**
+
+<p align="center">
+  <a href="https://mats2208.github.io/hyprdesk/"><img src="docs/landing-tunnel.png" alt="The A2A tunnel act of the HyprDesk landing page — the router core burning under load, packets moving on the wires between the three engines" width="900"/></a>
+</p>
+
+One router (Claude) and four workers, each on its own git worktree. The router read two reference projects, **froze an architectural contract**, and only then fanned out — one worker per file, so four agents could write in parallel without ever touching the same line. It reviewed each branch before merging and rejected the ones that broke the rules.
+
+**75 minutes, unattended.** The whole source is in [`web/`](web/), and the git history above this line is theirs: `models:`, `scene:`, `director:`, `style:`, and the merges of four `hyprdesk/*` branches. The exact brief they were given is [`web/PROMPT.md`](web/PROMPT.md).
+
+What they shipped: a **44 KB procedural GLB** (generated from a Blender script that is in the repo — the models are *reproducible*, not downloaded), a scroll-derived camera that is deterministic, and a **27-check verification harness that runs on a real GPU** and gates the build (232 fps median, zero console errors, `prefers-reduced-motion` fully honoured).
+
+> The most interesting moment wasn't the speed. It was when the router hit a contradiction in the brief and, instead of guessing, **stopped and asked** (`ask_user`) — laying out the exact trade-off of each option. And when it found a bug **in its own test harness**, it said so: *"Three of the seven documented bugs were caused by me — the contract author."*
+>
+> That's the point of a router. It isn't a dispatcher.
+
+---
+
 ## Showcase
 
 <p align="center">

@@ -2,15 +2,16 @@
 
 Things that are next, in rough priority order. The [Roadmap in the README](README.md#roadmap) is the shipped-feature view; this is the working list.
 
-## Landing page — 3D 🔥
+## Landing page — 3D ✅ **shipped**
 
-A real landing site for HyprDesk, scroll-driven and in 3D: **the three engines (Claude · Codex · OpenCode) as 3D models**, orbiting a router, wiring themselves into the local A2A tunnel as you scroll. Awwwards-grade, not a template.
+Built by HyprDesk's own agent team in 75 minutes, unattended: one router + four workers on isolated
+worktrees. Lives in [`web/`](web/), deployed to GitHub Pages on every push. The brief they were
+given is [`web/PROMPT.md`](web/PROMPT.md).
 
-- Stack: Three.js / React Three Fiber + GSAP ScrollTrigger + Lenis
-- Lives in `web/` — **gitignored for now**, on purpose: it does not ship until it's good
-- Beats: hero (the three engines) → router leads, workers spawn → live terminals → git worktrees merge back → download
-- Models: hard-surface, procedurally built (not AI image-to-3D — that geometry is unusable for this)
-- Must not bloat the app repo: it's a separate build, its own `package.json`, zero coupling to `desktop/`
+Still open on it:
+- [ ] The hero act is the weakest frame: the three engines float without a relationship to each other.
+- [ ] Mobile: the rig is centred and the copy stacks, but it has not been driven on a real phone.
+
 
 ## App
 
