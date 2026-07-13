@@ -1,7 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 /* ══════════════════════════════════════════════════════════════
    styles.css — owned by: `style`.
+
+   Fonts are loaded by the <link> in index.html, NOT by an @import
+   here. An @import is serial and render-blocking: the browser has
+   to fetch this stylesheet, parse it, and only then discover the
+   font — behind a preconnect that's already warm. The <link> is in
+   the head, so it starts immediately.
 
    Register: editorial dev-tool. Huge tight-tracked display type
    against small mono metadata. The 3D object is the hero; the type
