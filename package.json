@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/shots.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "gsap": "^3.12.5",
