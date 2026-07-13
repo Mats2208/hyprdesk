@@ -74,50 +74,6 @@ const MAX_PACKETS = 96;            // pool. At the wildest scroll ~55 are live.
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const clamp = THREE.MathUtils.clamp;
 
-/* ponytail: primitives with the REAL names, so the page runs before the .glb
-   lands. DELETE this and the try/catch below once public/models/hyprdesk.glb
-   exists — initScene must then REJECT (main.js already degrades gracefully). */
-function buildPlaceholder() {
-  const root = new THREE.Group();
-
-  const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.62, 2),
-    new THREE.MeshPhysicalMaterial({ name: 'RouterCore', color: '#F2F1ED', emissive: CORE_HEX, emissiveIntensity: 1.2, roughness: 0.2, metalness: 0 })
-  );
-  core.name = 'Router';
-  root.add(core);
-
-  const cage = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.98, 0),
-    new THREE.MeshPhysicalMaterial({ name: 'Cage', color: '#9AA1A8', metalness: 1, roughness: 0.24, flatShading: true, side: THREE.DoubleSide })
-  );
-  cage.name = 'RouterCage';
-  root.add(cage);
-
-  const glyphMat = new THREE.MeshPhysicalMaterial({ name: 'Glyph', color: '#111315', emissive: '#F2F1ED', emissiveIntensity: 0.25, roughness: 0.5 });
-
-  ENGINES.forEach((e, i) => {
-    const a = engineAngle(i);
-    const px = Math.cos(a) * RING, pz = Math.sin(a) * RING;
-
-    const shell = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.62, 0),
-      new THREE.MeshPhysicalMaterial({ name: `Shell${e.name}`, color: e.hex, roughness: e.rough, metalness: 0.15, clearcoat: 0.5, clearcoatRoughness: 0.25 })
-    );
-    shell.name = e.mesh;
-    shell.position.set(px, 0, pz);
-    root.add(shell);
-
-    const glyph = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 24), glyphMat);
-    glyph.name = `Glyph${e.name}`;
-    glyph.position.set(px + Math.cos(a) * 0.4, 0, pz + Math.sin(a) * 0.4);
-    glyph.rotation.y = -a;
-    root.add(glyph);
-  });
-
-  return root;
-}
-
 /** glTF hands us MeshStandardMaterial; the studio wants clearcoat (that is where the
     long lacquer highlight comes from). Upgrade in place, keeping the name. */
 function toPhysical(m, extra) {
@@ -202,17 +158,12 @@ export async function initScene({ canvas, onProgress }) {
 
   /* ─── The model ─────────────────────────────────────────────── */
 
-  let model;
-  try {
-    const draco = new DRACOLoader().setDecoderPath('/draco/');
-    const gltf = await new GLTFLoader().setDRACOLoader(draco)
-      .loadAsync('/models/hyprdesk.glb', (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
-    model = gltf.scene;
-  } catch {
-    console.warn('[scene] hyprdesk.glb not found — placeholder. (models worker: still baking)');
-    model = buildPlaceholder();
-    onProgress?.(1);
-  }
+  // No fallback: if the model is gone, initScene REJECTS and main.js degrades the
+  // page to a readable, 3D-less page. A silent box of primitives would be worse.
+  const draco = new DRACOLoader().setDecoderPath('/draco/');
+  const gltf = await new GLTFLoader().setDRACOLoader(draco)
+    .loadAsync('/models/hyprdesk.glb', (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
+  const model = gltf.scene;
 
   const parts = {};
   const mats = {};
@@ -317,15 +268,24 @@ export async function initScene({ canvas, onProgress }) {
     };
   });
 
-  // radii back in MODEL units (the boxes are world-space, the model is scaled)
-  const radiusOf = (mesh, fb) => (mesh
-    ? (new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).x * 0.5) / scale
-    : fb);
-  const CORE_GEO_R = radiusOf(parts.Router, 0.62);
-  const CAGE_R = radiusOf(parts.RouterCage, CORE_GEO_R * 1.5);
-  const CORE_R = CAGE_R + 0.12;                            // where a link leaves the router
-  // the halo has to clear the CAGE, or the core's load never reads from outside it
-  const HALO_R = Math.max(CORE_GEO_R * 1.4, CAGE_R * 1.12);
+  /* Radii back in MODEL units (the boxes are world-space, the model is scaled), and
+     DERIVED from the real geometry — the cage is not a sphere, so which extent you
+     take matters:
+       · the halo is a SPHERE, so it must clear the LARGEST half-extent, or it ends up
+         buried inside a cage that is taller than it is wide (2.04 vs 1.82).
+       · the links leave in the XZ PLANE, so they anchor to the XZ radius. Anchor them
+         to the largest extent instead and each wire starts floating in mid-air, a
+         visible gap short of the cage it is supposed to plug into. */
+  const extents = (mesh) => (mesh ? new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()) : null);
+  const sphereR = (mesh, fb) => { const s = extents(mesh); return s ? (Math.max(s.x, s.y, s.z) * 0.5) / scale : fb; };
+  const planeR = (mesh, fb) => { const s = extents(mesh); return s ? (Math.max(s.x, s.z) * 0.5) / scale : fb; };
+
+  const CORE_GEO_R = sphereR(parts.Router, 0.44);
+  const CAGE_R = sphereR(parts.RouterCage, CORE_GEO_R * 1.6);
+  // 0.96: the wire tip ends just INSIDE the cage silhouette, so it reads as plugged in
+  const CORE_R = planeR(parts.RouterCage, CAGE_R) * 0.96;
+  // the glow lives INSIDE the open cage, hugging the core — see haloMat below
+  const HALO_R = Math.min(CORE_GEO_R * 1.75, CAGE_R * 0.92);
 
   /* ─── The A2A links. Procedural: they must react to scroll. ──── */
 
@@ -366,10 +326,23 @@ export async function initScene({ canvas, onProgress }) {
   const SC = new THREE.Vector3();
   const ZERO = new THREE.Vector3(0, 0, 0);
 
-  /* ─── The core's halo. A backside fresnel shell, additive: the bloom read
-         without paying for a post pass (see the report — no EffectComposer). */
+  /* ─── The core's glow: a soft additive ball, the bloom read without paying for a
+         post pass (see the report — no EffectComposer).
+
+         FrontSide + centre-weighted falloff, NOT a backside fresnel rim. The cage is
+         an open LATTICE, so the glow belongs inside it, spilling through the struts.
+         A rim shell would (a) be occluded by the opaque core, since its back hemisphere
+         sits behind it, leaving only a hard ring at the silhouette, and (b) read as a
+         glass bubble wrapped around the whole router. Brightest facing the camera,
+         fading out at the edges = a ball of light. */
+  /* The glow takes its colour FROM THE MODEL's core emissive (the .glb ships a warm
+     amber). Hard-coding a cyan here would wrap an amber core in a blue halo and light
+     it with a blue lamp — the muddy cream that results is nobody's design. CORE_HEX is
+     only the fallback for a core that ships no emissive at all. */
+  const GLOW = mats.RouterCore?.emissive?.clone() ?? new THREE.Color(CORE_HEX);
+
   const haloMat = new THREE.ShaderMaterial({
-    uniforms: { uInt: { value: 0 }, uCol: { value: new THREE.Color(CORE_HEX) } },
+    uniforms: { uInt: { value: 0 }, uCol: { value: GLOW.clone() } },
     vertexShader: `
       varying vec3 vN; varying vec3 vV;
       void main() {
@@ -382,14 +355,13 @@ export async function initScene({ canvas, onProgress }) {
       uniform float uInt; uniform vec3 uCol;
       varying vec3 vN; varying vec3 vV;
       void main() {
-        float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-        f = pow(f, 1.7);
+        float f = pow(abs(dot(normalize(vN), normalize(vV))), 2.5);
         gl_FragColor = vec4(uCol * f * uInt, f * uInt);
       }`,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
-    side: THREE.BackSide,
+    side: THREE.FrontSide,
     toneMapped: false,
   });
   const halo = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), haloMat);
@@ -400,7 +372,7 @@ export async function initScene({ canvas, onProgress }) {
   /* The core is a light source, not a painted sphere: under load it lights the cage
      from the INSIDE. In the dark act this is what the glow actually reads as.
      It lives in `group` (world scale), not in `model` — PointLight.distance is world. */
-  const coreLight = new THREE.PointLight(new THREE.Color(CORE_HEX), 0, 5, 2);
+  const coreLight = new THREE.PointLight(GLOW.clone(), 0, 5, 2);
   coreLight.castShadow = false;
   group.add(coreLight);
 
@@ -495,6 +467,29 @@ export async function initScene({ canvas, onProgress }) {
 
   /* the tunnel's aliveness, verifiable from a test instead of by eyeballing it */
   window.__flow = () => ({ load: P.load, vel: P.vel, packets: P.live, spawned: P.n, focus: focusIdx });
+
+  /* the rig, same reason: a glyph is engraved geometry riding its shell's pivot, so
+     `shell → glyph` must stay RIGID while the engine orbits and splits. A test can
+     watch that distance instead of squinting at a render. */
+  // world CENTRE of a mesh's geometry — the glyph's origin sits on the shell's origin,
+  // so comparing origins would compare nothing. The engraved mark is an offset in the
+  // vertices; only the bbox centre sees it.
+  const centre = (o) => new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+  const arr = (v) => v.toArray().map((n) => +n.toFixed(4));
+  window.__rigs = () => RIGS.map((r, i) => {
+    const glyph = parts[`Glyph${ENGINES[i].name}`];
+    const sc = r.rig.scale.x;
+    const s = r.shell ? centre(r.shell) : null;
+    const g = glyph ? centre(glyph) : null;
+    return {
+      id: ENGINES[i].id,
+      shell: s ? arr(s) : null,
+      glyph: g ? arr(g) : null,
+      scale: +sc.toFixed(4),
+      // shell↔glyph, in the rig's OWN scale. Constant ⇒ the mark rides the shell.
+      gap: s && g ? +(s.distanceTo(g) / sc).toFixed(4) : null,
+    };
+  });
 
   /* ─── Framing ────────────────────────────────────────────────── */
 
@@ -605,11 +600,14 @@ export async function initScene({ canvas, onProgress }) {
 
     /* glow IS the load — a spring, not a sin() */
     const core = mats.RouterCore;
-    if (core) core.emissiveIntensity = glow * (0.55 + P.load * 0.9);
+    // once the studio is out, the core is the only light left in the room: it has to
+    // carry the shot, so its own output rises as everything around it falls.
+    const night = 1 + dark * 0.6;
+    if (core) core.emissiveIntensity = glow * (0.55 + P.load * 0.9) * night;
     if (mats.Glyph) mats.Glyph.emissiveIntensity = 0.28 + dark * 0.35 + P.load * 0.12;
     halo.scale.setScalar(HALO_R * (1 + P.load * 0.06));
-    haloMat.uniforms.uInt.value = clamp((0.22 + P.load * 0.75) * (0.7 + dark * 0.8) * glow * 0.6, 0, 2.4);
-    coreLight.intensity = (0.5 + P.load * 3.2) * glow * (1 + dark * 0.5);
+    haloMat.uniforms.uInt.value = clamp((0.18 + P.load * 0.5) * (0.7 + dark * 1.1) * glow * 0.55, 0, 1.6);
+    coreLight.intensity = (0.5 + P.load * 3.2) * glow * night;
 
     /* camera. No tween ever touches it. */
     mx += (fin(S.mouseX) - mx) * 0.07;
