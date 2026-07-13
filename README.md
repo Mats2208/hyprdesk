@@ -79,6 +79,90 @@ Read that trace, because it's the spec:
 
 ---
 
+## Round 2 — art direction
+
+Round 1 was green and wrong. 27/27 passed, the rules held, and the page still didn't land:
+the rig was a widget parked in the corner, the three engines read as *cube, ring, gem*, and
+the whole thing was staged in a bright editorial room — including the act that is entirely
+about light moving on a wire.
+
+**The worst part is that it was already written down.** The round-1 README said, in these
+words: *"This rig floats. A hard shadow cast onto an invisible floor answers a question
+nobody asked."* The diagnosis was correct, it was made *before* shipping, and it was spent on
+prose instead of a fix. **If you can name the flaw, you own it.** A green suite proved the
+tunnel simulation rings and settles; it could never have said the hero doesn't make anyone
+want to scroll. That is what looking at the renders is for, and it is not optional.
+
+### The shadow is gone
+
+The ground plane, the `ShadowMaterial`, the shadow map, every `castShadow` — deleted. The rig
+is an orbital system suspended in space. There is no table. It's now lit as what it is: a
+`HemisphereLight` (sky above / shade below — a flat ambient lights the *underside* of a
+floating object exactly as hard as its top, which is what makes a render read as a sticker),
+softboxes for the long highlights on the cage, and a **rim + kicker** doing the separation job
+the shadow was only pretending to do. Self-occlusion comes from a half-res **GTAO** pass that
+fades out with `dark` (AO is invisible at near-black, so the dark acts don't pay for it).
+
+`S.shadowOp` is gone from POSE — a prop wired to nothing is the same silent lie as a shadow
+with no floor.
+
+### The tunnel burns
+
+`dark: 0.05 → 1` on the tunnel, and `orbit` alongside it, so the page *stays* dark across both
+acts. **Emission and bloom do nothing at `#f0efec`.** Pipeline is now
+`RenderPass → GTAO → UnrealBloom → OutputPass`, with tone mapping moved to `OutputPass` so the
+buffer stays linear — which is exactly what a bloom threshold needs to see.
+
+Bloom is selective *by construction*, not by a second render: only the emissives are pushed
+above 1.0 in linear space as `dark` closes, and they're boosted by **different** amounts on
+purpose — wire ×(1 + 0.6·dark), packet ×(1 + 3.2·dark). Boosted equally they clip to the same
+white and the packet disappears into the wire it's riding, which deletes the one thing the act
+is about. Cost, measured at DPR 6 until the frame was GPU-bound: GTAO ~0.35 ms, bloom below
+the noise floor. No act pays for both.
+
+Two things had to die for the bloom to earn the darkness. The old additive halo — whose own
+comment said its job was *"the bloom read without paying for a post pass"* — now doubled the
+glow instead of adding it, and the first render came back with the cage swallowed by a white
+sun. And the core's `PointLight` was hitting intensity ~18, flooding every engine the same
+pale peach. **`glow` is what the core EMITS, not how hard it floods the room.**
+
+### The engines stopped being interchangeable
+
+Not logos — a form that *carries* a mark beats a form that *is* one, and our hero objects
+aren't a trademark fight. The fix was **silhouette by mass**, and the insight that made it
+work: scene spins each engine about the **vertical** axis, so **height is the one dimension the
+orbit cannot rotate away.** Identity that lives there survives every phase, forever.
+
+```
+Claude    TALL   standing faceted blade, heavy belly, chisel roof   2.92 × 1.28
+Codex     LOW    machined module lying down, flange, stepped lid    1.90 × 0.80
+OpenCode  OPEN   two rims of DIFFERENT radius, six struts, a bore   ~50% air
+```
+
+OpenCode's two-rim construction is load-bearing: from dead side-on — the angle the orbit sweeps
+every engine through every 95 s — a single ring is a solid black bar and the identity dies. Two
+rims read as a **ladder**. And the core went from a 12-fold gem to 8-fold and 3.3:1 tall,
+because **an emissive has no shading** (emission is view-independent), so the only thing that
+reads it is its outline: a fat glowing gem is just a luminous circle.
+
+### The rig owns the frame — and `orbit` was the lever, not the camera
+
+The rig's *extent* already filled ~70% of the hero. What read as tiny was the **core**: 1.33
+against a 4.14 half-extent. Because `orbit: 0.15` parks the dormant engines **far out**, the
+hero was a sparse scatter — three dots and a golf ball. `orbit` isn't only a story prop; **it
+sets the rig's width.** Opening the hero at `0.45` draws the engines in and makes it an
+*object*. The arc still opens to 1.0 across the page.
+
+Reading acts hold ~46% (the copy has to survive). The two dark acts go to **51%** — and that
+number is a correction. I first set them to 72%, centred, and the render put the OpenCode ring
+straight through *"Spawn a worker per domain"* and the Claude blade through three lines of the
+tunnel paragraph. Not a one-off: **the engines orbit, so at some phase every engine lands on
+the copy.** A centred rig at 72% and a legible column are geometrically incompatible while the
+copy owns half the grid. Drama does not get to eat the words. On black, with the core burning,
+51% reads enormous anyway.
+
+---
+
 ## The bugs worth writing down
 
 ### 1. A simulation can latch NaN forever, and it fails silently

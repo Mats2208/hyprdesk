@@ -192,10 +192,14 @@ const POSE = {
   engines:   { rotY: -1.15, camX: 0, camY: 4.80, camZ: 20.8, ty: 0, fov: 28, groupX: 4.05,  groupY: 0, orbit: 0.60, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
   // orbit: FLIPPED (product left). Camera climbs to 23° so the ring READS as an orbit,
   // and the studio lights go OUT. The page turns with them.
-  // orbit: THE RIG TAKES THE FRAME — 72% of it. Lights out, camera climbed to 23° so the
-  // ring reads as an orbit, and the copy (right column) now OVERLAYS the rig instead of
-  // sitting beside a widget. The object is the argument; the text is the caption.
-  orbit:     { rotY: -2.10, camX: 0, camY: 3.90, camZ: 9.2,  ty: 0, fov: 34, groupX: -0.90, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 2.1, idleSpin: 0.55 },
+  // orbit: THE RIG TAKES THE FRAME — 51%, lights out, camera climbed to 23°.
+  // Why 51% and not the 72% I first set: at 72% the rig is centred, and THE ENGINES ORBIT.
+  // The first render put the OpenCode ring straight through "Spawn a worker per domain".
+  // Not a one-off — at some phase EVERY engine lands on the copy, so a centred rig and a
+  // legible column are geometrically incompatible while the copy owns half the grid.
+  // Drama does not get to eat the words. groupX is solved so the rig's RIGHT edge stops
+  // just short of the text column; on black, with the core burning, 51% reads enormous.
+  orbit:     { rotY: -2.10, camX: 0, camY: 5.47, camZ: 12.9, ty: 0, fov: 34, groupX: -2.90, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 2.1, idleSpin: 0.55 },
   // tunnel: the page BURNS. dark: 1 — emission and bloom do nothing at #f0efec, so the
   // act that is entirely about light on a wire has to happen in the dark. The halo goes
   // with it (stageOp 0): a pale CSS disc on black is a milky smudge; the light in this
@@ -204,9 +208,12 @@ const POSE = {
   //  That was a symptom. `style` fixed the CAUSE — ink lightness now derives from the
   //  background's own lightness — so the full 0→1 swing is safe. Worst contrast in the
   //  whole transition is 3.92:1. The workaround can go.)
-  // ...and the widest lens on the page (fov 38, camZ 8.0): 73% of the frame, so you are
-  // INSIDE the tunnel rather than watching it from across the room.
-  tunnel:    { rotY: -2.75, camX: 0, camY: 1.80, camZ: 8.0,  ty: 0, fov: 38, groupX: 0.90,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.6, idleSpin: 0.35 },
+  // ...and the widest lens on the page (fov 38) — 51%, mirrored off the copy like `orbit`
+  // (the first render drove the Claude blade through three lines of the paragraph).
+  // glow 2.2, not 2.6: at 2.6 the core stopped being a crystal and became a white blob —
+  // an emissive has no shading, so the ONLY thing that reads it is its outline, and a
+  // blown-out one has none. It should burn and still have facets.
+  tunnel:    { rotY: -2.75, camX: 0, camY: 2.56, camZ: 11.5, ty: 0, fov: 38, groupX: 2.90,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.2, idleSpin: 0.35 },
   // worktrees: flipped (product left). `split` throws the engines onto their branches —
   // the second-widest rig, so the frame is pulled back to hold the whole explosion.
   // worktrees: the widest rig on the page (5.02) — `split` throws the engines onto their
