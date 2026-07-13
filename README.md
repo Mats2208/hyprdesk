@@ -150,7 +150,21 @@ flowchart TB
 
 - **Frontend** (`desktop/src/`): React + xterm.js. Modular — a zustand store (`store/`), hooks (`hooks/`), a layout shell (`layout/`: activity bar, side panel with file tree, tile grid, status bar), the file editor (`FileTile.tsx`, CodeMirror), a command registry (`commands/`), a theme-token system (`theme/`), schema-driven settings (`settings/`), and onboarding.
 - **Backend** (`desktop/src-tauri/src/`): Rust/Tauri — `lib.rs` (`PtyManager` + commands + Windows npm-shim resolution), `control.rs` (HTTP control server = tunnel hub + worker roster), `engines.rs` (per-engine adapters + model/effort/persona + MCP/skill injection), `worktree.rs` (isolation + merge), `memory.rs` (router memory), `fsops.rs` (file read/write/list for the in-app editor), `workspace.rs`, `settings.rs` (config + meta-agent + GLM quota), `browser.rs` (native webview).
-- **MCP** (`desktop/agent/`): a *role-aware* stdio server exposing router vs worker tools — `spawn_worker`, `send_to_worker`, `list_workers`, `list_profiles`, `review_worker`, `merge_worker`, `ask_user`, `save_memory` (router) / `report_to_router`, `ask_router` (worker).
+- **The agent's brain** (`desktop/agent/`): the *role-aware* MCP server (router tools — `spawn_worker`, `send_to_worker`, `review_worker`, `merge_worker`, `ask_user`, `save_memory`, `list_playbooks`, `load_playbook` — vs worker tools — `report_to_router`, `ask_router`), plus the three text layers below.
+
+### The three layers: roles, playbooks, skills
+
+The tunnel makes the agents *talk*. These are what make them **know how to work together**.
+
+| | what it is | who gets it | when |
+|---|---|---|---|
+| **Role** (`agent/*-role.md`) | who you are, your tools, **how you work** | router / worker | **always** (system prompt) |
+| **Playbook** (`agent/playbooks/`) | how you **orchestrate** this *kind* of project — the split between workers (one owner per file), the contract to freeze before fanning out, what starts first, and the verifiable gate for "done" | **router** | **on demand** (`load_playbook`) — it only pays context for the one it uses |
+| **Skill** (`agent/skills/`) | **domain** knowledge, for whoever does the work | **worker** | on demand (`spawn_worker({skills})`) |
+
+A playbook is **orchestration, not domain**: `landing-3d` doesn't teach you Three.js — it tells the router how to *split* a 3D landing page across four agents, which worker is the critical path, and what "done" has to mean. They're transcribed from **real runs**, not invented: [`landing-3d`](desktop/agent/playbooks/landing-3d.md) is the one that built [this site](https://mats2208.github.io/hyprdesk/).
+
+Skills are injected as **text into the agent's role**, so they work on **any engine** — Claude, Codex or OpenCode alike.
 
 ### How it delegates
 

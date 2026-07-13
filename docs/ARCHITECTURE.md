@@ -53,6 +53,27 @@ A `tiny_http` server on `127.0.0.1:<random>`. The bundled MCP server (`desktop/a
 
 The hub is **per-workspace**: a `router_id → cwd` map, not a global singleton. With several workspaces alive at once, a singleton router id would cross the wires. When a message is addressed to the literal `"router"`, we resolve it through the *sending worker's* `router_id` — that's the only way to know which workspace it meant.
 
+## The agent's brain (`desktop/agent/`)
+
+Three text layers, each with a different owner and a different moment. Nothing here is code — it's the prompt, and prompt is where an orchestrator actually lives.
+
+| | what | who | when |
+|---|---|---|---|
+| **Role** (`*-role.md`) | who you are, your tools, how you work | router / worker | **always** — injected into the system prompt |
+| **Playbook** (`playbooks/`) | how you *orchestrate* this kind of project | **router** | **on demand** (`load_playbook`) |
+| **Skill** (`skills/`) | *domain* knowledge, for whoever does the work | **worker** | on demand (`spawn_worker({skills})`) |
+
+**The worker cannot load a playbook, and that isn't stylistic.** A playbook contains the file split *between* workers. A worker that reads it knows which files belong to the others — which is exactly what makes a "helpful" worker touch someone else's file and blow up the merge. You'd be handing it the map of foreign territory and asking it not to step on it. The MCP's `ROLE === "router"` gate means it can't even see the tool.
+
+Two failure modes worth knowing:
+
+- **A missing playbook must be an explicit error, never empty text.** Silent absence reads as approval: the router would go on planning, convinced a playbook had backed it. `load_playbook` returns `{ok: false}` plus the list of valid names.
+- **A skill name that doesn't exist is ignored silently** (`with_skills` is best-effort). So a playbook naming a skill that isn't installed launches a worker with *nothing*, and nobody finds out. Confirm names against `list_skills`.
+
+Resources are packaged by `tauri.conf.json`'s `"resources": ["resources"]` — a **directory**, not a glob. `resources/*` doesn't recurse (subdirectories are skipped), so every new folder used to need its own line. Worse, `res_file` falls back to the crate's own `resources/` when a file isn't in the bundle, so a forgotten glob **worked fine in dev and broke only in the installer**. A directory pattern walks recursively and removes the trap.
+
+And `build.rs` declares `rerun-if-changed=resources`. Without it, cargo doesn't re-run the build script when a role changes, the copy in `target/<profile>/resources/` goes stale, and **the app keeps injecting a role from days ago** — silently, with no error. (We shipped that bug for two days.)
+
 ## Engines (`engines.rs`)
 
 Each engine gets a `LaunchSpec` (argv, env, session id, whether we must capture it). The differences that matter:
