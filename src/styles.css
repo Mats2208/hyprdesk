@@ -193,27 +193,62 @@ body {
 
 #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
 
-/* The halo behind the product. It tracks the router across the screen.
-   Soft radial, not a hard disc: a disc with a 2px blur reads as a sticker.
-   The size is clamped here as well as in scene.js — in the close-up acts
-   the projection explodes, and an unclamped halo swallows the text column. */
+/* ─── THE HALO ────────────────────────────────────────────────────
+   This is the light the product is standing in. It tracks the router
+   (--router-x/y/d) and it carries the engine's colour across the page.
+
+   The baseline was a flat disc of --stage with a 2px blur, and at the
+   close-up framings scene.js hands over a --router-d near its ceiling
+   (min(90vh, 60vw) — ~800px) — so it became an enormous hard-edged peach
+   circle sitting behind the whole frame. The SIZE was never the problem:
+   the engines orbit far out, and the rig genuinely needs a backdrop that
+   wide. The problem is that it was FLAT and it ENDED. A disc with an edge
+   reads as a sticker. A light has no edge — it falls off.
+
+   So: no border-radius, no blur filter (blurring an 800px box is a
+   full-frame raster every frame; the falloff is free inside the gradient).
+   Four layers, centre out:
+
+     1. a breath of the engine's TRUE hue at the core — --stage is the pale
+        version, --accent is the real one — so the pick reads at the heart
+     2. the hot centre
+     3. one faint ring: the structure. It echoes the orbit the engines
+        actually travel, so it reads as the set the object stands in
+        rather than as ornament
+     4. the ambient pool, decaying to fully transparent well inside the box
+
+   Opacity is deliberately NOT set here. main.js writes it inline every
+   frame from S.stageOp — that's how the halo dies when the lights go out
+   on the orbit act. A CSS opacity would be overridden, and !important
+   would break the lights-out. Weight is carried by the alphas instead. */
 .stage {
   position: fixed;
   z-index: 0;
   left: var(--router-x);
   top: var(--router-y);
-  width: clamp(240px, var(--router-d), 82vmin);
-  height: clamp(240px, var(--router-d), 82vmin);
+  width: clamp(320px, calc(var(--router-d) * 1.3), 96vmin);
+  aspect-ratio: 1 / 0.94;
   transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 50%,
-    var(--stage) 0%,
-    color-mix(in srgb, var(--stage) 62%, transparent) 46%,
-    transparent 72%
-  );
+  background:
+    radial-gradient(ellipse closest-side,
+      color-mix(in srgb, var(--accent) 14%, transparent) 0%,
+      transparent 42%),
+    radial-gradient(ellipse closest-side,
+      color-mix(in srgb, var(--stage) 88%, transparent) 0%,
+      color-mix(in srgb, var(--stage) 60%, transparent) 22%,
+      transparent 52%),
+    radial-gradient(ellipse closest-side,
+      transparent 43%,
+      color-mix(in srgb, var(--stage) 42%, transparent) 46%,
+      transparent 49%),
+    radial-gradient(ellipse closest-side,
+      color-mix(in srgb, var(--stage) 52%, transparent) 0%,
+      color-mix(in srgb, var(--stage) 30%, transparent) 38%,
+      color-mix(in srgb, var(--stage) 11%, transparent) 62%,
+      color-mix(in srgb, var(--stage) 3%, transparent) 80%,
+      transparent 92%);
   pointer-events: none;
-  will-change: left, top, width, height;
+  will-change: left, top, width;
 }
 
 .grain {
@@ -679,11 +714,42 @@ section { position: relative; }
 
 @media (max-width: 900px) {
   .grid { grid-template-columns: minmax(0, 1fr); }
-  /* The product column collapses, but the canvas is FIXED — the object is
-     still behind the copy. Without a scrim the type sits on top of the 3D
-     and neither reads. This is the only decoration in the file that earns
-     its place: it is what keeps the page legible on a phone. */
+
+  /* ── THE PHONE ────────────────────────────────────────────────────
+     The product column collapses, but #gl is FIXED and still renders the
+     full rig at full strength — directly under now-full-width paragraphs.
+     Three moves, in order of how much they buy:
+
+     1. Dim the canvas. The 3D stops being the subject and becomes the set.
+        opacity is a compositor property — free per frame. A blur filter
+        here would cost a full-screen raster every frame and is exactly
+        what NOT to do on the device with the least budget.
+     2. The halo stops tracking. --router-x/y/d still stream in, but they
+        point at a router that no longer has a column to live in, so a
+        halo pinned to them lands in the middle of the copy. Anchor it,
+        widen it, and let it become an ambient wash that just tints the
+        page with the engine you picked. It still fades on the orbit act,
+        because S.stageOp still drives its inline opacity.
+     3. Scrim the text. The gradient fades out, so it needs no bleed. */
   .col--product { display: none; }
+
+  #gl { opacity: 0.3; }
+
+  .stage {
+    left: 50%;
+    top: 38%;
+    width: min(150vw, 620px);
+    aspect-ratio: 1 / 1;
+    background:
+      radial-gradient(ellipse closest-side,
+        color-mix(in srgb, var(--accent) 10%, transparent) 0%,
+        transparent 45%),
+      radial-gradient(ellipse closest-side,
+        color-mix(in srgb, var(--stage) 44%, transparent) 0%,
+        color-mix(in srgb, var(--stage) 22%, transparent) 40%,
+        color-mix(in srgb, var(--stage) 7%, transparent) 68%,
+        transparent 90%);
+  }
   /* NO horizontal inset. Bleeding the scrim sideways pushed the document
      12vw wider than the viewport at every width below 1024 — the gradient
      already fades to transparent, so it needs no bleed to look soft. */
