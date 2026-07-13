@@ -198,6 +198,7 @@ struct OutputPayload {
 
 // Abre un PTY nuevo corriendo el shell del usuario (interactivo por el tty).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // la firma ES el contrato IPC con el frontend
 fn pty_spawn(
     app: AppHandle,
     manager: State<'_, PtyManager>,
@@ -217,7 +218,7 @@ fn pty_spawn(
         .map_err(|e| e.to_string())?;
 
     // `argv` presente => es un AGENTE (claude). Si no, el login shell interactivo.
-    let is_agent = argv.as_ref().map_or(false, |v| !v.is_empty());
+    let is_agent = argv.as_ref().is_some_and(|v| !v.is_empty());
     let mut cmd = match &argv {
         Some(av) if !av.is_empty() => {
             // Windows: av[0] (claude/codex/opencode) es un shim de npm; resolvemos su binario real.
@@ -500,6 +501,7 @@ fn router_launch(
 
 // Relanza un worker existente con --resume (al reabrir un workspace).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // la firma ES el contrato IPC con el frontend
 fn worker_launch(
     state: State<'_, ControlState>,
     engine: String,
@@ -532,6 +534,7 @@ fn worker_launch(
 // Lanza un worker NUEVO desde un perfil (motor + modelo + effort + persona). Se conecta al hub
 // con router_id = el router actual del workspace, así reporta a ese router.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // la firma ES el contrato IPC con el frontend
 fn spawn_profile_worker(
     state: State<'_, ControlState>,
     engine: String,

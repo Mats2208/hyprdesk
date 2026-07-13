@@ -2,7 +2,7 @@
 // Cada motor arma su propio comando interactivo conectado al MCP "hyprdesk" (el túnel),
 // con su rol, su autonomía y su manejo de sesión (claude setea el id; codex/opencode
 // generan uno que hay que CAPTURAR luego para poder resumir).
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -38,7 +38,7 @@ fn capture_codex(cwd: &str, since: SystemTime) -> Option<String> {
                     let p = &v["payload"];
                     if p["cwd"].as_str() == Some(cwd) {
                         if let Some(id) = p["id"].as_str() {
-                            if best.as_ref().map_or(true, |(t, _)| mt > *t) {
+                            if best.as_ref().is_none_or(|(t, _)| mt > *t) {
                                 best = Some((mt, id.to_string()));
                             }
                         }
@@ -65,21 +65,21 @@ fn capture_opencode(since: SystemTime) -> Option<String> {
             continue;
         }
         let id = name.trim_end_matches(".json").to_string();
-        if best.as_ref().map_or(true, |(t, _)| mt > *t) {
+        if best.as_ref().is_none_or(|(t, _)| mt > *t) {
             best = Some((mt, id));
         }
     }
     best.map(|(_, id)| id)
 }
 
-fn walk_jsonl(root: &PathBuf) -> Vec<PathBuf> {
-    walk_files(root).into_iter().filter(|p| p.extension().map_or(false, |e| e == "jsonl")).collect()
+fn walk_jsonl(root: &Path) -> Vec<PathBuf> {
+    walk_files(root).into_iter().filter(|p| p.extension().is_some_and(|e| e == "jsonl")).collect()
 }
 
 // Recorre recursivamente (hasta ~4 niveles) devolviendo archivos.
-fn walk_files(root: &PathBuf) -> Vec<PathBuf> {
+fn walk_files(root: &Path) -> Vec<PathBuf> {
     let mut out = vec![];
-    let mut stack = vec![(root.clone(), 0u8)];
+    let mut stack = vec![(root.to_path_buf(), 0u8)];
     while let Some((dir, depth)) = stack.pop() {
         if depth > 4 {
             continue;
@@ -240,7 +240,7 @@ fn session_exists(engine: &str, cwd: &str, id: &str) -> bool {
             // en silencio: el agente revivía SIN memoria.
             let cwd = crate::paths::strip_verbatim(cwd);
             #[cfg(windows)]
-            let escaped = cwd.replace(|c| matches!(c, '/' | '\\' | ':'), "-");
+            let escaped = cwd.replace(['/', '\\', ':'], "-");
             #[cfg(not(windows))]
             let escaped = cwd.replace('/', "-");
             home()
@@ -255,10 +255,10 @@ fn session_exists(engine: &str, cwd: &str, id: &str) -> bool {
     }
 }
 
-fn file_with_id_exists(root: &PathBuf, id: &str) -> bool {
+fn file_with_id_exists(root: &Path, id: &str) -> bool {
     walk_files(root)
         .iter()
-        .any(|p| p.file_name().map_or(false, |n| n.to_string_lossy().contains(id)))
+        .any(|p| p.file_name().is_some_and(|n| n.to_string_lossy().contains(id)))
 }
 
 // Opciones de lanzamiento por-agente (de un perfil): modelo, effort de razonamiento, y persona
@@ -388,6 +388,9 @@ fn role_with_memory(role: &str, cwd: &str) -> Result<String, String> {
     }
 }
 
+// Un motor necesita todos estos datos para armar su comando; meterlos en un struct solo movería
+// el ruido de lugar. El lint mide una heurística, no la complejidad real.
+#[allow(clippy::too_many_arguments)]
 pub fn build_agent(
     engine: &str,
     port: u16,

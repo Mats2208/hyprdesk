@@ -138,7 +138,7 @@ impl ControlState {
 // El Enter va como keystroke SEPARADO tras un delay: pegado al texto, claude lo trata como un
 // "paste" y no lo envía. Separado = submit real.
 pub fn inject(app: &AppHandle, target: &str, text: &str) -> bool {
-    let clean = text.replace('\n', " ").replace('\r', " ");
+    let clean = text.replace(['\n', '\r'], " ");
     let wrote = app.state::<crate::PtyManager>().write(target, &clean);
     if wrote {
         let app = app.clone();
