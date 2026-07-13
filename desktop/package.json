@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": ["mcp"],
   "scripts": {
     "build:mcp": "node scripts/build-mcp.mjs",
     "dev": "node scripts/build-mcp.mjs && vite",
