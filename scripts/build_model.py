@@ -4,21 +4,40 @@ build_model.py — the HyprDesk hero rig, generated from scratch, headless.
     & "C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe" -b --factory-startup -P scripts\\build_model.py
 
 Optional, for review only (never committed):
-    ... -P scripts\\build_model.py -- --blend OUT.blend --preview DIR
+    ... -P scripts\\build_model.py -- --blend OUT.blend
 
 Writes public/models/hyprdesk.glb (Draco). Deterministic: same Blender, same bytes.
 
 WHAT IT BUILDS (see CONTRACT.md §6 — mesh + material names are frozen)
 
-    Router        RouterCore    faceted gem, emissive — the core
-    RouterCage    Cage          geodesic strut cage around it — metal
-    EngineClaude  ShellClaude   tall pointed spindle
-    EngineCodex   ShellCodex    chamfered block
-    EngineOpenCode ShellOpenCode thin open ring
-    Glyph*        Glyph         the engine marks — real extruded geometry, shared emissive mat
+    Router         RouterCore     faceted crystal, emissive — the core
+    RouterCage     Cage           gimbal rings + geodesic lattice — metal
+    EngineClaude   ShellClaude    TALL:  a standing faceted blade, leaning
+    EngineCodex    ShellCodex     LOW:   a wide machined module, stepped
+    EngineOpenCode ShellOpenCode  OPEN:  a two-rim strut frame with a bore through it
+    Glyph*         Glyph          the engine marks — real geometry, shared emissive mat
 
-The three engines are three different SOLIDS, not one mesh in three colours: spindle,
-block, ring. Strip the colour and the silhouette still tells you which is which.
+THE ONE RULE OF THIS FILE: the three engines must be tellable apart IN A BLUR.
+Not by colour — by MASS. So they differ in the axis the orbit cannot rotate away:
+scene.js spins each engine about the vertical (`rig.rotation.y = phase`), which means
+**HEIGHT IS INVARIANT** under the whole story. Height is therefore where the identity
+lives:
+
+    Claude   2.80 tall · 1.10 wide   ratio 2.5:1 standing   — mass, gravity
+    Codex    0.70 tall · 1.66 wide   ratio 2.4:1 lying      — instrument, precision
+    OpenCode 1.80 tall · 0.62 deep   50% air                — open
+
+Tall / low / hollow. At 200 px, in greyscale, out of focus, that still resolves.
+The glyphs are an INLAY (recessed pad, mark sunk into it) — they accent the identity;
+they no longer have to carry it.
+
+DENSITY: scene.js normalizes the whole rig to a fixed 3 units, so the bounding box is a
+CONSTANT and the only way to make the object read bigger is to grow the parts RELATIVE to
+the ring (which the contract pins at 2.6). That is nearly free, because a fatter engine
+grows the numerator (its own size) far faster than the denominator (a box already 5+ units
+wide because of the ring). The core/cage is free outright: it lives inside the ring and
+does not touch the box at all. `### FRAME` at the bottom prints exactly what scene.js will
+compute, so the claim is checkable.
 
 UNITS: Blender units == scene units (scene.js renormalizes the rig anyway), NOT millimetres.
        Nothing here is a manufactured part, so a mm scale would be a fiction.
@@ -26,6 +45,8 @@ AXES:  Blender is Z-up; the exporter's export_yup rotates to glTF's +Y-up. Engin
        authored at Blender (R·cos a, -R·sin a, 0) precisely so they land at glTF
        (R·cos a, 0, R·sin a) — the ring in the XZ plane, starting at +X, that scene.js
        assumes (glTF z = -blender y).
+LOCAL FRAME of an engine: +X points AWAY from the router (that is the mark-bearing face),
+       +Y is tangential, +Z is up. Looking at the mark, screen-right is +Y, screen-up +Z.
 """
 import bpy
 import bmesh
@@ -35,14 +56,21 @@ import sys
 from mathutils import Matrix, Euler, Vector
 
 # ─── the whole shape of the thing, in one block ──────────────────────────────
-RING_R      = 2.6          # engine orbit radius (CONTRACT)
-ENGINE_TILT = math.radians(12)   # pitch the mark-bearing face up, so it catches the key
+RING_R = 2.6                      # engine orbit radius (CONTRACT §6)
 
-CORE_R      = 0.50
-CAGE_R      = 1.00
-CAGE_STRUT  = 0.060
+# Per-engine pitch about local Y. It is not just "lift the mark to the key light" any more —
+# it is ATTITUDE, and each engine gets its own. The blade leans in toward the core (a heavy
+# thing tipping under gravity); the instrument sits nearly dead level (precision); the frame
+# leans back like a portal you walk through.
+TILT = (math.radians(10), math.radians(3), math.radians(15))
 
-HEX = 6
+CORE_R = 0.62                     # girdle. Was 0.50 — but see CORE_H: it grew UPWARD.
+CORE_H = 2.05                     # 3.3:1 tall. An emissive object has no shading, so the
+#                                   core can only read by SILHOUETTE, and a fat 12-fold gem
+#                                   in profile IS a circle. See build_router().
+CAGE_R = 1.42                     # was 1.00
+CAGE_STRUT = 0.052
+GIMBAL_R = 0.070
 
 COL = {                    # sRGB, as designers hand them over
     "core":   0x141821,
@@ -58,7 +86,7 @@ ROUGH = {"claude": 0.34, "codex": 0.30, "open": 0.38}   # CONTRACT §3 ENGINES[]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-GLB  = os.path.join(ROOT, "public", "models", "hyprdesk.glb")
+GLB = os.path.join(ROOT, "public", "models", "hyprdesk.glb")
 
 
 # ─── bmesh helpers (world-unit, Z-up local frames) ───────────────────────────
@@ -106,23 +134,51 @@ def lathe(bm, profile, seg, phase):
                 bm.faces.new((a0, a1, b1, b0))
 
 
-def torus_x(bm, R, r, nmaj, nmin):
-    """Faceted torus whose HOLE looks down +X — so it reads as a ring, not a disc."""
-    grid = []
-    for i in range(nmaj):
-        u = 2 * math.pi * (i + 0.5) / nmaj
-        cu, su = math.cos(u), math.sin(u)
-        row = []
-        for j in range(nmin):
-            v = 2 * math.pi * (j + 0.5) / nmin
-            rr = R + r * math.cos(v)
-            row.append(bm.verts.new((r * math.sin(v), rr * cu, rr * su)))
-        grid.append(row)
-    for i in range(nmaj):
-        i2 = (i + 1) % nmaj
-        for j in range(nmin):
-            j2 = (j + 1) % nmin
-            bm.faces.new((grid[i][j], grid[i][j2], grid[i2][j2], grid[i2][j]))
+def chamfered_rect(hx, hy, c, dx=0.0, dy=0.0):
+    """A rectangle with its four corners cut: keeps a BROAD FLAT ±X face (the mark lives
+    there) while the cut corners give the vertical facets that catch the key light. An
+    n-gon would not: its +X 'face' is only sin(π/n) of the depth, too narrow for a mark."""
+    c = min(c, hx * 0.9, hy * 0.9)
+    return [(dx + x, dy + y) for x, y in
+            [(hx, hy - c), (hx - c, hy), (-(hx - c), hy), (-hx, hy - c),
+             (-hx, -(hy - c)), (-(hx - c), -hy), (hx - c, -hy), (hx, -(hy - c))]]
+
+
+def loft(bm, sections):
+    """
+    sections = [(z, [(x, y), ...]), ...] bottom→top, equal vert counts, closed rings.
+    Caps both ends. Repeat a z with a different ring to get a hard horizontal STEP —
+    that is how the plinth under the blade and the stepped rails of the module are made,
+    and it is why neither engine needs a boolean union: one skin, no interior faces.
+    (Interior faces are not cosmetic here — `S.xray` ghosts the shells, so anything buried
+    inside a shell becomes visible clutter in the tunnel act.)
+    """
+    rings = [[bm.verts.new((x, y, z)) for x, y in pts] for z, pts in sections]
+    for a, b in zip(rings, rings[1:]):
+        n = len(a)
+        for i in range(n):
+            j = (i + 1) % n
+            if (a[i].co - b[i].co).length < 1e-9 and (a[j].co - b[j].co).length < 1e-9:
+                continue                                  # degenerate band (a pure step of 0)
+            bm.faces.new((a[i], a[j], b[j], b[i]))
+    bm.faces.new(rings[0][::-1])
+    bm.faces.new(rings[-1])
+
+
+def annulus_x(bm, n, r_out, r_in, x0, x1, phase=0.0):
+    """A flat faceted washer with a bore, extruded along X. The bore is the point:
+    OpenCode's negative space has to be real geometry you can see through, not a dark
+    material."""
+    def ring(r, x):
+        return [bm.verts.new((x, r * math.cos(phase + 2 * math.pi * i / n),
+                              r * math.sin(phase + 2 * math.pi * i / n))) for i in range(n)]
+    oa, ob_, ia, ib = ring(r_out, x0), ring(r_out, x1), ring(r_in, x0), ring(r_in, x1)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((oa[i], oa[j], ob_[j], ob_[i]))      # outer wall
+        bm.faces.new((ib[i], ib[j], ia[j], ia[i]))        # bore
+        bm.faces.new((ia[i], ia[j], oa[j], oa[i]))        # back face
+        bm.faces.new((ob_[i], ob_[j], ib[j], ib[i]))      # front face
 
 
 def prism_x(bm, pts, x0, x1):
@@ -147,6 +203,12 @@ def _deactivate(ob):
     ob.select_set(False)
 
 
+def _apply(ob, m):
+    _activate(ob)
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    _deactivate(ob)
+
+
 def wireframe(ob, thickness):
     m = ob.modifiers.new("wf", 'WIREFRAME')
     m.thickness = thickness
@@ -155,9 +217,16 @@ def wireframe(ob, thickness):
     m.use_replace = True
     m.use_boundary = True
     m.use_crease = False
-    _activate(ob)
-    bpy.ops.object.modifier_apply(modifier=m.name)
-    _deactivate(ob)
+    _apply(ob, m)
+
+
+def boolean(ob, cutter, op):
+    m = ob.modifiers.new("bool", 'BOOLEAN')
+    m.operation = op
+    m.solver = 'EXACT'
+    m.object = cutter
+    _apply(ob, m)
+    bpy.data.objects.remove(cutter, do_unlink=True)
 
 
 def bevel(ob, width, segments, angle_deg=25.0):
@@ -168,9 +237,7 @@ def bevel(ob, width, segments, angle_deg=25.0):
     m.angle_limit = math.radians(angle_deg)
     m.miter_outer = 'MITER_ARC'
     m.use_clamp_overlap = True          # star points would self-intersect without it
-    _activate(ob)
-    bpy.ops.object.modifier_apply(modifier=m.name)
-    _deactivate(ob)
+    _apply(ob, m)
 
 
 def shade(ob, angle_deg):
@@ -178,11 +245,11 @@ def shade(ob, angle_deg):
     Smooth across the bevel rounds, hard across the facets. (`use_auto_smooth` is gone;
     this operator is the 4.1+ replacement.)
 
-    The angle has to sit BETWEEN the two: above the bevel's per-segment step (so the edge
-    rounds and catches a highlight) and below the facet-to-facet dihedral (so the facets
-    stay crisp). Get it wrong on the high side and the whole model melts — a 30° angle on
-    a geodesic core whose facets only turn ~22° smooths the facets away and you get a
-    blob in a cage. Hence a different angle per piece; they have different dihedrals.
+    The angle has to sit BETWEEN the two: above the bevel's per-segment step (90°/(seg+1),
+    so the edge rounds and catches a highlight) and below the facet-to-facet dihedral (so
+    the facets stay crisp). Get it wrong on the high side and the model melts — 30° on a
+    geodesic core whose facets only turn ~22° smooths the facets away and you get a blob in
+    a cage. Hence a different angle per piece; they have different dihedrals.
     """
     _activate(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(angle_deg))
@@ -215,93 +282,226 @@ def paint(ob, mat):
     ob.data.materials.append(mat)
 
 
-# ─── the pieces ──────────────────────────────────────────────────────────────
+# ─── the router: the centre of gravity of the whole composition ──────────────
 def build_router():
+    """
+    A tall bipyramid crystal, standing on the vertical axis of the whole composition.
+
+    Two things drove this, and both were learned by rendering it wrong first.
+
+    · **The core is EMISSIVE, and emission is view-independent — it produces no shading.**
+      So the core cannot be read by its facets the way the shells can; whatever is glowing
+      hardest reads as a flat patch of light, and all that survives is the OUTLINE. The
+      first cut was a fat 12-fold gem: correct in Blender, and on the page a luminous
+      circle. A ball. The exact note the client opened with.
+      Hence: 8-fold (not 12), and 3.3:1 TALL (not 1.9:1 round). In profile that is a
+      pointed crystal at any angle — angular and vertical against a cage that is round.
+
+    · It is also NARROWER than the first cut (girdle 0.80 → 0.62). A core that fills its
+      cage hides the cage. The volume went up the axis instead, where it buys silhouette.
+    """
     bm = bmesh.new()
-    icosphere(bm, 1, CORE_R)
+    R, H = CORE_R, CORE_H
+    lathe(bm, [
+        (0.00, -H * 0.50),      # culet
+        (R * 0.30, -H * 0.38),
+        (R * 0.92, -H * 0.10),
+        (R * 1.00, 0.00),       # girdle — the widest line, and a hard one
+        (R * 0.92, H * 0.10),
+        (R * 0.30, H * 0.38),
+        (0.00, H * 0.50),       # table
+    ], 8, math.pi / 8)
     ob = finish(bm, "Router")
-    ob.data.transform(Matrix.Diagonal(Vector((1.0, 1.0, 1.16, 1.0))))   # a gem, not a ball
-    bevel(ob, 0.018, 3)
-    shade(ob, 12.0)               # geodesic facets only turn ~22° — smooth above that and it's a blob
+    bevel(ob, 0.018, 1)
+    shade(ob, 8.0)              # hard. A gem that smooths is a ball with a highlight on it.
     return ob
 
 
 def build_cage():
-    bm = bmesh.new()
-    icosphere(bm, 1, CAGE_R)
-    ob = finish(bm, "RouterCage")
-    wireframe(ob, CAGE_STRUT)     # 80 tri faces -> a geodesic lattice of struts
-    bevel(ob, 0.009, 2, angle_deg=35.0)
-    shade(ob, 20.0)
+    """
+    A gyroscope, not a golf ball: two chunky gimbal rings (one equatorial, one polar) that
+    the A2A wires visibly plug into, wrapped in a fine geodesic lattice. scene.js anchors
+    the links to the cage's XZ radius and sizes the halo from its sphere radius, so the
+    equatorial ring is doing real work, not decoration.
+    """
+    lat = bmesh.new()
+    icosphere(lat, 1, CAGE_R)
+    ob = finish(lat, "RouterCage")
+    wireframe(ob, CAGE_STRUT)          # 80 tri faces -> a geodesic lattice of struts
+
+    rings = bmesh.new()
+    for R, tilt in ((CAGE_R * 1.03, 0.0), (CAGE_R * 0.93, math.pi / 2)):
+        n_maj, n_min = 22, 5
+        grid = []
+        for i in range(n_maj):
+            u = 2 * math.pi * (i + 0.5) / n_maj
+            row = []
+            for j in range(n_min):
+                v = 2 * math.pi * (j + 0.5) / n_min
+                rr = R + GIMBAL_R * math.cos(v)
+                p = Vector((rr * math.cos(u), rr * math.sin(u), GIMBAL_R * math.sin(v)))
+                row.append(rings.verts.new(Matrix.Rotation(tilt, 3, 'X') @ p))
+            grid.append(row)
+        for i in range(n_maj):
+            i2 = (i + 1) % n_maj
+            for j in range(n_min):
+                j2 = (j + 1) % n_min
+                rings.faces.new((grid[i][j], grid[i][j2], grid[i2][j2], grid[i2][j]))
+    gim = finish(rings, "gimbals")
+
+    boolean(ob, gim, 'UNION')          # one skin: the Cage is ghosted by S.xray too
+    bevel(ob, 0.008, 2, angle_deg=35.0)
+    shade(ob, 22.0)
     return ob
+
+
+# ─── the three engines ───────────────────────────────────────────────────────
+CL_HX = 0.31          # blade half-thickness — CONSTANT across the whole mark band, because
+CL_LEAN = 0.105       # the lean is a shear in **Y** (tangential). A shear in X would tilt
+#                       the outward face off vertical and the inlay pad would come out a
+#                       wedge; a shear in Y leaves it a true plane at x = CL_HX. It is also
+#                       the only lean you can SEE face-on — an X-lean just leans at the
+#                       camera, and TILT[0] already does that.
 
 
 def build_claude():
-    """Spindle: hexagonal, pointed both ends, taller than it is wide. A shard."""
+    """
+    TALL. A standing blade: a plinth it stands on, a heavy low belly, a long taper, and a
+    chisel for a top — the ridge shoved 0.14 off-axis so the roof is one long slope and one
+    short one, the way a blade is actually ground. 2.92 × 1.28 × 0.72, and it leans.
+
+    Faceted means faceted: a ONE-segment bevel (a flat chamfer, a highlight line, not a
+    round) and shading hard at 8°. The first cut of this used a 3-segment bevel smoothed at
+    30° — but a 3-segment bevel on the 45° corner steps by only 11°, so 30° smoothed the
+    corner clean away and the blade came out of the render as a suppository. Nothing here
+    is allowed to melt.
+    """
     bm = bmesh.new()
-    lathe(bm, [(0.00, -0.71), (0.34, -0.30), (0.50, 0.00), (0.39, 0.30), (0.00, 0.75)],
-          HEX, math.pi / HEX)
+    sec = [                       # z, half-width(Y), half-thickness(X), ridge offset(X)
+        (-1.46, 0.64, 0.36, 0.0),   # the plinth — WIDER than the blade. It stands on it.
+        (-1.30, 0.64, 0.36, 0.0),
+        (-1.30, 0.55, CL_HX, 0.0),  # hard step in: the blade rises out of the base
+        (-1.12, 0.55, CL_HX, 0.0),
+        (-0.20, 0.55, CL_HX, 0.0),  # the belly — the widest line, and it is LOW
+        (0.95, 0.46, CL_HX, 0.0),   # long taper, in Y only: the mark face stays planar
+        (1.18, 0.42, CL_HX, 0.0),
+        (1.46, 0.36, 0.05, 0.14),   # the chisel: a wide flat ridge, ground off-centre
+    ]
+    loft(bm, [(z, chamfered_rect(hx, hy, 0.075, dx=dx, dy=CL_LEAN * z))
+              for z, hy, hx, dx in sec])
     ob = finish(bm, "EngineClaude")
-    bevel(ob, 0.020, 3)           # 60° facet edges, split into 15° steps
-    shade(ob, 22.0)               # ...rounds the edge, leaves the six facets dead flat
+
+    cut = bmesh.new()             # the inlay pad, milled 0.04 into the outward face
+    box(cut, (0.14, 0.68, 0.68), loc=(CL_HX + 0.03, CL_LEAN * 0.24, 0.24))
+    boolean(ob, finish(cut, "cut"), 'DIFFERENCE')
+
+    bevel(ob, 0.030, 1)           # a flat chamfer: catches a line of key, rounds nothing
+    shade(ob, 8.0)                # hard everywhere. It is a carved thing, not a cast one.
     return ob
+
+
+CX_HX = 0.48          # module half-depth (radial). The +X face is the mark face.
 
 
 def build_codex():
-    """Block: a chamfered cube. Machined, precise, unmistakably not a gem."""
+    """
+    LOW. A machined module lying on its side: a mounting flange, a stepped body, a lid.
+    1.90 wide × 0.80 tall — 2.4:1 the other way from the blade. Single-segment bevels: a
+    FLAT chamfer, the mark of a milled part, not the soft round of an app icon.
+    """
     bm = bmesh.new()
-    box(bm, (0.96, 0.96, 0.96))
+    sec = [
+        (-0.40, 0.95, 0.53),      # flange
+        (-0.25, 0.95, 0.53),
+        (-0.25, 0.82, CX_HX),     # step in
+        (0.25, 0.82, CX_HX),      # the body — the mark lives on its +X face
+        (0.25, 0.62, 0.36),       # step in
+        (0.40, 0.57, 0.33),       # the lid, very slightly drafted
+    ]
+    loft(bm, [(z, chamfered_rect(hx, hy, 0.055)) for z, hy, hx in sec])
     ob = finish(bm, "EngineCodex")
-    bevel(ob, 0.085, 3)           # 9% of the edge: a machined chamfer, not a soft app icon
-    shade(ob, 26.0)
+
+    cut = bmesh.new()
+    box(cut, (0.14, 0.98, 0.46), loc=(CX_HX + 0.03, 0.0, 0.0))
+    boolean(ob, finish(cut, "cut"), 'DIFFERENCE')
+
+    bevel(ob, 0.028, 1)           # ONE segment = a flat 45° chamfer = machined
+    shade(ob, 8.0)                # everything hard. No melt anywhere on this one.
     return ob
+
+
+OC_R = 0.90           # outer radius of the front rim
 
 
 def build_opencode():
-    """Ring: thin, open, hole facing out. Even edge-on it's a bar, never a block."""
+    """
+    OPEN. Two rims of different radius, held apart by six struts, with a 1.24-wide bore
+    straight through. It is ~50% air and the air is REAL geometry, not a dark material.
+
+    The rims are what make it survive the orbit. A single ring goes edge-on at some phase
+    and reads as a solid bar — the exact failure this whole round is about. Two rims with
+    a gap between them do not: edge-on you look straight THROUGH the gap, and the taper
+    (0.90 front → 0.74 back) makes the profile a splayed aperture instead of a rectangle.
+    """
     bm = bmesh.new()
-    torus_x(bm, 0.50, 0.15, 10, 6)
-    ob = finish(bm, "EngineOpenCode")
-    bevel(ob, 0.020, 2)
-    shade(ob, 20.0)               # 36° around the ring, 60° across it — both stay faceted
-    return ob
+    annulus_x(bm, 10, OC_R, 0.62, 0.17, 0.31)        # front rim: the big O
+    annulus_x(bm, 10, 0.74, 0.50, -0.31, -0.17)      # back rim: smaller — a splay
+    frame = finish(bm, "EngineOpenCode")
+
+    st = bmesh.new()
+    for i in range(6):
+        a = 2 * math.pi * i / 6 + math.pi / 6
+        st_r = 0.70
+        box(st, (0.64, 0.15, 0.11),                  # local: X axial, Y radial, Z tangential
+            loc=(0.0, st_r * math.cos(a), st_r * math.sin(a)), rot=(a, 0, 0))
+    boolean(frame, finish(st, "struts"), 'UNION')
+
+    bevel(frame, 0.022, 1)        # flat chamfer, same reason as the other two: no melt
+    shade(frame, 8.0)
+    return frame
 
 
-def star_pts(rays, r_out, r_in, sharp=0.42):
+# ─── the marks ───────────────────────────────────────────────────────────────
+# Every mark is authored on its engine's local +X face, which is the face that points away
+# from the router — and, on Claude and Codex, inside a pad milled 0.04 into it. The mark
+# rises out of the pad but stops just BELOW the original face: it is INLAID, not stuck on.
+# No two surfaces anywhere are coplanar, so there is nothing to z-fight.
+# Looking straight at that face (camera on +X, world up), SCREEN-RIGHT IS +Y and screen-up
+# is +Z. Get that backwards and the Codex prompt renders as `<_`.
+
+def star_pts(rays, r_out, r_in, sharp=0.42, cy=0.0, cz=0.0):
     """A tapered burst — sharp rays, not a fat cog. `sharp` narrows the ray root."""
     pts = []
     for i in range(rays):
         a = 2 * math.pi * i / rays
         h = math.pi / rays
-        pts.append((r_out * math.cos(a), r_out * math.sin(a)))
-        pts.append((r_in * math.cos(a + h * sharp), r_in * math.sin(a + h * sharp)))
-        pts.append((r_in * math.cos(a + h * (2 - sharp)), r_in * math.sin(a + h * (2 - sharp))))
+        pts.append((cy + r_out * math.cos(a), cz + r_out * math.sin(a)))
+        pts.append((cy + r_in * math.cos(a + h * sharp), cz + r_in * math.sin(a + h * sharp)))
+        pts.append((cy + r_in * math.cos(a + h * (2 - sharp)), cz + r_in * math.sin(a + h * (2 - sharp))))
     return pts
 
 
-# Every mark is authored on its engine's local +X face, which is the face that points away
-# from the router. Looking straight at that face (camera on +X, world up), SCREEN-RIGHT IS
-# +Y and screen-up is +Z. Get that backwards and the Codex prompt renders as `<_`.
-
 def build_glyph_claude():
-    """The burst. Its base is sunk inside the spindle's +X facet (x≈0.38), tips stand proud —
-    so there is no coplanar pair anywhere, and therefore nothing to z-fight."""
+    """The burst, inlaid in the blade's pad. Face x = 0.31, pad floor 0.27, mark tops out
+    at 0.302 — proud of the floor, shy of the face. Nothing coplanar with anything."""
     bm = bmesh.new()
-    prism_x(bm, star_pts(8, 0.185, 0.062, sharp=0.38), 0.34, 0.490)
+    prism_x(bm, star_pts(8, 0.250, 0.084, sharp=0.38, cy=CL_LEAN * 0.24, cz=0.24),
+            CL_HX - 0.13, CL_HX - 0.008)
     ob = finish(bm, "GlyphClaude")
-    bevel(ob, 0.006, 1, angle_deg=30.0)
+    bevel(ob, 0.007, 1, angle_deg=30.0)
     shade(ob, 20.0)
     return ob
 
 
 def build_glyph_codex():
-    """`>_` — the prompt. Two bars and a rule, on the block's +X face (x=0.48)."""
+    """`>_` — the prompt. Wide and short, because the face it sits on is wide and short."""
     bm = bmesh.new()
-    arm, th, dep = 0.23, 0.060, 0.13
+    x0, x1 = CX_HX - 0.12, CX_HX - 0.008
+    dep, arm, th = x1 - x0, 0.28, 0.075
     for s in (+1, -1):                       # apex at +Y == screen-right: this reads `>`
-        box(bm, (dep, arm, th), loc=(0.455, 0.060, s * 0.082),
-            rot=(-s * math.radians(42), 0, 0))
-    box(bm, (dep, 0.30, 0.055), loc=(0.455, -0.020, -0.210))
+        box(bm, (dep, arm, th), loc=((x0 + x1) / 2, -0.06, s * 0.100),
+            rot=(-s * math.radians(40), 0, 0))
+    box(bm, (dep, 0.36, 0.068), loc=((x0 + x1) / 2, 0.26, -0.130))
     ob = finish(bm, "GlyphCodex")
     bevel(ob, 0.010, 1)
     shade(ob, 20.0)
@@ -310,23 +510,24 @@ def build_glyph_codex():
 
 def build_glyph_opencode():
     """
-    A triangle of struts with a node at each corner, bridging the ring's aperture. It's a
-    three-node graph — the A2A mesh, and the three providers. The mark lives INSIDE the
-    hole rather than on a face, because on this engine the hole IS the face.
+    A triangle of struts with a node at each corner, spanning the bore — a three-node
+    graph: the A2A mesh, and the three providers. The mark lives INSIDE the hole, because
+    on this engine the hole IS the face. Its corners reach r = 0.55 and bite into the back
+    rim (bore 0.50), so it is suspended by the frame rather than floating in it.
 
     An earlier version was a hub with three radiating spokes. Rendered, it read as a
-    download arrow. A closed triangle can't be mistaken for one.
+    download arrow. A closed triangle cannot be mistaken for one.
     """
     bm = bmesh.new()
-    R, th, dep = 0.26, 0.048, 0.10
+    R, th, dep, x = 0.55, 0.060, 0.12, -0.24
     corner = [(R * math.cos(2 * math.pi * i / 3 + math.pi / 2),
                R * math.sin(2 * math.pi * i / 3 + math.pi / 2)) for i in range(3)]
     for i in range(3):
         (y0, z0), (y1, z1) = corner[i], corner[(i + 1) % 3]
         box(bm, (dep, math.hypot(y1 - y0, z1 - z0), th),
-            loc=(0.0, (y0 + y1) / 2, (z0 + z1) / 2),
+            loc=(x, (y0 + y1) / 2, (z0 + z1) / 2),
             rot=(math.atan2(z1 - z0, y1 - y0), 0, 0))
-        box(bm, (dep + 0.02, 0.10, 0.10), loc=(0.0, y0, z0),
+        box(bm, (dep + 0.02, 0.12, 0.12), loc=(x, y0, z0),
             rot=(math.radians(45), 0, 0))          # the nodes
     ob = finish(bm, "GlyphOpenCode")
     bevel(ob, 0.010, 1)
@@ -348,7 +549,7 @@ def place(engine, glyph, slot):
     a = 2 * math.pi * slot / 3
     # glTF z = -blender y, so -sin here == +sin there: the ring lands in XZ, starting at +X.
     pos = Vector((RING_R * math.cos(a), -RING_R * math.sin(a), 0.0))
-    R = Matrix.Rotation(-a, 4, 'Z') @ Matrix.Rotation(-ENGINE_TILT, 4, 'Y')
+    R = Matrix.Rotation(-a, 4, 'Z') @ Matrix.Rotation(-TILT[slot], 4, 'Y')
     engine.data.transform(R)
     glyph.data.transform(R)
     engine.location = pos
@@ -356,12 +557,51 @@ def place(engine, glyph, slot):
     glyph.matrix_parent_inverse = Matrix.Identity(4)
 
 
+def report_frame():
+    """
+    Print exactly what scene.js computes, because 'the rig reads denser' is a claim.
+    scene.js: scale = 3 / max(bbox), then engines swing out to radius·(1 + (1−orbit)·0.55).
+    The last line is the number the director's framing is tuned against — if it grows,
+    the hero crops, and that is the ONE way this round could break the page.
+    """
+    pts = [ob.matrix_world @ Vector(c) for ob in bpy.context.scene.objects
+           if ob.type == 'MESH' for c in ob.bound_box]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    size = hi - lo
+    k = 3.0 / max(size.x, size.y, size.z)
+
+    print(f"### FRAME bbox(gltf x,y,z) = {size.x:.2f} {size.z:.2f} {size.y:.2f}  -> scale {k:.4f}")
+    worst = 0.0
+    for ob in bpy.context.scene.objects:
+        if ob.name in ("Router", "RouterCage"):
+            b = [ob.matrix_world @ Vector(v) for v in ob.bound_box]
+            d = max(max(p[i] for p in b) - min(p[i] for p in b) for i in range(3))
+            print(f"###   {ob.name:<15} {d * k:.2f} across            (normalized)")
+        if not ob.name.startswith("Engine"):
+            continue
+        c = sum(((ob.matrix_world @ Vector(v)) for v in ob.bound_box), Vector()) / 8
+        h = max((ob.matrix_world @ Vector(v) - c).length for v in ob.bound_box)
+        b = [ob.matrix_world @ Vector(v) for v in ob.bound_box]
+        dims = (max(p.x for p in b) - min(p.x for p in b),
+                max(p.z for p in b) - min(p.z for p in b))   # gltf: x wide, y tall = blender z
+        print(f"###   {ob.name:<15} {dims[0] * k:.2f} wide x {dims[1] * k:.2f} tall  (normalized)")
+        # widest act: orbit 0 pushes the ring out by 55%, split adds 1.5 on top
+        worst = max(worst, (RING_R * 1.55 + h) * k)
+    print(f"### FRAME worst-case rig half-extent at orbit=0: {worst:.2f}  (of a 3.00 box)")
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)   # no default cube / lamp / camera
 
     mats = {
+        # emit_strength is 1.2, not 3.0, and that is a PREVIEW decision, not a page one:
+        # scene.js overwrites `emissiveIntensity` every frame from the load spring, so the
+        # exported strength never reaches the visitor. All 3.0 did was blow the core to
+        # white in preview.py and hide the very facets I was there to inspect — a render
+        # that lies to you about the thing you built it to check.
         "RouterCore":    pbr("RouterCore", COL["core"], 0.22, 0.0,
-                             emit=COL["coreEm"], emit_strength=3.0),
+                             emit=COL["coreEm"], emit_strength=1.2),
         "Cage":          pbr("Cage", COL["cage"], 0.26, 1.0),
         "ShellClaude":   pbr("ShellClaude", COL["claude"], ROUGH["claude"], 0.10, coat=0.15),
         "ShellCodex":    pbr("ShellCodex", COL["codex"], ROUGH["codex"], 0.10, coat=0.15),
@@ -395,6 +635,7 @@ def main():
         n = len(o.data.loop_triangles)
         tris += n
         print(f"###   {o.name:<16} {n:>6,} tris   scale={tuple(round(v, 4) for v in o.scale)}")
+    report_frame()
 
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     if "--blend" in argv:
