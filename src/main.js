@@ -158,10 +158,16 @@ const POSE = {
   engines:   { rotY: -1.15, camX: 0, camY: 3.45, camZ: 15.0, ty: 0, fov: 25, groupX: 2.59,   groupY: 0, orbit: 0.45, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.26, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
   // orbit: FLIPPED (product left). Camera climbs to 23° so the ring READS as an orbit,
   // and the studio lights go OUT. The page turns with them.
-  orbit:     { rotY: -2.10, camX: 0, camY: 4.41, camZ: 10.4,  ty: 0, fov: 28, groupX: -2.03, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 1.7, idleSpin: 0.55 },
-  // tunnel: wide lens, closest camera, shells ghosted so the packets read. dark stays
-  // LOW on purpose — a mid theme lerp is grey-on-grey and the copy dies.
-  tunnel:    { rotY: -2.75, camX: 0, camY: 2.19, camZ: 9.8,  ty: 0, fov: 32, groupX: 2.19,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 0.05, stageOp: 1,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.0, idleSpin: 0.35 },
+  orbit:     { rotY: -2.10, camX: 0, camY: 4.41, camZ: 10.4,  ty: 0, fov: 28, groupX: -2.03, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 2.1, idleSpin: 0.55 },
+  // tunnel: the page BURNS. dark: 1 — emission and bloom do nothing at #f0efec, so the
+  // act that is entirely about light on a wire has to happen in the dark. The halo goes
+  // with it (stageOp 0): a pale CSS disc on black is a milky smudge; the light in this
+  // act comes from the core and the packets, not from a gradient.
+  // (Round 1 held dark at 0.05 because a mid-lerp was grey-on-grey and killed the copy.
+  //  That was a symptom. `style` fixed the CAUSE — ink lightness now derives from the
+  //  background's own lightness — so the full 0→1 swing is safe. Worst contrast in the
+  //  whole transition is 3.92:1. The workaround can go.)
+  tunnel:    { rotY: -2.75, camX: 0, camY: 2.19, camZ: 9.8,  ty: 0, fov: 32, groupX: 2.19,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.6, idleSpin: 0.35 },
   // worktrees: flipped (product left). `split` throws the engines onto their branches —
   // the second-widest rig, so the frame is pulled back to hold the whole explosion.
   worktrees: { rotY: -3.60, camX: 0, camY: 4.00, camZ: 16.9, ty: 0, fov: 30, groupX: -3.52, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0.06, stageOp: 1,   shadowOp: 0.28, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
