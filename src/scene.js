@@ -99,7 +99,10 @@ export async function initScene({ canvas, onProgress }) {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // VSM, not PCFSoft: PCFSoft IGNORES shadow.radius (its kernel is fixed at ~1 texel),
+  // so a soft studio shadow is simply not reachable with it — you get hard slabs no
+  // matter what you set. VSM is the one built-in type that actually blurs.
+  renderer.shadowMap.type = THREE.VSMShadowMap;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(S.fov, 1, 0.1, 100);
@@ -113,20 +116,33 @@ export async function initScene({ canvas, onProgress }) {
   const ambient = new THREE.AmbientLight(0xffffff, 0.45);
   scene.add(ambient);
 
+  /* The key is STEEP (2.2 lateral against 9.4 up ≈ 13° off vertical) and it FOLLOWS
+     the rig — both on purpose, and both are shadow decisions:
+       · this product does not rest on the ground, it hangs in the air. A light at 50°
+         throws a floating object's shadow ~1.2x its height sideways, and the shadow
+         detaches into a slab lying next to the object. Overhead, it lands underneath,
+         which is the only way a floating object reads as being ANYWHERE.
+       · the rig slides across world X (groupX -1.3 … +1.5) and the engines swing out
+         with orbit/split. A fixed frustum has to be huge to cover all that — which
+         costs resolution AND still clips at the edges. Parented to the rig, it can be
+         tight, sharp, and it can never clip. */
+  const KEY_OFF = new THREE.Vector3(2.2, 9.4, 3.4);
   const key = new THREE.DirectionalLight(0xffffff, S.keyInt);
-  key.position.set(3.4, 7.5, 5.2);
+  key.position.copy(KEY_OFF);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.camera.near = 1;
-  key.shadow.camera.far = 26;
-  key.shadow.camera.left = -5;
-  key.shadow.camera.right = 5;
-  key.shadow.camera.top = 5;
-  key.shadow.camera.bottom = -3;
-  key.shadow.bias = -0.0006;
+  key.shadow.mapSize.set(1024, 1024);        // VSM blurs; a huge map just costs blur time
+  key.shadow.camera.near = 4;
+  key.shadow.camera.far = 20;
+  key.shadow.camera.left = -4;
+  key.shadow.camera.right = 4;
+  key.shadow.camera.top = 4;
+  key.shadow.camera.bottom = -4;
+  key.shadow.bias = 0;                       // VSM does not want a depth bias…
   key.shadow.normalBias = 0.02;
-  key.shadow.radius = 4;
+  key.shadow.radius = 6;                     // …it wants THIS, and it actually honours it
+  key.shadow.blurSamples = 12;
   scene.add(key);
+  scene.add(key.target);
 
   // softboxes: the long clean highlights on the cage come from HERE, not from the env map
   const boxL = new THREE.RectAreaLight(0xffffff, 3.4, 3.0, 5.0);
@@ -619,6 +635,11 @@ export async function initScene({ canvas, onProgress }) {
 
     group.rotation.y = fin(S.rotY) + Math.sin(t * 0.16) * 0.035 * fin(S.idleSpin, 1);
     group.position.set(gx, gy, 0);
+
+    // the shadow frustum rides the rig — it can stay tight, and it can never clip
+    key.position.copy(group.position).add(KEY_OFF);
+    key.target.position.copy(group.position);
+    key.target.updateMatrixWorld();
 
     /* THE STUDIO LIGHTS GO OUT — lights, shadow, env and exposure move together,
        and main.js turns the page in the same frame. */
