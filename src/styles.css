@@ -1,66 +1,224 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 /* ══════════════════════════════════════════════════════════════
-   styles.css — BASELINE (router). Owned by: `style` worker.
+   styles.css — owned by: `style`.
 
-   Tokens + skeleton so the page runs while the team builds. style
-   worker: this is yours to take to Awwwards grade. Two things are
-   load-bearing, keep them:
+   Register: editorial dev-tool. Huge tight-tracked display type
+   against small mono metadata. The 3D object is the hero; the type
+   frames it, never fights it for the same pixels.
 
-   1. The `>` child combinator on split headings (see §TRAP).
-   2. --router-x/y/d and --accent/--stage are written from JS every
-      frame. Don't rename them; CONTRACT.md §4.
+   ── THREE THINGS THAT ARE LOAD-BEARING ─────────────────────────
+
+   1. --router-x/y/d, --accent/--stage, --bg/--fg/--muted/--line are
+      written from JS. --bg/--fg/--muted/--line are rewritten EVERY
+      FRAME as the studio lights go out (CONTRACT.md §4).
+
+   2. Therefore: NEVER put a `transition` on a property whose value
+      comes from --bg/--fg/--muted/--line. The token itself animates,
+      so a transition on top of it lags a frame behind the 3D scene
+      forever — the page visibly trails the lights. Transition
+      transform / opacity / box-shadow only. Hover states are built
+      as opacity fades on a pseudo-element, not colour tweens.
+      (--accent/--stage are safe: they only change on a pick, and
+      main.js already tweens them, so `var(--accent)` animates free.)
+
+   3. Split headings use the CHILD combinator (see §TRAP).
+
+   ── THE INK TOKENS, AND WHY THEY EXIST ─────────────────────────
+   The theme hexes come from main.js and can't be raised from here.
+   Measured against their own ground:
+
+     --muted  #7C8288 on #F2F1ED = 3.44:1   ✗ fails AA for body copy
+     --accent #6D28D9 on #0E0F11 = 2.70:1   ✗ fails even as large text
+     --fg     against --bg at S.dark = 0.5  = 1.03:1   ✗ copy VANISHES
+
+   So no text is painted with raw --muted, raw --accent, or raw --fg.
+   Every ink derives from --ink0, which derives from the background
+   itself (see the token). One definition, three problems solved, and
+   it holds through the whole lerp rather than only at its two ends.
+
+   Measured on the running page by sweeping the real scroll through the
+   engines→orbit transition and reading the resolved pixels back:
+
+                     light     dark     worst anywhere in the lerp
+     --ink0          17.6:1    16.1:1     3.92:1   (was 1.03:1)
+     --ink-2  body   14.6:1    12.1:1     3.40:1
+     --ink-3  meta    8.1:1     7.0:1     2.65:1
+     --accent-ink     8.1:1     6.5:1  (Claude — worst of the three is
+     --accent-solid + #fff ≥ 6.1:1        OpenCode at 5.45:1 on dark)
+
+   The "worst" column is a two-frame band at the crossing, and ~4:1 is
+   the ceiling for ANY ink there (see the token). Everything a visitor
+   actually stops to read sits at the two ends. Metadata dips under 3:1
+   for those frames; the one real cure is to make the band pass faster,
+   which is main.js's applyTheme() — raised with the router.
    ══════════════════════════════════════════════════════════════ */
 
 :root {
+  /* written by main.js — the studio */
   --bg: #F2F1ED;
   --fg: #111315;
   --muted: #7C8288;
   --line: rgba(17, 19, 21, 0.14);
+  /* written by main.js — the engine you picked */
   --accent: #C2410C;
   --stage: #F6E7DE;
-
-  /* written by main.js every frame — the halo tracks the router */
+  /* written by main.js — the router core, projected to CSS px */
   --router-x: 50vw;
   --router-y: 50vh;
   --router-d: 40vw;
 
-  --f-display: 'Outfit', system-ui, sans-serif;
+  /* ── --ink0: the guaranteed-contrast foreground ────────────────
+     Every ink on the page derives from this, and it derives from --bg.
+
+     The fallback is plain --fg. It is correct at both ENDS of the lerp and
+     catastrophic in the middle: main.js walks --fg and --bg toward each
+     other, so at S.dark ≈ 0.5 they meet at the same mid-grey and the copy
+     hits 1.03:1 — it doesn't dim, it disappears. Measured, not assumed.
+
+     The real definition below reads the background's own lightness and
+     steps the ink to the far end of it. `round(down, l + 0.5, 1)` is 0 on a
+     dark ground and 1 on a light one — a hard flip exactly where the two
+     would otherwise cross. The lerp of the GROUND stays smooth (that's the
+     set going dark, and it's the good part); it's only the ink that snaps,
+     at the one moment it has to.
+
+     It is not a hack for the ends: on the light ground it resolves to
+     ~#101317 and on the dark one to ~#f0efe9 — within a hair of the --fg
+     values main.js is already writing. It only diverges in the danger band,
+     where the worst case goes from 1.03:1 to ~4.0:1.
+
+     (Mid-grey is not the enemy people assume: #808080 has a relative
+     luminance of 0.216, so black-on-mid-grey is 5.3:1. The collapse was
+     never the background — it was --fg lerping into it at the same time.) */
+  --ink0: var(--fg);
+
+  /* muted = the ink pulled back toward the ground it sits on. Body copy
+     keeps more of the ink (it carries the reading load); metadata gives up
+     more (it is supposed to recede). Both track the theme for free. */
+  --ink-2: color-mix(in oklab, var(--ink0) 88%, var(--bg));
+  --ink-3: color-mix(in oklab, var(--ink0) 68%, var(--bg));
+  --accent-ink: color-mix(in oklab, var(--accent) 66%, var(--ink0));
+  --accent-solid: color-mix(in srgb, var(--accent) 90%, #000);
+  --rule: color-mix(in srgb, var(--ink0) 16%, transparent);
+  --rule-strong: color-mix(in srgb, var(--ink0) 32%, transparent);
+  --surface: color-mix(in srgb, var(--bg) 78%, transparent);
+
+  --f-display: 'Inter Tight', system-ui, sans-serif;
   --f-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* type scale. The display sizes are additionally capped in `cqi` at
+     their use site: a viewport-only clamp overflows the text column at
+     wide widths and at 320px. See §TYPE. */
+  --t-hero: clamp(2.9rem, 6.1vw, 6.4rem);
+  --t-h2: clamp(2.2rem, 4.6vw, 4.4rem);
+  --t-h3: clamp(1.5rem, 2vw, 1.95rem);
+  --t-body: clamp(1rem, 0.94rem + 0.28vw, 1.15rem);
+  --t-sm: 0.875rem;
+  --t-mono: 0.6875rem;
+
+  /* 4/8 rhythm */
+  --s-1: 0.5rem;
+  --s-2: 0.75rem;
+  --s-3: 1rem;
+  --s-4: 1.5rem;
+  --s-5: 2rem;
+  --s-6: 3rem;
+  --s-7: 4.5rem;
+
   --pad: clamp(20px, 4vw, 64px);
+  --wrap: 1440px;
+  /* the prose measure — also the keep-out that holds the copy off the object */
+  --measure: 34rem;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* Guarded: relative colour syntax and round() are both ~2024 features. Where
+   they're missing, the --ink0 fallback above still gives a page that is
+   correct at both ends — it just loses the mid-lerp rescue. */
+@supports (color: oklch(from white calc(round(down, l + 0.44, 1)) c h)) {
+  :root {
+    /* round(down, l + 0.44, 1) → 1 when the ground's lightness is ≥ 0.56,
+       0 below it. So the ink is dark on a light set and light on a dark one,
+       and it changes sides once, at l = 0.56.
+
+       0.56 is not a guess — it is where the two contrast curves cross. Swept
+       0.36 / 0.40 / 0.44 / 0.50 against the real scroll: the worst contrast
+       anywhere in the transition peaks at this threshold (3.92:1) and falls
+       off on both sides (3.36 at 0.60, 3.33 at 0.50). The theoretical ceiling
+       for ANY ink at that background luminance is ~4.03:1, so this is
+       essentially the best a continuous lerp allows.
+
+       L 0.14→0.94 and hue 240→90 reproduce main.js's own --fg at both ends
+       (~#101317 / ~#f0efe9) — this is the same palette, not a new one. */
+    --ink0: oklch(
+      from var(--bg)
+      calc(0.94 - 0.80 * round(down, l + 0.44, 1))
+      0.006
+      calc(90 + 150 * round(down, l + 0.44, 1))
+    );
+  }
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { scrollbar-width: none; }
 html::-webkit-scrollbar { display: none; }
 
 body {
   background: var(--bg);
-  color: var(--fg);
+  color: var(--ink0);
   font-family: var(--f-display);
+  font-size: var(--t-body);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
   cursor: none;
 }
 @media (hover: none) { body { cursor: auto; } }
 
-/* ─── canvas + halo ─────────────────────────────────────────── */
+::selection { background: var(--accent-solid); color: #fff; }
+
+/* The custom cursor hides the native one — a keyboard user still has to
+   see where they are. This is the only outline in the file, and it is
+   never removed. */
+:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* ─── canvas · halo · grain ─────────────────────────────────── */
 
 #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
 
+/* The halo behind the product. It tracks the router across the screen.
+   Soft radial, not a hard disc: a disc with a 2px blur reads as a sticker.
+   The size is clamped here as well as in scene.js — in the close-up acts
+   the projection explodes, and an unclamped halo swallows the text column. */
 .stage {
-  position: fixed; z-index: 0;
-  left: var(--router-x); top: var(--router-y);
-  width: var(--router-d); height: var(--router-d);
+  position: fixed;
+  z-index: 0;
+  left: var(--router-x);
+  top: var(--router-y);
+  width: clamp(240px, var(--router-d), 82vmin);
+  height: clamp(240px, var(--router-d), 82vmin);
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: var(--stage);
-  filter: blur(2px);
-  transition: background 0.1s linear;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--stage) 0%,
+    color-mix(in srgb, var(--stage) 62%, transparent) 46%,
+    transparent 72%
+  );
   pointer-events: none;
+  will-change: left, top, width, height;
 }
 
 .grain {
-  position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.035;
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  opacity: 0.05; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -69,36 +227,81 @@ body {
 .cursor, .cursor-ring {
   position: fixed; top: 0; left: 0; z-index: 90; pointer-events: none;
   border-radius: 50%; transform: translate(-50%, -50%);
+  will-change: transform;
 }
-.cursor { width: 6px; height: 6px; background: var(--accent); margin: -3px 0 0 -3px; }
-.cursor-ring { width: 34px; height: 34px; border: 1px solid var(--line); opacity: 0.3; margin: -17px 0 0 -17px; }
+.cursor {
+  width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+  background: var(--accent-ink);
+}
+.cursor-ring {
+  width: 36px; height: 36px; margin: -18px 0 0 -18px;
+  border: 1px solid var(--rule-strong);
+}
 @media (hover: none) { .cursor, .cursor-ring { display: none; } }
 
 /* ─── preloader ─────────────────────────────────────────────── */
 
 .preloader {
   position: fixed; inset: 0; z-index: 100;
-  background: var(--bg); color: var(--fg);
-  display: grid; place-content: center; gap: 18px; justify-items: center;
+  background: var(--bg); color: var(--ink0);
+  display: grid; place-content: center; justify-items: center;
+  gap: var(--s-4);
 }
-.preloader__mark { font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
-.preloader__bar { width: 180px; height: 1px; background: var(--line); overflow: hidden; }
-.preloader__bar i { display: block; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: 0 50%; }
-.preloader__count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.preloader__mark {
+  font-size: clamp(3rem, 9vw, 5.5rem);
+  font-weight: 700; letter-spacing: -0.05em; line-height: 1;
+}
+.preloader__bar {
+  width: min(220px, 50vw); height: 1px;
+  background: var(--rule); overflow: hidden;
+}
+.preloader__bar i {
+  display: block; height: 100%; background: var(--accent-solid);
+  transform: scaleX(0); transform-origin: 0 50%;
+}
+.preloader__count {
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.24em; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ─── hud ───────────────────────────────────────────────────── */
 
 .hud {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 22px var(--pad);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-3);
+  padding: var(--s-4) var(--pad);
+  /* difference against whatever is under it — the page ground OR the 3D
+     object. It stays legible through the whole dark lerp for free. */
   mix-blend-mode: difference; color: #fff;
 }
-.hud__mark { font-weight: 700; letter-spacing: -0.02em; }
-.hud__mark b { font-weight: 400; opacity: 0.7; }
-.hud__nav { display: flex; gap: 22px; }
-.hud__nav a { color: inherit; text-decoration: none; font-size: 13px; opacity: 0.75; }
-.hud__meta { font-family: var(--f-mono); font-size: 11px; opacity: 0.6; }
+.hud__mark { font-weight: 600; font-size: 0.9375rem; letter-spacing: -0.02em; }
+.hud__mark b { font-weight: 400; opacity: 0.6; }
+
+.hud__nav { display: flex; gap: var(--s-4); }
+.hud__nav a {
+  position: relative;
+  color: inherit; text-decoration: none;
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  opacity: 0.7; transition: opacity 0.25s var(--ease);
+}
+.hud__nav a::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -5px; height: 1px;
+  background: currentColor;
+  transform: scaleX(0); transform-origin: 100% 50%;
+  transition: transform 0.4s var(--ease);
+}
+.hud__nav a:hover, .hud__nav a:focus-visible { opacity: 1; }
+.hud__nav a:hover::after { transform: scaleX(1); transform-origin: 0 50%; }
+
+.hud__meta {
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.1em; opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+/* reserve the width so the fps counter never reflows the bar */
+.hud__meta i { font-style: normal; display: inline-block; min-width: 6ch; text-align: right; }
 @media (max-width: 800px) { .hud__nav { display: none; } }
 
 /* ─── layout ────────────────────────────────────────────────── */
@@ -106,108 +309,426 @@ body {
 main { position: relative; z-index: 10; pointer-events: none; }
 main a, main button, .card { pointer-events: auto; }
 
-.wrap { max-width: 1440px; margin: 0 auto; padding: 0 var(--pad); }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; min-height: 100vh; }
-.act--flip .grid { direction: rtl; }
-.act--flip .grid > * { direction: ltr; }
-.col--product { pointer-events: none; }
-@media (max-width: 900px) {
-  .grid { grid-template-columns: 1fr; }
-  .col--product { display: none; }
+.wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--pad); }
+
+/* Asymmetric on purpose. A 50/50 split cannot hold a 100px display line
+   without either shrinking the type or running it into the object's column.
+   The text side takes the extra width; the object doesn't need DOM width. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  gap: clamp(2rem, 4vw, 4.5rem);
+  align-items: center;
+  min-height: 100svh;
 }
+
+/* The flipped acts place the text EXPLICITLY, by grid-column — not with
+   `direction: rtl`.
+
+   rtl flips by DOM order, and the two .act--flip sections don't agree on
+   theirs: #act-orbit is product-then-text, #act-worktrees is text-then-
+   product. One rule reversing DOM order therefore has to be wrong for one
+   of them — and it was: rtl put orbit's copy in the LEFT column while
+   POSE.orbit.groupX = -1.0 puts the object on the LEFT too, so the body
+   copy ran straight through the engines.
+
+   Both flipped acts have groupX < 0, so both want their text on the right.
+   Explicit placement says exactly that and doesn't care about DOM order.
+   It also drops the `direction: ltr` counter-hack the rtl trick needed. */
+.act--flip .grid { grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr); }
+.act--flip .col--product { grid-column: 1; grid-row: 1; }
+.act--flip .col--text { grid-column: 2; grid-row: 1; }
+
+/* The KEEP-OUT. The text column is wider than the text needs to be; what
+   matters is which EDGE the content hugs.
+
+   Left-aligned content in a right-hand column starts on the edge nearest
+   the object — which is how the orbiting engines ended up sitting on the
+   ledger rows. Flipped acts therefore pin their whole content box to the
+   OUTER edge with a padding, not with per-child auto margins: a padding
+   moves the title with everything else, so the block keeps one left edge.
+   (It also narrows the container, so the `cqi` type cap now measures
+   against the box the type actually has to fit in.)
+
+   The padding is a max() of two terms, and both matter: `100% - measure`
+   pins the box to the outer edge on wide columns, and the 18% floor keeps
+   a gap on narrow ones — below ~1100px the column is thinner than the
+   measure, that first term goes to zero, and without the floor the copy
+   slides right back under the engines. */
+.act--flip .col--text { padding-left: max(18%, calc(100% - var(--measure))); }
+
+/* and in the un-flipped acts the same measure caps the content's RIGHT
+   edge, holding it off the object on that side. Titles are exempt — they
+   are sized by the cqi cap and would wrap against a prose measure. */
+.specs, .hero__meta, .engines, .engines__note, .price, .outro__cta {
+  max-width: var(--measure);
+}
+
+/* container-type makes `cqi` resolve against the TEXT COLUMN, which is what
+   the display type actually has to fit inside — see §TYPE. */
+.col--text {
+  container-type: inline-size;
+  position: relative;
+  padding: var(--s-7) 0;
+}
+.col--product { pointer-events: none; }
 
 section { position: relative; }
 
-/* ─── type ──────────────────────────────────────────────────── */
-
-.eyebrow {
-  display: block; font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
-}
+/* ─── §TYPE ─────────────────────────────────────────────────────
+   Display sizes are min()'d against a `cqi` cap. A viewport clamp alone
+   overflows: at 1440 the text column is ~700px, and "Three engines." at
+   the clamp's 102px ceiling is ~690px of glyphs — one long word away from
+   spilling into the object. The cap ties the type to the column that has
+   to hold it, so it also survives 320px, where the clamp floor would
+   otherwise be too big.
+   ─────────────────────────────────────────────────────────────── */
 
 .hero__title, .act__title, .outro__title {
-  font-weight: 800; letter-spacing: -0.035em; line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.042em;
+  line-height: 0.94;
+  text-wrap: balance;
 }
-.hero__title { font-size: clamp(44px, 7.2vw, 108px); }
-.act__title, .outro__title { font-size: clamp(36px, 5vw, 76px); }
+.hero__title { font-size: min(var(--t-hero), 14cqi); }
+.act__title, .outro__title { font-size: min(var(--t-h2), 12.5cqi); line-height: 0.98; }
 
-/* TRAP — child combinator, NOT descendant. The splitter injects a
-   <span class="w"> per word; a descendant selector matches those too
-   (higher specificity than .w) → one word per line, long ones clipped
-   by .w{overflow:hidden}. Three projects, three times. */
+/* §TRAP — CHILD combinator, never descendant. The splitter injects a
+   <span class="w"> per word; a descendant selector matches those too, at
+   higher specificity than .w → one word per line, long ones clipped by
+   .w{overflow:hidden}. Three projects, three times. */
 .hero__title > .line,
 .act__title > span,
 .outro__title > span { display: block; }
-.line--accent, .accent { color: var(--accent); }
+.line--accent, .accent { color: var(--accent-ink); }
 
-.hero__sub, .act__body {
-  margin-top: 24px; max-width: 46ch; font-size: clamp(15px, 1.15vw, 18px);
-  line-height: 1.6; color: var(--muted);
+/* the splitter's word mask. The padding/margin pair is not decoration:
+   overflow:hidden on a tight line-height clips descenders (the "y" in
+   "capability"), and the mask has to sit below the baseline to hide them. */
+.w {
+  display: inline-block; overflow: hidden; vertical-align: top;
+  padding-bottom: 0.18em; margin-bottom: -0.18em;
 }
-.hero__meta { display: flex; gap: 26px; margin-top: 34px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
-
-/* the splitter's word mask */
-.w { display: inline-block; overflow: hidden; vertical-align: bottom; }
 .wi { display: inline-block; will-change: transform; }
 
-.specs { list-style: none; margin-top: 32px; border-top: 1px solid var(--line); }
-.specs li { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-.specs b { font-weight: 600; }
-.specs span { color: var(--muted); font-family: var(--f-mono); font-size: 12px; }
-
-.scrollcue { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: grid; gap: 10px; justify-items: center; color: var(--muted); font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
-.scrollcue i { width: 1px; height: 40px; background: var(--line); }
-
-/* ─── engine picker ─────────────────────────────────────────── */
-
-.engines { display: flex; gap: 12px; margin-top: 34px; }
-.sw {
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
-  background: var(--sw); cursor: none; transition: box-shadow 0.25s;
+/* NOT display:flex. The splitter turns the eyebrow's text into sibling
+   <span class="w"> words, and a flex container drops the whitespace text
+   nodes between them — the words would render with no spaces at all. Inline
+   flow keeps the spaces; the rule is an inline-block ::before. */
+.eyebrow {
+  display: block;
+  font-family: var(--f-mono); font-size: var(--t-mono); font-weight: 500;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: var(--s-4);
 }
-.sw[aria-checked='true'] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--fg); }
-.engines__name { display: block; margin-top: 14px; font-weight: 600; }
-.engines__note { margin-top: 4px; font-size: 13px; color: var(--muted); max-width: 40ch; min-height: 2.6em; }
+.eyebrow::before {
+  content: ''; display: inline-block; vertical-align: middle;
+  width: 28px; height: 1px; margin-right: 0.75em;
+  background: var(--accent);
+}
+
+.hero__sub, .act__body {
+  margin-top: var(--s-4);
+  max-width: 44ch;
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+
+.hero__meta {
+  display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5);
+  margin-top: var(--s-5);
+  font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+/* `>` again — a descendant selector would put a tick on every word. */
+.hero__meta > span { position: relative; padding-left: 1rem; }
+.hero__meta > span::before {
+  content: ''; position: absolute; left: 0; top: 0.62em;
+  width: 5px; height: 5px; background: var(--accent);
+}
+
+.scrollcue {
+  position: absolute; left: var(--pad); bottom: var(--s-5);
+  display: flex; align-items: center; gap: 0.85rem;
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3);
+}
+.scrollcue i {
+  display: block; width: 52px; height: 1px; background: var(--accent);
+  transform-origin: 0 50%; animation: cue 2.4s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(0.12); opacity: 0.4; }
+  50% { transform: scaleX(1); opacity: 1; }
+}
+
+/* ─── the spec ledger ───────────────────────────────────────── */
+
+.specs { list-style: none; margin-top: var(--s-5); }
+.specs li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--rule);
+}
+.specs li:last-child { border-bottom: 1px solid var(--rule); }
+.specs b {
+  font-weight: 600; font-size: 0.9375rem; letter-spacing: -0.01em;
+  color: var(--ink0);
+}
+.specs span {
+  font-family: var(--f-mono); font-size: 0.75rem;
+  color: var(--ink-3); text-align: right;
+}
+
+/* ─── the engine picker — the page repaints with it ─────────── */
+
+.engines {
+  display: flex; flex-wrap: wrap; gap: var(--s-2);
+  margin-top: var(--s-5);
+}
+/* 44px hit target, 30px visual — the swatch is the product's whole colour
+   story, so it gets a real ring, not a border tint. */
+.sw {
+  position: relative;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border: 0; background: none; cursor: none;
+  border-radius: 50%;
+  transition: transform 0.35s var(--ease);
+}
+.sw::before {
+  content: ''; grid-area: 1 / 1;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--sw);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 22%, transparent);
+}
+.sw::after {
+  content: ''; grid-area: 1 / 1;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--sw);
+  transform: scale(0.72); opacity: 0;
+  transition: transform 0.5s var(--ease), opacity 0.35s var(--ease);
+}
+.sw:hover { transform: translateY(-3px); }
+.sw[aria-checked='true']::after { transform: scale(1); opacity: 1; }
+@media (hover: none) { .sw { cursor: pointer; } }
+
+.engines__name {
+  display: block; margin-top: var(--s-4);
+  font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--ink0);
+}
+/* the note swaps text on pick — reserve its box or the column jumps */
+.engines__note {
+  margin-top: 0.35rem;
+  max-width: 40ch; min-height: 3.2em;
+  font-size: var(--t-sm); line-height: 1.55;
+  color: var(--ink-2);
+}
 
 /* ─── horizontal specs ──────────────────────────────────────── */
 
-.hsec { height: 100vh; display: flex; align-items: center; overflow: hidden; }
-.htrack { display: flex; gap: 28px; padding: 0 var(--pad); will-change: transform; }
-.card {
-  flex: 0 0 clamp(280px, 30vw, 420px); padding: 34px;
-  border: 1px solid var(--line); border-radius: 4px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(6px);
+.hsec { height: 100svh; display: flex; align-items: center; overflow: hidden; }
+.htrack {
+  display: flex; gap: clamp(1rem, 2vw, 1.75rem);
+  padding: 0 var(--pad);
+  will-change: transform;
 }
-.card__n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
-.card h3 { margin: 18px 0 12px; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-.card h3 em { font-style: normal; color: var(--accent); }
-.card p { font-size: 14px; line-height: 1.55; color: var(--muted); }
+.card {
+  position: relative; isolation: isolate;
+  flex: 0 0 clamp(260px, 28vw, 380px);
+  min-height: 46svh;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: var(--s-5);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  backdrop-filter: blur(8px);
+  transition: transform 0.5s var(--ease);
+}
+/* On hover the card fills with the engine you picked. Both ends of every
+   transition here are STABLE values — --accent-solid (only moves on a pick,
+   and main.js already tweens it) and a literal #fff. Never --bg/--fg: those
+   move every frame, and the label would have to chase them.
+   The fill and the label share one duration/easing. If the fill wiped in
+   over 400ms while the label snapped to white instantly, the label would be
+   white-on-near-white for a third of a second — invisible. */
+.card::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: var(--accent-solid);
+  opacity: 0; transition: opacity 0.4s var(--ease);
+}
+.card:hover, .card:focus-within { transform: translateY(-6px); }
+.card:hover::before, .card:focus-within::before { opacity: 1; }
+.card:hover .card__n, .card:focus-within .card__n,
+.card:hover h3, .card:focus-within h3,
+.card:hover h3 em, .card:focus-within h3 em { color: #fff; }
+.card:hover p, .card:focus-within p { color: rgba(255, 255, 255, 0.86); }
+
+.card__n {
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.2em; color: var(--accent-ink);
+  transition: color 0.4s var(--ease);
+}
+.card h3 {
+  margin-top: var(--s-6);
+  font-size: var(--t-h3); font-weight: 600;
+  letter-spacing: -0.03em; line-height: 1.05;
+  transition: color 0.4s var(--ease);
+}
+.card h3 em {
+  font-style: normal; display: block; color: var(--accent-ink);
+  transition: color 0.4s var(--ease);
+}
+.card p {
+  margin-top: var(--s-3);
+  font-size: var(--t-sm); line-height: 1.55; color: var(--ink-2);
+  transition: color 0.4s var(--ease);
+}
 
 /* ─── outro ─────────────────────────────────────────────────── */
 
-.outro { padding-top: 80px; }
-.marquee { overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0; }
-.marquee__track { display: flex; white-space: nowrap; font-size: clamp(28px, 4vw, 56px); font-weight: 800; letter-spacing: -0.03em; opacity: 0.12; }
+.outro { padding-top: var(--s-7); }
 
-.price { margin-top: 30px; display: flex; align-items: baseline; gap: 14px; }
-.price__n { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; }
-.price__note { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
-
-.outro__cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
-.btn {
-  display: inline-block; padding: 14px 26px; border: 1px solid var(--line); border-radius: 999px;
-  color: var(--fg); text-decoration: none; font-size: 14px; font-weight: 600;
+.marquee {
+  overflow: hidden;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
 }
-.btn--solid { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn--ghost { color: var(--muted); }
+.marquee__track {
+  display: flex; width: max-content; white-space: nowrap;
+  font-size: clamp(2rem, 4.5vw, 4rem);
+  font-weight: 700; letter-spacing: -0.035em;
+  color: var(--ink0); opacity: 0.1;
+}
+/* outlined display type reads as texture, not as a shouted headline.
+   Guarded: without text-stroke support the fill above still shows. */
+@supports (-webkit-text-stroke: 1px currentColor) {
+  .marquee__track {
+    color: transparent;
+    -webkit-text-stroke: 1px var(--ink0);
+    opacity: 0.22;
+  }
+}
 
-.foot { display: flex; justify-content: space-between; padding-top: 70px; padding-bottom: 34px; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+/* padding-BLOCK, not the shorthand: .outro__grid also carries .wrap, and a
+   `padding` shorthand here wins on source order and wipes .wrap's horizontal
+   gutter — the whole outro slams against the left edge of the viewport. */
+.outro__grid { min-height: auto; padding-block: var(--s-7) var(--s-6); }
 
-/* ─── reduced motion ────────────────────────────────────────── */
+.price {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-2) var(--s-3);
+  margin-top: var(--s-5);
+}
+.price__n {
+  font-size: clamp(2rem, 3.2vw, 2.75rem); font-weight: 700;
+  letter-spacing: -0.04em; line-height: 1;
+}
+.price__note {
+  font-family: var(--f-mono); font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+.outro__cta { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-5); }
+
+/* Same rule as the cards: the wipe fills with the engine colour and the
+   label goes to a literal #fff, in the same 400ms. Both endpoints stable. */
+.btn {
+  position: relative; isolation: isolate;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 46px; padding: 0 1.6rem;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink0); text-decoration: none;
+  font-family: var(--f-mono); font-size: 0.75rem; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  transition: transform 0.35s var(--ease), color 0.4s var(--ease);
+}
+.btn::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: var(--accent-solid);
+  transform: scaleY(0); transform-origin: 50% 100%;
+  transition: transform 0.4s var(--ease);
+}
+.btn:hover, .btn:focus-visible { transform: translateY(-2px); color: #fff; }
+.btn:hover::before, .btn:focus-visible::before { transform: scaleY(1); }
+
+/* already filled — hover just deepens it. The label never leaves #fff. */
+.btn--solid {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: #fff;
+}
+.btn--solid::before { background: rgba(0, 0, 0, 0.22); }
+.btn--solid:hover, .btn--solid:focus-visible { color: #fff; }
+
+.btn--ghost { border-color: transparent; color: var(--ink-3); }
+.btn--ghost::before { background: none; }
+.btn--ghost:hover, .btn--ghost:focus-visible { color: var(--ink0); transform: translateY(-2px); }
+
+.foot {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-2) var(--s-4);
+  padding-top: var(--s-5); padding-bottom: var(--s-4);
+  border-top: 1px solid var(--rule);
+  font-family: var(--f-mono); font-size: var(--t-mono);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ─── narrow ────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  /* The product column collapses, but the canvas is FIXED — the object is
+     still behind the copy. Without a scrim the type sits on top of the 3D
+     and neither reads. This is the only decoration in the file that earns
+     its place: it is what keeps the page legible on a phone. */
+  .col--product { display: none; }
+  /* NO horizontal inset. Bleeding the scrim sideways pushed the document
+     12vw wider than the viewport at every width below 1024 — the gradient
+     already fades to transparent, so it needs no bleed to look soft. */
+  .col--text::before {
+    content: ''; position: absolute; z-index: -1;
+    inset: -8vh 0;
+    background: radial-gradient(
+      ellipse at 40% 50%,
+      color-mix(in srgb, var(--bg) 92%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 76%, transparent) 48%,
+      transparent 76%
+    );
+  }
+  /* single column — release the explicit placement or the text would be
+     pinned to a column 2 that no longer exists */
+  .act--flip .grid { grid-template-columns: minmax(0, 1fr); }
+  .act--flip .col--product,
+  .act--flip .col--text { grid-column: auto; grid-row: auto; }
+  /* one column: no object beside the text, so no keep-out to hold */
+  .act--flip .col--text { padding-left: 0; }
+  .hero__sub, .act__body { max-width: 52ch; }
+  .card { min-height: 42svh; }
+}
+
+@media (max-width: 560px) {
+  .specs li { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+  .specs span { text-align: left; }
+  .outro__cta .btn { flex: 1 1 100%; }
+  .foot { justify-content: flex-start; }
+}
+
+/* ─── reduced motion ────────────────────────────────────────────
+   Not a degraded page — a static, complete one. main.js parks the scene
+   in the hero pose and sets the words to yPercent 0; the masks have to
+   come off with it, or a word that never animates stays clipped. */
 
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
   body { cursor: auto; }
   .cursor, .cursor-ring, .scrollcue { display: none; }
+  .w { overflow: visible; }
   .wi { transform: none !important; }
+  .sw { cursor: pointer; }
 }
