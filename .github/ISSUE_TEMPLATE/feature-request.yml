@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest something for HyprDesk
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        HyprDesk aims to stay **small and sharp**: a router that leads a team of agents, and nothing it doesn't need.
+        Features that add weight without earning it get declined — so make the case for *why*, not just *what*.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the friction you hit while actually using HyprDesk. Not the solution — the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you build?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What did you consider and reject?
+      description: Including "why not just do X with what already exists?"

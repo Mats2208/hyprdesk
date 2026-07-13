@@ -1,0 +1,25 @@
+# Normalizar finales de línea: en el repo siempre LF, en el checkout lo que use tu SO.
+# Sin esto, cada commit desde Windows escupe "LF will be replaced by CRLF".
+* text=auto eol=lf
+
+*.rs      text eol=lf
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.css     text eol=lf
+*.json    text eol=lf
+*.mjs     text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.toml    text eol=lf
+
+*.png     binary
+*.ico     binary
+*.icns    binary
+
+# Lockfiles y assets: no ensucian los diffs de las PRs.
+pnpm-lock.yaml   linguist-generated=true -diff
+Cargo.lock       linguist-generated=true -diff
+docs/*.png       linguist-documentation
+
+# El repo es Rust + TS, no "HTML" por los assets de marca.
+*.html    linguist-documentation

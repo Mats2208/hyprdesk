@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Rápido y barato: si el frontend no tipa ni buildea, no gastamos runners de Windows/macOS.
+  frontend:
+    name: frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm exec tsc --noEmit
+      - name: build
+        run: pnpm build
+
+  # HyprDesk corre en macOS y Windows: las dos se compilan de verdad, no una sola.
+  backend:
+    name: backend (${{ matrix.os }})
+    needs: frontend
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      # `tauri::generate_context!` valida que exista `frontendDist` (../dist) en tiempo de
+      # compilación, así que el frontend tiene que estar buildeado ANTES de tocar cargo.
+      - name: build frontend (lo necesita generate_context!)
+        working-directory: desktop
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: clippy (cero warnings)
+        working-directory: desktop/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo check
+        working-directory: desktop/src-tauri
+        run: cargo check --all-targets

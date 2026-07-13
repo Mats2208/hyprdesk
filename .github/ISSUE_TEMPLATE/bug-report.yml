@@ -1,0 +1,77 @@
+name: Bug report
+description: Something is broken in HyprDesk
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more precise the repro, the faster it gets fixed.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+      placeholder: |
+        I opened an existing folder as a workspace, closed it, reopened it from Recent — and the router came back without any of its workers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: engines
+    attributes:
+      label: Which engines were involved?
+      description: If it only happens with one engine, that is a big clue — say so below.
+      options:
+        - label: Claude Code
+        - label: Codex
+        - label: OpenCode
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Where did it happen?
+      options:
+        - Router
+        - Worker
+        - Both
+        - Not agent-related (UI, editor, settings, workspaces…)
+
+  - type: input
+    id: version
+    attributes:
+      label: HyprDesk version / commit
+      description: "Run: git rev-parse --short HEAD"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: |
+        If you ran it with `pnpm tauri dev`, paste the terminal output. Screenshots of the tile are very welcome.
+        For workspace/session bugs, the contents of `~/HyprDesk/workspaces.json` help a lot.
+      render: shell

@@ -6,6 +6,7 @@
 
 **Orchestrate a team of AI coding agents on your desktop.** A **router** agent — the one you talk to — _leads_: it thinks, investigates, designs, writes the critical code, and **delegates execution** to **worker** agents, each in its own real terminal. They all talk over a **local bidirectional MCP tunnel** — **A2A (Agent-to-Agent) running on your machine**.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Mats2208/hyprdesk/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Mats2208/hyprdesk/actions/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-active%20development-5f819b?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-000000?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
@@ -200,16 +201,23 @@ By default agents run in **autonomous mode** (permission bypass: `--dangerously-
 
 ## Contributing
 
-Issues and PRs welcome. To develop:
+Issues and PRs welcome — read **[CONTRIBUTING.md](CONTRIBUTING.md)** first (there's one rule: *minimal functional code, no bloat*).
 
 ```bash
 cd desktop && pnpm install
-pnpm tauri dev            # window with hot-reload
-pnpm exec tsc --noEmit    # frontend typecheck
-cd src-tauri && cargo build   # backend
+pnpm tauri dev                                # window with hot-reload
+
+# what CI runs, on both Windows and macOS:
+pnpm exec tsc --noEmit
+pnpm build
+cd src-tauri && cargo clippy --all-targets -- -D warnings
 ```
 
-Before a PR: make sure `tsc --noEmit` and `cargo build` both pass. Style: follow the surrounding code (comments in Spanish, matching each module's idiom). The MCP server and roles live in `desktop/mcp/` (`hyprdesk-mcp.mjs`, `router-role.md`, `worker-role.md`).
+Then **run the app and use what you changed** — this drives real PTYs and real agents, so a green typecheck proves very little.
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how the tunnel, PTYs, worktrees and session persistence actually work, including the traps that already bit us. Read it before touching the backend.
+- **[AGENTS.md](AGENTS.md)** — if you're pointing a coding agent at this repo.
+- **[TODO.md](TODO.md)** — what's next.
 
 ## License
 
