@@ -11,11 +11,15 @@
  */
 
 import { chromium } from 'playwright';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 
 const URL = process.argv[2] ?? 'http://localhost:4173';
 const OUT = '.shots';
 
+/* Wipe first. Writing INTO the old renders lets a stale PNG survive — from a previous
+   run, a renamed act, or (worse) a different branch — and you then review a picture of
+   a page that no longer exists. Every render in here must come from THIS run. */
+await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 
 const browser = await chromium.launch({
