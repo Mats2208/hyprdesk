@@ -179,9 +179,14 @@ export async function initScene({ canvas, onProgress }) {
 
   // No fallback: if the model is gone, initScene REJECTS and main.js degrades the
   // page to a readable, 3D-less page. A silent box of primitives would be worse.
-  const draco = new DRACOLoader().setDecoderPath('/draco/');
+  //
+  // BASE_URL, not '/': on GitHub Pages this ships under /hyprdesk/, and an absolute '/models/…'
+  // would 404 there. Vite rewrites asset paths it can see in HTML/CSS — a string inside JS it
+  // cannot. These two are the only paths in the codebase that Vite can't fix for us.
+  const BASE = import.meta.env.BASE_URL;
+  const draco = new DRACOLoader().setDecoderPath(`${BASE}draco/`);
   const gltf = await new GLTFLoader().setDRACOLoader(draco)
-    .loadAsync('/models/hyprdesk.glb', (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
+    .loadAsync(`${BASE}models/hyprdesk.glb`, (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
   const model = gltf.scene;
 
   const parts = {};
