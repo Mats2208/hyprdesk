@@ -60,12 +60,18 @@ export function BrowserTile({ id, title, active, canClose, maximized, url, hidde
   }, [src, nonce]);
 
   // Webview NATIVA para sitios externos: la creamos y la mantenemos pegada al rect del placeholder.
+  //
+  // El rAF corre SOLO mientras la ventana está visible. Antes latía a 60fps para siempre —incluso
+  // con la app minimizada— nada más que para comparar un rect que no se movía. Cuando la ventana se
+  // oculta, el loop se corta entero (no es que "no hace nada": no existe).
   useEffect(() => {
     if (!external) return;
     const label = `browser-${id}`;
     let raf = 0;
+    let corriendo = false;
     let opened = false;
     let last = "";
+
     const tick = () => {
       const r = nativeRef.current?.getBoundingClientRect();
       if (r) {
@@ -82,8 +88,18 @@ export function BrowserTile({ id, title, active, canClose, maximized, url, hidde
       }
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); invoke("browser_close", { label }).catch(() => {}); };
+
+    const arrancar = () => { if (!corriendo) { corriendo = true; raf = requestAnimationFrame(tick); } };
+    const parar = () => { corriendo = false; cancelAnimationFrame(raf); };
+    const onVis = () => (document.visibilityState === "visible" ? arrancar() : parar());
+
+    onVis();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      parar();
+      document.removeEventListener("visibilitychange", onVis);
+      invoke("browser_close", { label }).catch(() => {});
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, src, external, nonce]);
 

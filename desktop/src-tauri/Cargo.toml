@@ -31,3 +31,15 @@ uuid = { version = "1", features = ["v4"] }
 arboard = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+
+# El binario que shippeás. Sin esto van los defaults de cargo, que priorizan tiempo de compilación
+# por sobre el resultado — razonable en dev, gratis de corregir para el release.
+[profile.release]
+opt-level = 3
+lto = "fat"          # optimiza a través de los límites de los crates (tauri, portable-pty, sysinfo…)
+codegen-units = 1    # una unidad = el optimizador ve todo junto. Compila más lento, corre mejor.
+strip = true         # fuera los símbolos de debug: binario más chico, sin costo en runtime
+
+# panic = "abort" NO. Tentador (menos código, binario más chico) y equivocado acá: la app corre un
+# hilo reader + uno flusher + uno waiter POR AGENTE. Con unwinding, un panic mata ese hilo y el
+# resto sigue vivo. Con abort, te mata la app entera con los cinco agentes adentro. No vale.

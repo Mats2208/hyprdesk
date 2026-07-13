@@ -196,6 +196,49 @@ struct OutputPayload {
     data: String, // bytes crudos del PTY, en base64 (evita corromper UTF-8)
 }
 
+const VENTANA: std::time::Duration = std::time::Duration::from_millis(25);
+const TOPE: usize = 32 * 1024;
+
+// Junta la salida del PTY en ventanas de ~25ms (o 32KB) y llama a `emit` UNA vez por ventana. Con
+// varios agentes escupiendo a la vez, emitir cada chunk suelto satura el IPC y cuelga el webview.
+//
+// La clave está en el PRIMER recv(): bloquea INDEFINIDAMENTE. Antes esto era un `recv_timeout(25ms)`
+// en loop, así que con el agente en reposo —o sea, la mayor parte del tiempo— el hilo se despertaba
+// 40 veces por segundo para no hacer nada. Por CADA agente: con 5 agentes, 200 despertares/segundo
+// en vacío.
+//
+// En CPU% eso no se ve (es despreciable). Pero es exactamente lo que penaliza el modelo de energía
+// de macOS: los "idle wakeups" impiden que el core entre en sueño profundo, y eso sí se paga en
+// batería. Ahora, en reposo, el hilo duerme de verdad: CERO despertares.
+fn coalesce(rx: std::sync::mpsc::Receiver<Vec<u8>>, mut emit: impl FnMut(Vec<u8>)) {
+    use std::sync::mpsc::RecvTimeoutError;
+    let mut acc: Vec<u8> = Vec::new();
+    let mut flush = |acc: &mut Vec<u8>| {
+        if !acc.is_empty() {
+            emit(std::mem::take(acc));
+        }
+    };
+
+    // recv() duerme hasta que haya salida. Err = el reader cerró el canal → el PTY murió.
+    'vivo: while let Ok(chunk) = rx.recv() {
+        acc.extend_from_slice(&chunk);
+        let corte = std::time::Instant::now() + VENTANA;
+        while acc.len() < TOPE {
+            let resta = corte.saturating_duration_since(std::time::Instant::now());
+            if resta.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(resta) {
+                Ok(chunk) => acc.extend_from_slice(&chunk),
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => break 'vivo, // el flush final lo hace abajo
+            }
+        }
+        flush(&mut acc);
+    }
+    flush(&mut acc); // lo que quedó cuando murió el canal: no se pierde un byte
+}
+
 // Abre un PTY nuevo corriendo el shell del usuario (interactivo por el tty).
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // la firma ES el contrato IPC con el frontend
@@ -341,31 +384,10 @@ fn pty_spawn(
     let app2 = app.clone();
     let id2 = id.clone();
     std::thread::spawn(move || {
-        use std::sync::mpsc::RecvTimeoutError;
-        let mut acc: Vec<u8> = Vec::new();
-        let flush = |acc: &mut Vec<u8>| {
-            if acc.is_empty() {
-                return;
-            }
-            let data = base64::engine::general_purpose::STANDARD.encode(&acc);
+        coalesce(rx, |bytes| {
+            let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
             let _ = app2.emit("pty-output", OutputPayload { id: id2.clone(), data });
-            acc.clear();
-        };
-        loop {
-            match rx.recv_timeout(std::time::Duration::from_millis(25)) {
-                Ok(chunk) => {
-                    acc.extend_from_slice(&chunk);
-                    if acc.len() >= 32 * 1024 {
-                        flush(&mut acc);
-                    }
-                }
-                Err(RecvTimeoutError::Timeout) => flush(&mut acc),
-                Err(RecvTimeoutError::Disconnected) => {
-                    flush(&mut acc);
-                    break;
-                }
-            }
-        }
+        });
         // pty-exit lo emite el hilo waiter (child.wait), no acá: el EOF del reader no es fiable
         // en Windows/ConPTY (no llega al morir el proceso, solo al cerrar el PTY).
     });
@@ -827,4 +849,66 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+    use std::time::{Duration, Instant};
+
+    // La razón de existir del coalescing: N chunks que llegan juntos salen en UNA emisión, no en N.
+    // Sin esto, varios agentes escupiendo a la vez saturan el IPC y cuelgan el webview.
+    #[test]
+    fn junta_los_chunks_de_una_rafaga_en_una_sola_emision() {
+        let (tx, rx) = channel();
+        for c in [b"hola ".as_slice(), b"mundo ", b"pty"] {
+            tx.send(c.to_vec()).unwrap();
+        }
+        drop(tx);
+
+        let mut emisiones: Vec<Vec<u8>> = vec![];
+        coalesce(rx, |b| emisiones.push(b));
+
+        assert_eq!(emisiones.len(), 1, "una ráfaga = una emisión, no tres");
+        assert_eq!(emisiones[0], b"hola mundo pty");
+    }
+
+    // EL fix de batería: en reposo el hilo NO se despierta. Antes hacía recv_timeout(25ms) en loop,
+    // o sea 40 despertares por segundo por agente para llamar a un flush vacío.
+    #[test]
+    fn en_reposo_no_emite_nada_y_no_gira_en_vacio() {
+        let (tx, rx) = channel::<Vec<u8>>();
+        let t0 = Instant::now();
+        let h = std::thread::spawn(move || {
+            let mut emisiones = 0;
+            coalesce(rx, |_| emisiones += 1);
+            emisiones
+        });
+
+        std::thread::sleep(Duration::from_millis(300)); // 300ms de silencio: 12 ventanas de 25ms
+        tx.send(b"por fin".to_vec()).unwrap();
+        drop(tx);
+
+        let emisiones = h.join().unwrap();
+        assert_eq!(emisiones, 1, "el silencio no emite: solo el byte real produce una emisión");
+        assert!(t0.elapsed() >= Duration::from_millis(300));
+    }
+
+    // Una salida enorme no espera la ventana entera: corta al llegar al tope y emite ya.
+    #[test]
+    fn corta_por_tamano_sin_esperar_la_ventana() {
+        let (tx, rx) = channel();
+        for _ in 0..5 {
+            tx.send(vec![b'x'; 8 * 1024]).unwrap(); // 40KB > TOPE (32KB)
+        }
+        drop(tx);
+
+        let mut emisiones: Vec<Vec<u8>> = vec![];
+        coalesce(rx, |b| emisiones.push(b));
+
+        assert!(emisiones.len() >= 2, "no espera a juntar 40KB: parte en al menos dos emisiones");
+        let total: usize = emisiones.iter().map(|e| e.len()).sum();
+        assert_eq!(total, 40 * 1024, "y no se pierde un solo byte");
+    }
 }
