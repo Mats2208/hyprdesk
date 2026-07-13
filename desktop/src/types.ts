@@ -1,5 +1,5 @@
 // Tipos compartidos de la app (antes vivían en App.tsx, que era el hub de tipos).
-import type { WorkspaceMeta } from "./WorkspaceManager";
+import type { WorkspaceMeta } from "./store/workspaces";
 
 export type Role = "router" | "worker";
 export type TileKind = "terminal" | "file" | "browser";
@@ -10,12 +10,13 @@ export type Term = {
   kind?: TileKind; filePath?: string; url?: string; // tiles no-terminal
   name?: string; color?: string; // agente de un perfil (nombre + color propios)
   branch?: string; // rama del worktree (repos git)
+  gen?: number; // se incrementa al revivir el agente → fuerza el remount del tile (PTY nuevo)
 };
 
 // Perfil de agente (por-workspace): describís → un meta-agente lo genera → lo lanzás.
 export type Profile = {
   id: string; name: string; engine: string; model?: string; effort?: string;
-  persona: string; color: string; rules?: { canMerge?: "always" | "ask" | "never" };
+  persona: string; color: string;
   skills?: string[]; // skills de dominio fijas del perfil (se inyectan al lanzarlo)
 };
 
@@ -29,9 +30,8 @@ export type AgentLaunch = {
 
 export type Rect = { x: number; y: number; w: number; h: number };
 export type SysStats = { cpu: number; mem_used: number; mem_total: number };
-export type GlmUsage = { session?: number | null; weekly?: number | null };
-// Consumo de un agente de suscripción (Codex/Claude): % USADO del ciclo de 5h y semanal. Misma
-// forma que GlmUsage. null en cada campo si no aplica; el objeto es null si no hay login/dato.
+// Consumo de un agente de suscripción (GLM/Codex/Claude): % USADO del ciclo corto y del semanal.
+// null en cada campo si no aplica; el objeto es null si no hay login/dato.
 export type AgentUsage = { session?: number | null; weekly?: number | null };
 
 export type SavedTile = { id: string; role: Role; engine: string; sessionId: string; title: string; kind?: TileKind; filePath?: string; url?: string; name?: string; color?: string; cwd?: string; branch?: string };

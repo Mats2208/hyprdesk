@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import { monoFont, xtermTheme } from "./theme/tokens";
 import { useThemeStore } from "./theme/theme";
+import { encodeKey, installKittyKeyboard } from "./terminal/keys";
+import { isMac } from "./platform";
 
 // base64 (bytes crudos del PTY) -> Uint8Array para xterm.write sin corromper UTF-8.
 function b64ToBytes(b64: string): Uint8Array {
@@ -36,12 +40,15 @@ type Props = {
   onClose: (id: string) => void;
   onToggleMax: (id: string) => void;
   onMerge?: (id: string) => void; // mergear la rama del worker a la principal
+  onRestart?: (id: string) => void; // revivir el agente muerto (--resume de su sesión)
   onDetectUrl?: (url: string) => void; // detecta localhost:PORT en la salida → preview
+  onOpenLink?: (url: string) => void; // click en una URL de la salida → navegador embebido
   onStatus?: (id: string, status: "working" | "idle" | "exited") => void; // estado del agente
 };
 
 export function TerminalTile({
-  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, branch, onFocus, onClose, onToggleMax, onMerge, onDetectUrl, onStatus,
+  id, title, active, isRouter, canClose, maximized, argv, cwd, env, injectTask, captureEngine, hasActivity, color, branch, onFocus, onClose, onToggleMax, onMerge, onDetectUrl, onOpenLink, onStatus,
+  onRestart,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -49,6 +56,8 @@ export function TerminalTile({
   const [live, setLive] = useState<"working" | "idle">("idle"); // pulso del header: ¿está produciendo salida?
   const onDetectRef = useRef(onDetectUrl);
   onDetectRef.current = onDetectUrl;
+  const onOpenLinkRef = useRef(onOpenLink);
+  onOpenLinkRef.current = onOpenLink;
   const onStatusRef = useRef(onStatus);
   onStatusRef.current = onStatus;
   const busyRef = useRef(false);
@@ -71,8 +80,23 @@ export function TerminalTile({
     termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // URLs de la salida → clickeables, abren en el navegador embebido.
+    term.loadAddon(new WebLinksAddon((_e, uri) => onOpenLinkRef.current?.(uri)));
     term.open(host);
+
+    // Renderer por GPU. Con varios agentes streaming a la vez el renderer DOM satura el main thread
+    // (era EL cuello de botella); WebGL lo saca de encima. Si el contexto se pierde, xterm vuelve solo
+    // al DOM: por eso disponemos el addon en vez de reventar.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch { /* sin WebGL (VM, drivers viejos) → renderer DOM, funciona igual */ }
     fit.fit();
+
+    // Protocolo de teclado de Kitty: lo negocian codex/opencode y así Shift+Enter llega distinguible.
+    const kitty = installKittyKeyboard(term, (data) => { invoke("pty_write", { id, data }); });
+    const isAgent = !!argv?.length; // en un shell pelado no tocamos las teclas
 
     // Reaccionar a cambios de tema/fuente: re-aplicar tema, tamaño y familia, y re-ajustar.
     const themeUnsub = useThemeStore.subscribe(() => {
@@ -136,8 +160,6 @@ export function TerminalTile({
     });
     ro.observe(host);
 
-    const isMac = navigator.userAgent.toLowerCase().includes("mac");
-
     // Pegar: leemos el portapapeles del SO vía Rust. Si hay IMAGEN, inyectamos su RUTA (los agentes
     // leen rutas de imágenes); si hay texto, lo inyectamos. (El webview no entrega imágenes por el
     // evento paste del DOM, por eso lo hacemos por Rust/arboard.)
@@ -159,6 +181,22 @@ export function TerminalTile({
     // selección (si no, dejamos pasar el Ctrl+C para que sea SIGINT/interrupt, como toda terminal).
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+
+      // Shift/Alt/Ctrl + Enter → salto de línea, NO enviar. xterm mandaría "\r" pelado (= enviar).
+      //
+      // preventDefault() es IMPRESCINDIBLE, no cosmético: xterm captura el teclado con un <textarea>
+      // oculto, y el navegador SÍ tiene acción por defecto para Shift+Enter en un textarea (meter un
+      // salto de línea). Ese newline se colaba por el input del textarea y el agente lo leía como
+      // Enter → enviaba el mensaje. Ctrl+Enter funcionaba justamente porque no tiene default.
+      if (isAgent) {
+        const seq = encodeKey(e, kitty);
+        if (seq) {
+          e.preventDefault();
+          invoke("pty_write", { id, data: seq });
+          return false;
+        }
+      }
+
       if (!(e.metaKey || e.ctrlKey)) return true;
       const k = e.key.toLowerCase();
       if (k === "v") { doPaste(); return false; }
@@ -224,6 +262,15 @@ export function TerminalTile({
           </span>
         )}
         {exited && <span className="tile__exited">exited</span>}
+        {exited && onRestart && (
+          <button className="tile__revive" title="Relanza el agente con --resume: retoma la sesión donde quedó"
+            onClick={(e) => { e.stopPropagation(); onRestart(id); }}>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+              <path d="M13 8a5 5 0 11-1.6-3.7M13 2.5V5h-2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            revivir
+          </button>
+        )}
         <span className="tile__controls">
           {branch && onMerge && (
             <button className="tctl tctl--merge" title={`Merge ${branch} → rama principal`} onClick={(e) => { e.stopPropagation(); onMerge(id); }}>

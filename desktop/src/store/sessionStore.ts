@@ -2,7 +2,7 @@
 // Con zustand usamos get() para leer estado fresco dentro de las acciones (adiós al juego de refs).
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { WorkspaceMeta } from "./../WorkspaceManager";
+import type { WorkspaceMeta } from "./workspaces";
 import type { AgentLaunch, Profile, SavedState, Stage, Term, WsSession } from "../types";
 import { HOSTS, MAX_TILES, savedStateOf, tileFromLaunch } from "./sessionModel";
 import { useUiStore } from "./uiStore";
@@ -80,6 +80,7 @@ type SessionState = {
   launchProfile: (profile: Profile, task?: string) => Promise<void>;
   launchTeam: (selected: Profile[], goal: string) => Promise<void>;
 
+  restartTile: (id: string) => Promise<void>;
   addWorkerTile: (routerId: string, tile: Term) => void;
   setTileSession: (agentId: string, sessionId: string) => void;
   addPreview: (folder: string, url: string) => void;
@@ -106,7 +107,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ currentId: meta.id, stage: "ide" });
       return;
     }
-    invoke("touch_workspace", { id: meta.id }).catch(() => {});
+    // await, no fire-and-forget: touch REESCRIBE el índice y load lo LEE. Dispararlos a la vez era
+    // una carrera real que dejaba el índice en [] y abría el workspace vacío (ver workspace.rs).
+    await invoke("touch_workspace", { id: meta.id }).catch(() => {});
     let saved: SavedState | null = null;
     try {
       const s = await invoke<string | null>("load_workspace", { folder: meta.folder });
@@ -244,6 +247,38 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ? `Sos parte de un equipo. Objetivo compartido: ${goal}\n\nEsperá instrucciones puntuales del router (o del usuario) para tu parte.`
         : undefined;
       await get().launchProfile(p, task);
+    }
+  },
+
+  // Revive un agente cuyo proceso murió (Ctrl+C, /exit, crash) SIN perder su sesión: lo relanza con
+  // --resume de su sessionId. Antes un router muerto te dejaba el workspace inutilizable: había que
+  // cerrarlo y reabrirlo. `gen` se incrementa para forzar el remount del tile (= PTY nuevo).
+  restartTile: async (id) => {
+    const cur = get().current();
+    const t = cur?.terms.find((x) => x.id === id);
+    if (!cur || !t?.sessionId) return;
+    try {
+      if (t.role === "router") {
+        const r = await invoke<AgentLaunch>("router_launch", {
+          engine: t.engine || "claude", cwd: cur.meta.folder, resumeSession: t.sessionId,
+        });
+        const nt = tileFromLaunch(r, "router", t.title);
+        nt.gen = (t.gen ?? 0) + 1;
+        get().updateSession(cur.meta.id, (s) => ({
+          ...s, terms: s.terms.map((x) => (x.id === id ? nt : x)), routerId: r.agentId, activeId: r.agentId,
+        }));
+      } else {
+        const w = await invoke<AgentLaunch>("worker_launch", {
+          engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId,
+          cwd: t.cwd || cur.meta.folder, routerId: cur.routerId || "router",
+          wsRoot: cur.meta.folder, branch: t.branch || null,
+        });
+        const nt = tileFromLaunch(w, "worker", t.title);
+        nt.name = t.name; nt.color = t.color; nt.gen = (t.gen ?? 0) + 1;
+        get().updateSession(cur.meta.id, (s) => ({ ...s, terms: s.terms.map((x) => (x.id === id ? nt : x)), activeId: nt.id }));
+      }
+    } catch (e) {
+      useUiStore.getState().setToast(`No pude revivir "${t.title}": ${String(e)}`);
     }
   },
 

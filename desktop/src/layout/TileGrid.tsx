@@ -13,7 +13,7 @@ import { hk } from "../platform";
 export function TileGrid({ session: s }: { session: WsSession }) {
   const currentId = useSessionStore((st) => st.currentId);
   const closing = useSessionStore((st) => st.closing);
-  const { setActive, closeTerminal, toggleMax, mergeWorker, addPreview, addTerminal, updateSession } = useSessionStore.getState();
+  const { setActive, closeTerminal, toggleMax, mergeWorker, addPreview, addTerminal, updateSession, openBrowser, restartTile } = useSessionStore.getState();
   const dragging = useUiStore((st) => st.dragging);
   const setDragging = useUiStore((st) => st.setDragging);
   const setStatus = useUiStore((st) => st.setStatus);
@@ -63,7 +63,8 @@ export function TileGrid({ session: s }: { session: WsSession }) {
   return (
     <div className={`workspace ${dragging && isCurrent ? "workspace--dragging" : ""}`}>
       {s.terms.map((t) => (
-        <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={t.id} style={slotStyle(t)}>
+        // la key lleva `gen`: al revivir un agente cambia → React remonta el tile → PTY nuevo.
+        <div className={`slot ${closing.includes(t.id) ? "slot--closing" : ""}`} key={`${t.id}:${t.gen ?? 0}`} style={slotStyle(t)}>
           {t.kind === "file" ? (
             <FileTile
               id={t.id} title={t.title} filePath={t.filePath ?? ""} active={s.activeId === t.id} canClose={t.role === "worker"}
@@ -85,7 +86,9 @@ export function TileGrid({ session: s }: { session: WsSession }) {
               argv={t.argv} cwd={t.cwd} env={t.env} injectTask={t.injectTask} captureEngine={t.captureEngine}
               hasActivity={activity.includes(t.id)} color={t.color} branch={t.branch}
               onFocus={setActive} onClose={closeTerminal} onToggleMax={toggleMax} onMerge={mergeWorker}
+              onRestart={restartTile}
               onDetectUrl={(url) => addPreview(s.meta.folder, url)}
+              onOpenLink={(url) => openBrowser(url)}
               onStatus={(tid, st) => setStatus(tid, st)}
             />
           )}
