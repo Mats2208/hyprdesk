@@ -15,15 +15,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # UN solo .dmg para las dos arquitecturas de Mac. Un runner ARM cross-compila el target
+          # Intel sin problema, así que no hace falta una máquina x86 — y menos mal, porque GitHub
+          # ya retiró los runners macos-13: un job que los pidiera se quedaría encolado PARA SIEMPRE
+          # (lo comprobamos: el resto del build terminó y ese quedó colgado).
           - os: macos-latest
-            label: macOS (Apple Silicon)
-            target: aarch64-apple-darwin
-          - os: macos-13
-            label: macOS (Intel)
-            target: x86_64-apple-darwin
+            label: macOS (universal — Intel + Apple Silicon)
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: windows-latest
             label: Windows
             target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +40,7 @@ jobs:
           cache-dependency-path: desktop/pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.rust-targets }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
