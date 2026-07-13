@@ -137,14 +137,42 @@ if (!COARSE && !REDUCED) {
 
        hero 2.57 · engines 2.35 · orbit 1.84 · tunnel 1.98 · worktrees 3.19 · outro 1.97
 
-   and then framed to sit inside its OWN column with air on both sides:
+   and then framed with
 
        visW = 2 · camZ · tan(fov/2) · aspect      (aspect 1.6 = the tight case)
-       rig ≤ 44% of viewport width, centred on the product column
 
-   The camera sits far back because the object is genuinely big, not because the shot is
-   timid — 44% of the viewport is the same apparent size in every act. Losing a little
-   scale beats cropping an engine.
+   ROUND 2 — the object is the argument, the text is the caption.
+   Round 1 kept the rig inside its own grid column in all seven acts, which caps it at
+   ~46% of the frame and made it read as a widget parked in the corner. Two changes:
+
+   · The READING acts (hero, engines, worktrees, specs, outro) still respect the column —
+     46% — because the copy has to survive. But `hero` now opens at orbit 0.45, NOT 0.15.
+     That is the real fix. `orbit` is not just a story prop: it SETS THE RIG'S WIDTH,
+     because dormant engines are parked far out. At 0.15 the hero was a 4.14-wide scatter
+     around a 1.33 core — it filled 70% of the frame while reading as three dots and a
+     golf ball. Drawing the engines in makes it an OBJECT. The arc still opens to 1.0.
+
+   · The DARK acts (orbit, tunnel) let the rig TAKE THE FRAME — 72% and 73%. The copy
+     overlays it. This is the whole point of those two acts, and it's what the light
+     column-bound version could never do.
+
+   Extents are the PHASE-SWEPT worst case, from scene.js's window.__extent() probe — the
+   engines never stop orbiting (~95 s/rev), so a single sample proves nothing. That is how
+   six of seven acts cropped an engine in round 1.
+
+       act        halfExtent   rig % of frame
+       hero          3.81          46%
+       engines       3.65          44%
+       orbit         3.22          72%   ← takes the frame
+       tunnel        3.22          73%   ← takes the frame
+       worktrees     5.02          45%   (widest rig: split throws the engines out)
+       specs         3.33          47%
+       outro         3.22          46%
+
+   `shadowOp` is GONE from this table. The ground plane and the cast shadow were deleted in
+   round 2 — the rig is an orbital system suspended in space, and a hard shadow on an
+   invisible floor answered a question nobody asked. Nothing reads the prop any more, so it
+   is not left wired to nothing.
 
    groupX sign follows the REAL rendered layout: product right, except the two
    .act--flip acts (#act-orbit, #act-worktrees) where it goes left. Get the sign wrong
@@ -152,13 +180,22 @@ if (!COARSE && !REDUCED) {
 
    rotY only ever decreases: the rig never rewinds, it keeps turning one way. */
 const POSE = {
-  // hero: the widest rig of all seven — the engines are dormant and thrown far out
-  hero:      { rotY: -0.45, camX: 0, camY: 3.00, camZ: 13.6, ty: 0, fov: 30, groupX: 2.83,   groupY: 0, orbit: 0.15, wire: 0,    flow: 0,    xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.0, idleSpin: 1.00 },
-  // engines: long lens on the three shells — the picker lives here
-  engines:   { rotY: -1.15, camX: 0, camY: 3.45, camZ: 15.0, ty: 0, fov: 25, groupX: 2.59,   groupY: 0, orbit: 0.45, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.26, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
+  // hero: orbit 0.45, NOT 0.15. This is the art direction, and it's the whole fix for
+  // "the rig is a widget parked in the corner". `orbit` doesn't just tell a story — it
+  // sets the rig's WIDTH (dormant engines are parked far out). At 0.15 the hero was a
+  // sparse 4.14-wide scatter around a 1.33 core: three dots and a golf ball, filling
+  // 70% of the frame while READING as nothing. Drawing the engines in makes it an
+  // OBJECT. It still opens to 1.0 across the page, so the arc survives.
+  hero:      { rotY: -0.45, camX: 0, camY: 3.50, camZ: 16.0, ty: 0, fov: 36, groupX: 4.05,  groupY: 0, orbit: 0.45, wire: 0,    flow: 0,    xray: 0,   split: 0, dark: 0,    stageOp: 1,   keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.0, idleSpin: 1.00 },
+  // engines: long lens (fov 28), tightest orbit of the lit acts — the picker lives here,
+  // so the three silhouettes have to be legible side by side
+  engines:   { rotY: -1.15, camX: 0, camY: 4.80, camZ: 20.8, ty: 0, fov: 28, groupX: 4.05,  groupY: 0, orbit: 0.60, wire: 0.10, flow: 0.05, xray: 0,   split: 0, dark: 0,    stageOp: 1,   keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.1, idleSpin: 0.35 },
   // orbit: FLIPPED (product left). Camera climbs to 23° so the ring READS as an orbit,
   // and the studio lights go OUT. The page turns with them.
-  orbit:     { rotY: -2.10, camX: 0, camY: 4.41, camZ: 10.4,  ty: 0, fov: 28, groupX: -2.03, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.16, keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 2.1, idleSpin: 0.55 },
+  // orbit: THE RIG TAKES THE FRAME — 72% of it. Lights out, camera climbed to 23° so the
+  // ring reads as an orbit, and the copy (right column) now OVERLAYS the rig instead of
+  // sitting beside a widget. The object is the argument; the text is the caption.
+  orbit:     { rotY: -2.10, camX: 0, camY: 3.90, camZ: 9.2,  ty: 0, fov: 34, groupX: -0.90, groupY: 0, orbit: 1.00, wire: 0.50, flow: 0.25, xray: 0,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.10, glow: 2.1, idleSpin: 0.55 },
   // tunnel: the page BURNS. dark: 1 — emission and bloom do nothing at #f0efec, so the
   // act that is entirely about light on a wire has to happen in the dark. The halo goes
   // with it (stageOp 0): a pale CSS disc on black is a milky smudge; the light in this
@@ -167,13 +204,17 @@ const POSE = {
   //  That was a symptom. `style` fixed the CAUSE — ink lightness now derives from the
   //  background's own lightness — so the full 0→1 swing is safe. Worst contrast in the
   //  whole transition is 3.92:1. The workaround can go.)
-  tunnel:    { rotY: -2.75, camX: 0, camY: 2.19, camZ: 9.8,  ty: 0, fov: 32, groupX: 2.19,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 1,    stageOp: 0,   shadowOp: 0.14, keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.6, idleSpin: 0.35 },
+  // ...and the widest lens on the page (fov 38, camZ 8.0): 73% of the frame, so you are
+  // INSIDE the tunnel rather than watching it from across the room.
+  tunnel:    { rotY: -2.75, camX: 0, camY: 1.80, camZ: 8.0,  ty: 0, fov: 38, groupX: 0.90,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 1.00, xray: 1,   split: 0, dark: 1,    stageOp: 0,   keyInt: 2.6, envInt: 0.90, expo: 1.02, glow: 2.6, idleSpin: 0.35 },
   // worktrees: flipped (product left). `split` throws the engines onto their branches —
   // the second-widest rig, so the frame is pulled back to hold the whole explosion.
-  worktrees: { rotY: -3.60, camX: 0, camY: 4.00, camZ: 16.9, ty: 0, fov: 30, groupX: -3.52, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0.06, stageOp: 1,   shadowOp: 0.28, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
-  // specs: centred turntable behind the cards — a backdrop, so it may be small
-  specs:     { rotY: -5.80, camX: 0, camY: 2.00, camZ: 12.6, ty: 0, fov: 32, groupX: 0,     groupY: 0, orbit: 0.90, wire: 0.70, flow: 0.45, xray: 0,   split: 0, dark: 0,    stageOp: 0.5, shadowOp: 0.22, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.70 },
-  outro:     { rotY: -8.90, camX: 0, camY: 1.88, camZ: 10.4,  ty: 0, fov: 30, groupX: 2.18,   groupY: 0, orbit: 1.00, wire: 1.00, flow: 0.60, xray: 0,   split: 0, dark: 0,    stageOp: 1,   shadowOp: 0.30, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.4, idleSpin: 1.00 },
+  // worktrees: the widest rig on the page (5.02) — `split` throws the engines onto their
+  // branches and the frame has to hold the whole explosion. Back to the light, product-LEFT.
+  worktrees: { rotY: -3.60, camX: 0, camY: 5.50, camZ: 23.4, ty: 0, fov: 32, groupX: -5.27, groupY: 0, orbit: 0.55, wire: 0.35, flow: 0.25, xray: 0.2, split: 1, dark: 0,    stageOp: 1,   keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.50 },
+  // specs: centred turntable behind the cards — a backdrop, so it may sit back
+  specs:     { rotY: -5.80, camX: 0, camY: 2.40, camZ: 15.3, ty: 0, fov: 32, groupX: 0,     groupY: 0, orbit: 0.90, wire: 0.70, flow: 0.45, xray: 0,   split: 0, dark: 0,    stageOp: 0.5, keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.2, idleSpin: 0.70 },
+  outro:     { rotY: -8.90, camX: 0, camY: 2.80, camZ: 15.4, ty: 0, fov: 32, groupX: 3.47,  groupY: 0, orbit: 1.00, wire: 1.00, flow: 0.60, xray: 0,   split: 0, dark: 0,    stageOp: 1,   keyInt: 2.6, envInt: 0.90, expo: 1.00, glow: 1.4, idleSpin: 1.00 },
 };
 
 /* PROPS is derived from the table on purpose: scrollVel / mouseX / mouseY
