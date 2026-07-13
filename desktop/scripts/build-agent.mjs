@@ -27,7 +27,9 @@ for (const f of ["router-role.md", "worker-role.md"]) {
 
 // cpSync NO poda. Una skill borrada o renombrada sobrevivía para siempre acá: la seguía listando
 // `list_skills` y se seguía empaquetando en el instalador. Borramos el destino antes de copiar.
-rmSync(join(outDir, "skills"), { recursive: true, force: true });
-cpSync(join(src, "skills"), join(outDir, "skills"), { recursive: true });
+for (const dir of ["skills", "playbooks"]) {
+  rmSync(join(outDir, dir), { recursive: true, force: true });
+  cpSync(join(src, dir), join(outDir, dir), { recursive: true });
+}
 
-console.log("[build-agent] MCP + roles + skills → src-tauri/resources/");
+console.log("[build-agent] MCP + roles + skills + playbooks → src-tauri/resources/");
