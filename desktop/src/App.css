@@ -93,6 +93,11 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+/* El UA le mete padding:1px 6px a TODO <button>. En los botones-ícono (caja cuadrada fija, glifo
+   centrado con grid) eso se come la caja de contenido — el ☰ de 26px quedaba con 12px útiles para un
+   ícono de 16px, y el glifo terminaba 4px a la derecha; .wstab__close, de 16px, quedaba con 4px. Los
+   que sí quieren padding lo declaran en su clase y ganan por especificidad. */
+button { padding: 0; }
 
 body {
   background:
@@ -1058,7 +1063,7 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .wel__swatch--light { background: linear-gradient(135deg, #ffffff 50%, #005fb8 50%); }
 .wel__swatch--hc { background: linear-gradient(135deg, #000000 50%, #3b9eff 50%); }
 .wel__foot { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
-.wel__skip { border: none; background: transparent; color: var(--faint); font-size: 12.5px; cursor: pointer; }
+.wel__skip { padding: 4px 6px; border: none; background: transparent; color: var(--faint); font-size: 12.5px; cursor: pointer; }
 .wel__skip:hover { color: var(--muted); }
 .wel__nav { display: flex; gap: 8px; }
 .wel__back { padding: 9px 14px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--surface-2); color: var(--muted); font-size: 13px; cursor: pointer; }

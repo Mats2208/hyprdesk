@@ -87,11 +87,28 @@ export function TerminalTile({
     // Renderer por GPU. Con varios agentes streaming a la vez el renderer DOM satura el main thread
     // (era EL cuello de botella); WebGL lo saca de encima. Si el contexto se pierde, xterm vuelve solo
     // al DOM: por eso disponemos el addon en vez de reventar.
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose());
-      term.loadAddon(webgl);
-    } catch { /* sin WebGL (VM, drivers viejos) → renderer DOM, funciona igual */ }
+    //
+    // ATADO A LA VISIBILIDAD: los tiles de un workspace inactivo siguen montados (la vista se oculta
+    // con display:none, ver Shell.tsx), y antes cada uno pedía su contexto igual. 3 workspaces × 9
+    // tiles = 27 contextos; Chromium corta en ~16 y fuerza la pérdida del más viejo → las terminales
+    // perdían la GPU en silencio, justo lo que WebGL venía a dar. Un tile oculto no necesita ninguno:
+    // se engancha al mostrarse y se suelta al ocultarse. IntersectionObserver ve el display:none.
+    let webgl: WebglAddon | undefined;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        if (webgl) return;
+        try {
+          const addon = new WebglAddon();
+          addon.onContextLoss(() => { addon.dispose(); if (webgl === addon) webgl = undefined; });
+          term.loadAddon(addon);
+          webgl = addon;
+        } catch { /* sin WebGL (VM, drivers viejos) → renderer DOM, funciona igual */ }
+      } else {
+        webgl?.dispose();
+        webgl = undefined;
+      }
+    });
+    io.observe(host);
     fit.fit();
 
     // Protocolo de teclado de Kitty: lo negocian codex/opencode y así Shift+Enter llega distinguible.
@@ -218,6 +235,7 @@ export function TerminalTile({
 
     return () => {
       ro.disconnect();
+      io.disconnect(); // term.dispose() suelta el addon; el observer hay que desconectarlo a mano
       themeUnsub();
       onData.dispose();
       unlisten?.();

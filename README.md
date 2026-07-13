@@ -7,7 +7,8 @@
 **Orchestrate a team of AI coding agents on your desktop.** A **router** agent — the one you talk to — _leads_: it thinks, investigates, designs, writes the critical code, and **delegates execution** to **worker** agents, each in its own real terminal. They all talk over a **local bidirectional MCP tunnel** — **A2A (Agent-to-Agent) running on your machine**.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Mats2208/hyprdesk/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Mats2208/hyprdesk/actions/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-active%20development-5f819b?style=flat-square)](https://github.com/Mats2208/hyprdesk)
+[![Release](https://img.shields.io/github/v/release/Mats2208/hyprdesk?include_prereleases&style=flat-square&label=download&color=5f819b)](https://github.com/Mats2208/hyprdesk/releases/latest)
+[![Status](https://img.shields.io/badge/status-beta-e8a33d?style=flat-square)](https://github.com/Mats2208/hyprdesk/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-000000?style=flat-square)](https://github.com/Mats2208/hyprdesk)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -94,11 +95,25 @@ A desktop app where one agent **leads** a team of others — all wired through a
 
 ## Installation
 
+### Download the installer
+
+**[→ Latest release](https://github.com/Mats2208/hyprdesk/releases/latest)** — `.dmg` for macOS (universal: Intel + Apple Silicon), `.exe` for Windows. No toolchain needed.
+
+The only thing you must have is the agent CLI itself: **[`claude`](https://docs.claude.com/en/docs/claude-code)** installed and logged in (required), and optionally **`codex`** / **`opencode`**. HyprDesk drives the CLIs you already use — it does not ship or replace them.
+
+> **The builds are not signed.** Signing needs a paid Apple / Microsoft developer account, and there isn't one yet — so the OS will warn you on first launch. That's the warning, not a diagnosis.
+> - **macOS** — Gatekeeper blocks the first open. Right-click the app → **Open** → **Open**. Once only.
+> - **Windows** — SmartScreen shows "Windows protected your PC". **More info** → **Run anyway**.
+
+### Or build it from source
+
 > **Requirements** — macOS or Windows · [Node 20+](https://nodejs.org) · [pnpm](https://pnpm.io) · [Rust/Cargo](https://rustup.rs) · `git` in PATH.
 > On **Windows**, also install the **[Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** ("Desktop development with C++") — Rust's MSVC linker.
 > Plus the agent CLIs installed and logged in: **[`claude`](https://docs.claude.com/en/docs/claude-code)** (required), and optionally **`codex`** / **`opencode`**.
 
 **1. Clone and install**
+
+> The Node workspace lives in **`desktop/`**, not at the repo root — running `pnpm install` one level up fails with `ERR_PNPM_NO_PKG_MANIFEST`.
 
 ```bash
 git clone https://github.com/Mats2208/hyprdesk
