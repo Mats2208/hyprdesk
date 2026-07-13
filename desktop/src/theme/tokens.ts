@@ -32,18 +32,3 @@ export function xtermTheme(isRouter: boolean) {
     ...(isLight() ? LIGHT_ANSI : DARK_ANSI),
   };
 }
-
-// Colores base para el tema de CodeMirror.
-export function editorTokens() {
-  return {
-    bg: cssVar("--tile-bg", "#0e0e10"),
-    text: cssVar("--text", "#e4e4e7"),
-    muted: cssVar("--muted", "#8a8a92"),
-    faint: cssVar("--faint", "#5c5c63"),
-    accent: cssVar("--router", "#34d399"),
-    hairline: cssVar("--hairline", "#26262a"),
-    selection: isLight() ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.10)",
-    mono: monoFont(),
-    light: isLight(),
-  };
-}

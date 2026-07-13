@@ -1,11 +1,10 @@
-import type { Profile } from "./types";
+import type { Profile, TileStatus } from "./types";
 import { EngineIcon } from "./EngineIcon";
 
 // Panel lateral de agentes: roster (router + workers vivos) + perfiles del workspace.
-export type AgentStatus = "working" | "idle" | "exited";
-export type AgentRow = { id: string; title: string; role: "router" | "worker"; engine?: string; color?: string; status?: AgentStatus; branch?: string };
+type AgentRow = { id: string; title: string; role: "router" | "worker"; engine?: string; color?: string; status?: TileStatus; branch?: string };
 
-export const ENGINE_COLOR: Record<string, string> = {
+const ENGINE_COLOR: Record<string, string> = {
   claude: "#d9a06b",
   codex: "#8b9cff",
   opencode: "#34d399",

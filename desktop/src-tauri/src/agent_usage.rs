@@ -21,6 +21,7 @@ fn read_json(path: PathBuf) -> Option<Value> {
 fn curl_json(url: &str, headers: &[String]) -> Option<Value> {
     let mut cmd = crate::hidden_command("curl");
     cmd.args(["-s", "--max-time", "10"]);
+    cmd.env("PATH", crate::user_path()); // sin esto no encuentra curl al lanzarse desde el Finder
     for h in headers {
         cmd.arg("-H").arg(h);
     }

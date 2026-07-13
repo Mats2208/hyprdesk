@@ -30,7 +30,7 @@ function buildPrompt(desc: string, cat: Catalog | null, skillNames: string[]): s
   const skillsField = skillNames.length ? `, "skills": string[]` : "";
   return `Sos un configurador de agentes de IA para HyprDesk (un orquestador de agentes de código).
 Dada la descripción de abajo, devolvé SOLO un objeto JSON válido (sin markdown, sin \`\`\`, sin texto extra) con EXACTAMENTE este shape:
-{"name": string corto (2-4 palabras), "engine": "claude"|"codex"|"opencode", "model": string|null, "effort": "low"|"medium"|"high"|null, "persona": string (instrucciones detalladas en 2da persona: rol, arquitectura, endpoints/reglas específicas, criterios de calidad), "color": string hex "#rrggbb", "rules": {"canMerge": "always"|"ask"|"never"}${skillsField}}
+{"name": string corto (2-4 palabras), "engine": "claude"|"codex"|"opencode", "model": string|null, "effort": "low"|"medium"|"high"|null, "persona": string (instrucciones detalladas en 2da persona: rol, arquitectura, endpoints/reglas específicas, criterios de calidad), "color": string hex "#rrggbb"${skillsField}}
 
 ${catalogText(cat)}
 
@@ -39,7 +39,7 @@ Reglas:
   un modelo que no está en la lista, elegí el más parecido de la lista (NO inventes strings).
 - "effort" solo aplica a codex; para claude y opencode usá null.
 - La "persona" debe ser detallada y accionable, no genérica.
-- Si el usuario menciona merge/push a git, reflejalo en rules.canMerge Y explícitamente en la persona.${skillsLine}
+- Si el usuario menciona merge/push a git, decilo EXPLÍCITAMENTE en la persona (es lo que el agente lee).${skillsLine}
 
 Descripción del usuario:
 """${desc}"""
@@ -64,7 +64,7 @@ const CloseIcon = () => (
 
 // Perfil en blanco para el modo manual (sin IA).
 function blankProfile(): Profile {
-  return { id: crypto.randomUUID(), name: "", engine: "claude", model: undefined, effort: undefined, persona: "", color: COLORS[0], rules: { canMerge: "ask" }, skills: [] };
+  return { id: crypto.randomUUID(), name: "", engine: "claude", model: undefined, effort: undefined, persona: "", color: COLORS[0], skills: [] };
 }
 
 export function CreateAgentModal({
@@ -110,7 +110,6 @@ export function CreateAgentModal({
         effort: o.effort || undefined,
         persona: o.persona || "",
         color: /^#[0-9a-f]{6}$/i.test(o.color || "") ? o.color : COLORS[0],
-        rules: { canMerge: o.rules?.canMerge || "ask" },
         skills: picked,
       });
     } catch (e) {
@@ -194,11 +193,6 @@ export function CreateAgentModal({
                 </div>
               )}
               <div className="ca__row">
-                <label className="modal__field"><span>Puede mergear a git</span>
-                  <select value={p.rules?.canMerge || "ask"} onChange={(e) => upd({ rules: { canMerge: e.target.value as any } })}>
-                    <option value="always">siempre</option><option value="ask">con permiso</option><option value="never">nunca</option>
-                  </select>
-                </label>
                 <div className="modal__field"><span>Color</span>
                   <div className="ca__colors">
                     {COLORS.map((c) => (

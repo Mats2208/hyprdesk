@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { useState } from "react";
 import { BrandMark } from "./BrandMark";
 import { WindowControls } from "./layout/WindowControls";
 import { isMac } from "./platform";
+import { type WorkspaceMeta, useWorkspaces } from "./store/workspaces";
 import ambientSvg from "./assets/brand/ambient.svg?raw";
-
-export type WorkspaceMeta = { id: string; name: string; folder: string; lastOpened: number; managed?: boolean };
 
 function ago(ms: number): string {
   if (!ms) return "";
@@ -18,7 +15,7 @@ function ago(ms: number): string {
 }
 
 export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => void }) {
-  const [list, setList] = useState<WorkspaceMeta[]>([]);
+  const { list, create, link, rename, remove } = useWorkspaces();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,49 +23,28 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
   const [editName, setEditName] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
-    invoke<WorkspaceMeta[]>("list_workspaces")
-      .then((l) => setList([...l].sort((a, b) => b.lastOpened - a.lastOpened)))
-      .catch(() => setList([]));
-  }, []);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  const create = async () => {
-    const n = name.trim();
-    if (!n || creating) return;
+  const doCreate = async () => {
+    if (!name.trim() || creating) return;
     setCreating(true);
-    try {
-      const meta = await invoke<WorkspaceMeta>("create_workspace", { name: n });
-      onOpen(meta);
-    } catch (e) {
-      setError(String(e));
-      setCreating(false);
-    }
+    try { onOpen(await create(name)); } catch (e) { setError(String(e)); setCreating(false); }
   };
 
   // Abre una carpeta EXTERNA existente (proyecto real) como workspace enlazado.
   const openFolder = async () => {
     try {
-      const picked = await open({ directory: true, multiple: false, title: "Abrir carpeta como workspace" });
-      if (!picked || typeof picked !== "string") return;
-      const meta = await invoke<WorkspaceMeta>("link_workspace", { folder: picked });
-      onOpen(meta);
+      const meta = await link();
+      if (meta) onOpen(meta);
     } catch (e) { setError(String(e)); }
   };
 
   const saveRename = async (id: string) => {
-    const n = editName.trim();
     setEditingId(null);
-    if (!n) return;
-    try { await invoke("rename_workspace", { id, name: n }); } catch (e) { setError(String(e)); }
-    reload();
+    await rename(id, editName);
   };
 
-  const remove = async (id: string) => {
+  const doRemove = async (id: string) => {
     setConfirmId(null);
-    try { await invoke("delete_workspace", { id }); } catch (e) { setError(String(e)); }
-    reload();
+    await remove(id);
   };
 
   return (
@@ -95,11 +71,11 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+                onKeyDown={(e) => { if (e.key === "Enter") doCreate(); }}
                 placeholder="Nombre del nuevo workspace…"
                 disabled={creating}
               />
-              <button className="welcome__create" onClick={create} disabled={creating || !name.trim()}>
+              <button className="welcome__create" onClick={doCreate} disabled={creating || !name.trim()}>
                 {creating ? "…" : "Crear"}
               </button>
             </div>
@@ -143,7 +119,7 @@ export function WorkspaceManager({ onOpen }: { onOpen: (m: WorkspaceMeta) => voi
                     <span className="welcome__item-actions welcome__item-actions--show">
                       <span className="welcome__confirm-txt">¿Borrar?</span>
                       <button className="welcome__act welcome__act--del" title="Confirmar"
-                        onClick={(e) => { e.stopPropagation(); remove(w.id); }}>
+                        onClick={(e) => { e.stopPropagation(); doRemove(w.id); }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </button>
                       <button className="welcome__act" title="Cancelar"

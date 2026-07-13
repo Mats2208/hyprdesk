@@ -57,6 +57,100 @@ pub struct ControlState {
     pub questions: Arc<Mutex<HashMap<String, std::sync::mpsc::SyncSender<String>>>>, // ask_user pendientes
 }
 
+// Un worker recién creado (worktree + comando armado + ya inscripto en el roster).
+pub struct SpawnedWorker {
+    pub id: String,
+    pub engine: String,
+    pub title: String,
+    pub cwd: String,
+    pub branch: Option<String>,
+    pub spec: crate::engines::LaunchSpec,
+}
+
+impl ControlState {
+    // Si hay UN solo router vivo, es ese. Con varios es ambiguo → None (el llamador decide).
+    pub fn sole_router(&self) -> Option<String> {
+        let map = self.routers.lock().unwrap();
+        if map.len() == 1 { map.keys().next().cloned() } else { None }
+    }
+
+    // Crea un worker: worktree aislado si el ws es git, arma su comando y lo inscribe en el roster.
+    // ÚNICA implementación — la usan tanto el comando Tauri (perfil lanzado por el usuario) como el
+    // handler HTTP (worker spawneado por el router). Antes eran dos copias que podían divergir.
+    #[allow(clippy::too_many_arguments)]
+    pub fn spawn_worker(
+        &self,
+        engine: &str,
+        ws_root: &str,
+        router: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        persona: Option<&str>,
+        task: Option<&str>,
+        name: Option<&str>,
+        skills: &[String],
+    ) -> Result<SpawnedWorker, String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        // ws git → worktree/rama propia (aislamiento); si no → comparte la carpeta del workspace.
+        let (cwd, branch) = match crate::worktree::create(ws_root, &id) {
+            Some(wt) => (wt.path, Some(wt.branch)),
+            None => (ws_root.to_string(), None),
+        };
+        let opts = crate::engines::AgentOpts { model, effort, persona, skills };
+        let spec = crate::engines::build_agent(engine, self.port, &id, "worker", &cwd, Some(router), None, task, &opts)?;
+        let title = match name.map(str::trim).filter(|n| !n.is_empty()) {
+            Some(n) => format!("{n} · {engine}"),
+            None => format!("worker · {engine}"),
+        };
+        self.workers.lock().unwrap().insert(id.clone(), WorkerInfo {
+            id: id.clone(), engine: engine.to_string(), name: title.clone(), router_id: router.to_string(),
+            cwd: cwd.clone(), ws_root: ws_root.to_string(), branch: branch.clone(), dead: false,
+        });
+        Ok(SpawnedWorker { id, engine: engine.to_string(), title, cwd, branch, spec })
+    }
+
+    // Mergea la rama del worker a la principal. ÚNICA implementación (comando Tauri = botón del
+    // usuario; handler HTTP = merge_worker del router). Un worker muerto ya integrado se limpia acá.
+    pub fn merge(&self, id: &str) -> serde_json::Value {
+        let info = self.workers.lock().unwrap().get(id).cloned();
+        let Some(w) = info else {
+            return json!({ "ok": false, "error": "no encuentro ese worker" });
+        };
+        let Some(branch) = w.branch.clone() else {
+            return json!({ "ok": false, "error": "el worker no tiene worktree (workspace no-git o restaurado)" });
+        };
+        match crate::worktree::merge(&w.ws_root, &w.cwd, &branch) {
+            Ok(_) => {
+                if w.dead {
+                    crate::worktree::remove(&w.ws_root, &w.cwd);
+                    self.workers.lock().unwrap().remove(id);
+                }
+                json!({ "ok": true, "branch": branch })
+            }
+            Err(conflicts) => json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
+        }
+    }
+}
+
+// Inyecta un mensaje en el PTY de un agente, como si lo tipeara el usuario. false si el PTY no
+// existe (agente muerto) → el llamador NO finge éxito.
+//
+// El Enter va como keystroke SEPARADO tras un delay: pegado al texto, claude lo trata como un
+// "paste" y no lo envía. Separado = submit real.
+pub fn inject(app: &AppHandle, target: &str, text: &str) -> bool {
+    let clean = text.replace('\n', " ").replace('\r', " ");
+    let wrote = app.state::<crate::PtyManager>().write(target, &clean);
+    if wrote {
+        let app = app.clone();
+        let target = target.to_string();
+        thread::spawn(move || {
+            thread::sleep(std::time::Duration::from_millis(350));
+            app.state::<crate::PtyManager>().write(&target, "\r");
+        });
+    }
+    wrote
+}
+
 #[derive(Serialize, Clone)]
 struct SpawnAgentEvent {
     #[serde(rename = "agentId")]
@@ -119,7 +213,7 @@ pub fn start(app: AppHandle) -> ControlState {
         for req in server.incoming_requests() {
             let app = app.clone();
             let state = state_srv.clone();
-            thread::spawn(move || handle_request(req, app, port, state));
+            thread::spawn(move || handle_request(req, app, state));
         }
     });
 
@@ -137,7 +231,7 @@ fn json_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
     Response::from_string(body).with_header(header)
 }
 
-fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state: ControlState) {
+fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlState) {
     let routers = &state.routers;
     let workers = &state.workers;
     let profiles = &state.profiles;
@@ -170,24 +264,7 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 .ok()
                 .and_then(|v| v.get("worker_id").and_then(|r| r.as_str()).map(String::from))
                 .unwrap_or_default();
-            let info = workers.lock().unwrap().get(&wid).cloned();
-            let result = match info {
-                Some(w) if w.branch.is_some() => {
-                    let branch = w.branch.clone().unwrap();
-                    match crate::worktree::merge(&w.ws_root, &w.cwd, &branch) {
-                        Ok(_) => {
-                            // worker muerto ya integrado → limpiar su worktree y sacarlo del roster.
-                            if w.dead {
-                                crate::worktree::remove(&w.ws_root, &w.cwd);
-                                workers.lock().unwrap().remove(&wid);
-                            }
-                            json!({ "ok": true, "branch": branch })
-                        }
-                        Err(conflicts) => json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
-                    }
-                }
-                _ => json!({ "ok": false, "error": "el worker no tiene worktree" }),
-            };
+            let result = state.merge(&wid);
             let _ = app.emit("merge-result", result.clone());
             let _ = req.respond(json_response(result.to_string()));
         }
@@ -247,13 +324,14 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 Ok(b) => b,
                 Err(_) => { let _ = req.respond(Response::from_string("bad json").with_status_code(400)); return; }
             };
-            let worker_id = uuid::Uuid::new_v4().to_string();
             // El router que spawnea manda su id y el cwd de SU workspace (R3). Fallback si no
             // vino el id: si hay UN solo router vivo, es ese; si no, "router".
-            let router = parsed.router.clone().filter(|r| !r.is_empty()).unwrap_or_else(|| {
-                let map = routers.lock().unwrap();
-                if map.len() == 1 { map.keys().next().unwrap().clone() } else { "router".into() }
-            });
+            let router = parsed
+                .router
+                .clone()
+                .filter(|r| !r.is_empty())
+                .or_else(|| state.sole_router())
+                .unwrap_or_else(|| "router".into());
             // Si el router pidió un PERFIL (por id o nombre), lo resolvemos → motor/modelo/effort/persona/color.
             let profile = parsed.profile.as_ref().and_then(|pid| {
                 profiles.lock().unwrap().get(&router).and_then(|list| {
@@ -275,61 +353,43 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
                 .filter(|c| !c.is_empty())
                 .or_else(|| routers.lock().unwrap().get(&router).cloned())
                 .unwrap_or_else(|| crate::home_dir().to_string_lossy().into_owned());
-            // Si el ws es git → worker en su propio worktree/rama (aislamiento). Si no → comparte carpeta.
-            let (cwd, branch) = match crate::worktree::create(&ws_root, &worker_id) {
-                Some(wt) => (wt.path, Some(wt.branch)),
-                None => (ws_root.clone(), None),
-            };
-            // Opts del perfil (modelo/effort/persona) — owned para que vivan durante el build.
-            let (p_model, p_effort, p_persona) = match &profile {
-                Some(p) => (p.model.clone(), p.effort.clone(), Some(p.persona.clone())),
-                None => (None, None, None),
-            };
             // Skills de dominio para este worker: las fijas del perfil (si usó uno) + las que el
             // router pidió en el spawn. Ponytail y las default-on se agregan solas en engines.
             let mut skills = profile.as_ref().map(|p| p.skills.clone()).unwrap_or_default();
             skills.extend(parsed.skills.clone().unwrap_or_default());
-            let opts = crate::engines::AgentOpts {
-                model: p_model.as_deref(),
-                effort: p_effort.as_deref(),
-                persona: p_persona.as_deref(),
-                skills: &skills,
-            };
+            let name = profile.as_ref().map(|p| p.name.clone()).or_else(|| parsed.name.clone());
             let color = profile.as_ref().and_then(|p| p.color.clone());
-            let display_name = profile
-                .as_ref()
-                .map(|p| p.name.clone())
-                .or_else(|| parsed.name.clone())
-                .filter(|n| !n.trim().is_empty());
-            let title = match &display_name {
-                Some(n) => format!("{n} · {engine}"),
-                None => format!("worker · {engine}"),
-            };
-            match crate::engines::build_agent(&engine, port, &worker_id, "worker", &cwd, Some(&router), None, Some(&parsed.prompt), &opts) {
-                Ok(spec) => {
-                    workers.lock().unwrap().insert(worker_id.clone(), WorkerInfo {
-                        id: worker_id.clone(), engine: engine.clone(), name: title.clone(),
-                        router_id: router.clone(), cwd: cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
-                        dead: false,
-                    });
+            let spawned = state.spawn_worker(
+                &engine,
+                &ws_root,
+                &router,
+                profile.as_ref().and_then(|p| p.model.as_deref()),
+                profile.as_ref().and_then(|p| p.effort.as_deref()),
+                profile.as_ref().map(|p| p.persona.as_str()),
+                Some(&parsed.prompt),
+                name.as_deref(),
+                &skills,
+            );
+            match spawned {
+                Ok(w) => {
                     let _ = app.emit(
                         "spawn-agent",
                         SpawnAgentEvent {
-                            agent_id: worker_id.clone(),
-                            title,
-                            engine,
+                            agent_id: w.id.clone(),
+                            title: w.title,
+                            engine: w.engine,
                             router,
-                            cwd,
-                            argv: spec.argv,
-                            env: spec.env,
-                            inject_task: spec.inject_task,
-                            capture: spec.capture,
-                            session_id: spec.session_id,
-                            branch,
+                            cwd: w.cwd,
+                            argv: w.spec.argv,
+                            env: w.spec.env,
+                            inject_task: w.spec.inject_task,
+                            capture: w.spec.capture,
+                            session_id: w.spec.session_id,
+                            branch: w.branch,
                             color,
                         },
                     );
-                    let _ = req.respond(json_response(json!({ "workerId": worker_id }).to_string()));
+                    let _ = req.respond(json_response(json!({ "workerId": w.id }).to_string()));
                 }
                 Err(e) => {
                     let _ = app.emit("tunnel-error", format!("El router no pudo crear un worker: {e}"));
@@ -401,38 +461,22 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, port: u16, state:
             // conocido, caemos a: el único router vivo, si hay uno solo. Si no, el id tal cual.
             let target = if msg.to == "router" {
                 workers.lock().unwrap().get(&msg.from).map(|w| w.router_id.clone())
-                    .or_else(|| {
-                        let map = routers.lock().unwrap();
-                        if map.len() == 1 { Some(map.keys().next().unwrap().clone()) } else { None }
-                    })
+                    .or_else(|| state.sole_router())
             } else {
                 Some(msg.to.clone())
             };
-            // Entrega = escribir en el PTY destino. Si el PTY no existe (agente muerto), `write`
+            // Entrega = escribir en el PTY destino. Si el PTY no existe (agente muerto), `inject`
             // devuelve false → NO fingimos éxito: le devolvemos el fallo al emisor (R1: acks reales).
-            let delivered = if let Some(target) = &target {
-                let clean = msg.text.replace('\n', " ").replace('\r', " ");
-                let payload = format!("Mensaje de {}: {}", msg.from, clean);
-                let wrote = {
-                    let mgr = app.state::<crate::PtyManager>();
-                    mgr.write(target, &payload)
-                };
-                if wrote {
-                    // avisar al frontend para que el tile destino "parpadee" (notificación)
-                    let _ = app.emit("tile-activity", target.clone());
-                    // El Enter va como keystroke SEPARADO tras un delay: si va pegado, claude
-                    // trata todo como un "paste" y no lo envía. Separado = submit real.
-                    let app2 = app.clone();
-                    let target2 = target.clone();
-                    thread::spawn(move || {
-                        thread::sleep(std::time::Duration::from_millis(350));
-                        let mgr = app2.state::<crate::PtyManager>();
-                        mgr.write(&target2, "\r");
-                    });
+            let delivered = match &target {
+                Some(target) => {
+                    let wrote = inject(&app, target, &format!("Mensaje de {}: {}", msg.from, msg.text));
+                    if wrote {
+                        // avisar al frontend para que el tile destino "parpadee" (notificación)
+                        let _ = app.emit("tile-activity", target.clone());
+                    }
+                    wrote
                 }
-                wrote
-            } else {
-                false
+                None => false,
             };
             if delivered {
                 let _ = req.respond(json_response(json!({ "ok": true }).to_string()));

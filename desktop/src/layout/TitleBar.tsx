@@ -15,12 +15,12 @@ import { hk, isMac } from "../platform";
 const gib = (b: number) => (b / 1024 ** 3).toFixed(1);
 
 // Chip de cuota "5h X% · sem Y%" (% USADO). Se oculta si no hay dato (no logueado / API caído).
-// Con `engine` muestra el logo del motor; si no, el label de texto (ej. GLM). Clic → refetch.
-function UsageChip({ label, engine, title, u, onRefresh }: { label: string; engine?: string; title: string; u: AgentUsage | null; onRefresh?: () => void }) {
+// Clic → refetch.
+function UsageChip({ engine, title, u, onRefresh }: { engine: string; title: string; u: AgentUsage | null; onRefresh?: () => void }) {
   if (!u || (u.session == null && u.weekly == null)) return null;
   return (
     <span className="stat stat--usage" title={`${title} · clic para actualizar`} onClick={onRefresh}>
-      {engine ? <EngineIcon engine={engine} size={15} /> : <span className="stat__k">{label}</span>}
+      <EngineIcon engine={engine} size={15} />
       <span className="stat__v">
         {u.session != null ? `5h ${Math.round(u.session)}%` : ""}
         {u.session != null && u.weekly != null ? " · " : ""}
@@ -60,9 +60,9 @@ export function TitleBar({ stats, glm, codex, claude, onRefreshUsage }: {
     <>
       <span className="stat"><span className="stat__k">CPU</span><span className="stat__v">{stats ? `${Math.round(stats.cpu)}%` : "—"}</span></span>
       <span className="stat"><span className="stat__k">RAM</span><span className="stat__v">{stats ? `${gib(stats.mem_used)}/${gib(stats.mem_total)}G` : "—"}</span></span>
-      <UsageChip engine="claude" label="Claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} onRefresh={onRefreshUsage} />
-      <UsageChip engine="codex" label="Codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} onRefresh={onRefreshUsage} />
-      <UsageChip engine="glm" label="GLM" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} onRefresh={onRefreshUsage} />
+      <UsageChip engine="claude" title="Consumo de Claude — ciclo de 5 horas / semanal" u={claude} onRefresh={onRefreshUsage} />
+      <UsageChip engine="codex" title="Consumo de Codex (ChatGPT) — ciclo de 5 horas / semanal" u={codex} onRefresh={onRefreshUsage} />
+      <UsageChip engine="glm" title="Cuota de GLM (z.ai) — 5 horas / semanal" u={glm} onRefresh={onRefreshUsage} />
     </>
   );
 

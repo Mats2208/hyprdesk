@@ -30,5 +30,4 @@ tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 arboard = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
-notify = "6"
 

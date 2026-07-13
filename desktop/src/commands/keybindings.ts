@@ -1,5 +1,7 @@
 // Atajos remapeables: mapa commandId → combo ("mod+t"). Defaults + overrides del usuario (localStorage).
 // useKeyboard resuelve el combo entrante a un comando; la Settings deja editarlos.
+import { isMac } from "../platform";
+
 export type Combo = string;
 
 export const DEFAULT_BINDINGS: Record<string, Combo> = {
@@ -28,7 +30,6 @@ export function resetBinding(id: string) {
 
 // combo → etiqueta legible, según el SO: en mac glifos compactos ("mod+t" → "⌘T"), en Windows/Linux
 // texto con "+" ("mod+t" → "Ctrl+T"). El binding real es el mismo (mod = ⌘ en mac / Ctrl en el resto).
-const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
 const SYM: Record<string, string> = isMac
   ? { mod: "⌘", shift: "⇧", alt: "⌥", arrowright: "→", arrowleft: "←", arrowup: "↑", arrowdown: "↓" }
   : { mod: "Ctrl+", shift: "Shift+", alt: "Alt+", arrowright: "→", arrowleft: "←", arrowup: "↑", arrowdown: "↓" };

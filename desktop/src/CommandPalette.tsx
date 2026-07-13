@@ -9,7 +9,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const binds = getBindings();
   const hint = (c: Command) => (binds[c.id] ? comboLabel(binds[c.id]) : c.keybinding);
-  const all = useMemo(() => listCommands().filter((c) => !c.when || c.when()), []);
+  const all = useMemo(() => listCommands(), []);
   const results = useMemo<Command[]>(
     () => (q ? fuzzysort.go(q, all, { key: "title" }).map((r) => r.obj) : all),
     [all, q]

@@ -2,11 +2,11 @@
 // tocar un chip vía refreshUsage).
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentUsage, GlmUsage, SysStats } from "../types";
+import type { AgentUsage, SysStats } from "../types";
 
 export function useSystemStats() {
   const [stats, setStats] = useState<SysStats | null>(null);
-  const [glm, setGlm] = useState<GlmUsage | null>(null);
+  const [glm, setGlm] = useState<AgentUsage | null>(null);
   const [codex, setCodex] = useState<AgentUsage | null>(null);
   const [claude, setClaude] = useState<AgentUsage | null>(null);
 
@@ -22,7 +22,7 @@ export function useSystemStats() {
 
   // Refetch de las cuotas (usado por el poll de 3min y por el clic en un chip).
   const refreshUsage = useCallback(() => {
-    invoke<GlmUsage | null>("glm_usage").then(setGlm).catch(() => {});
+    invoke<AgentUsage | null>("glm_usage").then(setGlm).catch(() => {});
     invoke<AgentUsage | null>("codex_usage").then(setCodex).catch(() => {});
     invoke<AgentUsage | null>("claude_usage").then(setClaude).catch(() => {});
   }, []);

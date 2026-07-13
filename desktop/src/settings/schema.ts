@@ -1,7 +1,7 @@
 // Schema de settings: describe cada opción (tipo, categoría, ayuda) y de DÓNDE sale/va (scope).
 // La SettingsView se auto-genera desde acá — agregar una opción es agregar una entrada.
 export type FieldType = "segmented" | "select" | "text" | "password" | "number";
-export type Scope = "theme" | "backend" | "local";
+export type Scope = "theme" | "backend";
 export type Option = { value: string; label: string };
 
 export type Field = {

@@ -24,8 +24,7 @@ type UiState = {
   welcomeOpen: boolean; // onboarding / first-run
 
   setSidebarOpen: (v: boolean | ((o: boolean) => boolean)) => void;
-  openPanel: (p: Panel) => void; // setPanel + abrir sidebar
-  setPanel: (p: Panel) => void;
+  openPanel: (p: Panel) => void; // cambia de panel y abre el sidebar
   togglePalette: () => void;
   setPaletteOpen: (v: boolean) => void;
   setSettingsOpen: (v: boolean) => void;
@@ -63,7 +62,6 @@ export const useUiStore = create<UiState>((set) => ({
     return { sidebarOpen };
   }),
   openPanel: (p) => { localStorage.setItem("hd-panel", p); localStorage.setItem("hd-sidebar", "1"); set({ panel: p, sidebarOpen: true }); },
-  setPanel: (p) => { localStorage.setItem("hd-panel", p); set({ panel: p }); },
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
   setPaletteOpen: (v) => set({ paletteOpen: v }),
   setSettingsOpen: (v) => set({ settingsOpen: v }),

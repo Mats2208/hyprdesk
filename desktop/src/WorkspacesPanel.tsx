@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import type { WorkspaceMeta } from "./WorkspaceManager";
+import { useState } from "react";
+import { type WorkspaceMeta, useWorkspaces } from "./store/workspaces";
 
 // Panel de workspaces en la sidebar: lista switcheable + crear/renombrar/eliminar inline.
 export function WorkspacesPanel({
@@ -10,50 +8,33 @@ export function WorkspacesPanel({
   activeId?: string;
   onSwitch: (m: WorkspaceMeta) => void;
 }) {
-  const [list, setList] = useState<WorkspaceMeta[]>([]);
+  const { list, create, link, rename, remove } = useWorkspaces();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
-    invoke<WorkspaceMeta[]>("list_workspaces")
-      .then((l) => setList([...l].sort((a, b) => b.lastOpened - a.lastOpened)))
-      .catch(() => setList([]));
-  }, []);
-  useEffect(() => { reload(); }, [reload]);
-
-  const create = async () => {
-    const n = newName.trim();
-    if (!n) return;
+  const doCreate = async () => {
+    if (!newName.trim()) return;
+    const n = newName;
     setNewName("");
-    try {
-      const m = await invoke<WorkspaceMeta>("create_workspace", { name: n });
-      reload();
-      onSwitch(m);
-    } catch { /* ignore */ }
+    try { onSwitch(await create(n)); } catch { /* ignore */ }
   };
 
   const saveRename = async (id: string) => {
-    const n = editName.trim();
     setEditingId(null);
-    if (n) { await invoke("rename_workspace", { id, name: n }).catch(() => {}); }
-    reload();
+    await rename(id, editName);
   };
 
   const del = async (id: string) => {
     setConfirmId(null);
-    await invoke("delete_workspace", { id }).catch(() => {});
-    reload();
+    await remove(id);
   };
 
   const openFolder = async () => {
     try {
-      const picked = await open({ directory: true, multiple: false, title: "Abrir carpeta como workspace" });
-      if (!picked || typeof picked !== "string") return;
-      const m = await invoke<WorkspaceMeta>("link_workspace", { folder: picked });
-      reload();
-      onSwitch(m);
+      const m = await link();
+      if (m) onSwitch(m);
     } catch { /* ignore */ }
   };
 
@@ -103,10 +84,10 @@ export function WorkspacesPanel({
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+          onKeyDown={(e) => { if (e.key === "Enter") doCreate(); }}
           placeholder="Nuevo workspace…"
         />
-        <button onClick={create} disabled={!newName.trim()} title="Crear workspace">
+        <button onClick={doCreate} disabled={!newName.trim()} title="Crear workspace">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
         </button>
         <button onClick={openFolder} title="Abrir carpeta existente…">

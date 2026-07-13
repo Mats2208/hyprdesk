@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { getCommand } from "../commands/registry";
 import { comboLabel, DEFAULT_BINDINGS, eventToCombo, getBindings, resetBinding, setBinding } from "../commands/keybindings";
+import { isMac } from "../platform";
 
 export function KeybindingsSection() {
   const [, force] = useState(0);
@@ -19,7 +20,7 @@ export function KeybindingsSection() {
   return (
     <div className="settings__field">
       <div className="settings__flabel">Atajos de teclado</div>
-      <div className="settings__fdesc">Clic en un atajo y presioná la nueva combinación (con {/mac/i.test(navigator.userAgent) ? "⌘" : "Ctrl"}). Esc para cancelar.</div>
+      <div className="settings__fdesc">Clic en un atajo y presioná la nueva combinación (con {isMac ? "⌘" : "Ctrl"}). Esc para cancelar.</div>
       <div className="keybinds">
         {Object.keys(bindings).map((id) => {
           const cmd = getCommand(id);

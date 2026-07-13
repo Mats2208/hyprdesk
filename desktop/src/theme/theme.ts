@@ -6,7 +6,7 @@ export type ThemeName = "dark" | "light" | "hc";
 export const THEMES: ThemeName[] = ["dark", "light", "hc"];
 export const THEME_LABEL: Record<ThemeName, string> = { dark: "Oscuro", light: "Claro", hc: "Alto contraste" };
 
-const K = { theme: "hd-theme", ui: "hd-font-ui", mono: "hd-font-mono", term: "hd-fs-term", editor: "hd-fs-editor" };
+const K = { theme: "hd-theme", ui: "hd-font-ui", mono: "hd-font-mono", term: "hd-fs-term" };
 const num = (v: string | null, d: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
 const isTheme = (v: string | null): v is ThemeName => v === "light" || v === "hc" || v === "dark";
 
@@ -23,13 +23,11 @@ type ThemeState = {
   uiFont: string;   // "" = default del CSS
   monoFont: string; // "" = default del CSS
   termFontSize: number;
-  editorFontSize: number;
   setTheme: (t: ThemeName) => void;
   cycleTheme: () => void;
   setUiFont: (f: string) => void;
   setMonoFont: (f: string) => void;
   setTermFontSize: (n: number) => void;
-  setEditorFontSize: (n: number) => void;
 };
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -37,7 +35,6 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   uiFont: localStorage.getItem(K.ui) ?? "",
   monoFont: localStorage.getItem(K.mono) ?? "",
   termFontSize: num(localStorage.getItem(K.term), 12.5),
-  editorFontSize: num(localStorage.getItem(K.editor), 12.5),
 
   // OJO: applyToDom ANTES de set(): set() dispara los subscribers (xterm/CodeMirror) que leen los
   // CSS vars con getComputedStyle; si data-theme aún no cambió, leerían los colores viejos (bug de
@@ -47,7 +44,6 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   setUiFont: (uiFont) => { localStorage.setItem(K.ui, uiFont); applyToDom({ ...get(), uiFont }); set({ uiFont }); },
   setMonoFont: (monoFont) => { localStorage.setItem(K.mono, monoFont); applyToDom({ ...get(), monoFont }); set({ monoFont }); },
   setTermFontSize: (termFontSize) => { localStorage.setItem(K.term, String(termFontSize)); set({ termFontSize }); },
-  setEditorFontSize: (editorFontSize) => { localStorage.setItem(K.editor, String(editorFontSize)); set({ editorFontSize }); },
 }));
 
 // Aplicar antes del primer render (main.tsx) para evitar el flash de tema/fuente.

@@ -15,8 +15,8 @@ mod control;
 mod engines;
 mod fsops;
 mod memory;
+mod paths;
 mod settings;
-mod usage;
 mod workspace;
 mod worktree;
 
@@ -374,12 +374,8 @@ fn pty_spawn(
         let app3 = app.clone();
         let id3 = id.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(6));
-            let clean = task.replace('\n', " ").replace('\r', " ");
-            let mgr = app3.state::<PtyManager>();
-            mgr.write(&id3, &clean);
-            std::thread::sleep(std::time::Duration::from_millis(450));
-            mgr.write(&id3, "\r");
+            std::thread::sleep(std::time::Duration::from_secs(6)); // esperar a que el TUI esté listo
+            control::inject(&app3, &id3, &task);
         });
     }
 
@@ -460,6 +456,22 @@ struct AgentLaunch {
     branch: Option<String>, // rama del worktree, si aplica
 }
 
+impl AgentLaunch {
+    fn new(agent_id: String, engine: String, spec: engines::LaunchSpec, cwd: String, branch: Option<String>) -> Self {
+        AgentLaunch {
+            agent_id,
+            engine,
+            argv: spec.argv,
+            env: spec.env,
+            inject_task: spec.inject_task,
+            capture: spec.capture,
+            session_id: spec.session_id,
+            cwd,
+            branch,
+        }
+    }
+}
+
 // Lanza el agente-router (claude/codex/opencode) interactivo con el MCP hyprdesk, en la
 // carpeta del workspace `cwd`. Sesión nueva o `resume_session`.
 #[tauri::command]
@@ -472,6 +484,8 @@ fn router_launch(
     // id único por lanzamiento (evita colisiones de tile/PTY al cambiar de workspace).
     // El túnel sigue resolviendo el literal "router" vía este router_id del hub.
     let agent_id = format!("router-{}", uuid::Uuid::new_v4());
+    // Rutas viejas guardadas con el prefijo \\?\ rompen el --resume de claude (ver paths.rs).
+    let cwd = paths::strip_verbatim(&cwd);
     let spec = engines::build_agent(&engine, state.port, &agent_id, "router", &cwd, None, resume_session, None, &engines::AgentOpts::default())?;
     // R3: registrar el router con el cwd de SU workspace (hub por-workspace, sin singletons globales).
     // Un workspace tiene UN router activo: al relanzar (reopen/resume) evictamos el router previo de
@@ -481,17 +495,7 @@ fn router_launch(
         map.retain(|_, v| v != &cwd);
         map.insert(agent_id.clone(), cwd.clone());
     }
-    Ok(AgentLaunch {
-        agent_id,
-        engine,
-        argv: spec.argv,
-        env: spec.env,
-        inject_task: spec.inject_task,
-        capture: spec.capture,
-        session_id: spec.session_id,
-        cwd,
-        branch: None,
-    })
+    Ok(AgentLaunch::new(agent_id, engine, spec, cwd, None))
 }
 
 // Relanza un worker existente con --resume (al reabrir un workspace).
@@ -508,7 +512,8 @@ fn worker_launch(
 ) -> Result<AgentLaunch, String> {
     // R4: si el worker tenía worktree pero ya no existe en disco (fue mergeado/limpiado), no
     // podemos resumir ahí → caemos a la carpeta del ws sin rama. Si existe, resumimos en él.
-    let ws_root = ws_root.unwrap_or_else(|| cwd.clone());
+    let cwd = paths::strip_verbatim(&cwd);
+    let ws_root = paths::strip_verbatim(&ws_root.unwrap_or_else(|| cwd.clone()));
     let (cwd, branch) = match &branch {
         Some(b) if std::path::Path::new(&cwd).is_dir() => (cwd, Some(b.clone())),
         Some(_) => (ws_root.clone(), None), // worktree perdido → carpeta del ws
@@ -518,20 +523,10 @@ fn worker_launch(
     // registrar en el roster con su worktree/rama restaurados (así review/merge funcionan tras reabrir)
     state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
         id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
-        router_id: router_id.clone(), cwd: cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
+        router_id: router_id.clone(), cwd: cwd.clone(), ws_root, branch: branch.clone(),
         dead: false,
     });
-    Ok(AgentLaunch {
-        agent_id,
-        engine,
-        argv: spec.argv,
-        env: spec.env,
-        inject_task: spec.inject_task,
-        capture: spec.capture,
-        session_id: spec.session_id,
-        cwd,
-        branch,
-    })
+    Ok(AgentLaunch::new(agent_id, engine, spec, cwd, branch))
 }
 
 // Lanza un worker NUEVO desde un perfil (motor + modelo + effort + persona). Se conecta al hub
@@ -549,49 +544,18 @@ fn spawn_profile_worker(
     name: Option<String>,
     skills: Option<Vec<String>>,
 ) -> Result<AgentLaunch, String> {
-    let agent_id = uuid::Uuid::new_v4().to_string();
-    let skills = skills.unwrap_or_default();
-    let opts = engines::AgentOpts {
-        model: model.as_deref(),
-        effort: effort.as_deref(),
-        persona: persona.as_deref(),
-        skills: &skills,
-    };
-    // ws git → worktree/rama aislada; si no → comparte la carpeta.
-    let ws_root = cwd.clone();
-    let (agent_cwd, branch) = match worktree::create(&ws_root, &agent_id) {
-        Some(wt) => (wt.path, Some(wt.branch)),
-        None => (ws_root.clone(), None),
-    };
-    let spec = engines::build_agent(
-        &engine, state.port, &agent_id, "worker", &agent_cwd, Some(&router_id), None, task.as_deref(), &opts,
+    let w = state.spawn_worker(
+        &engine,
+        &paths::strip_verbatim(&cwd),
+        &router_id,
+        model.as_deref(),
+        effort.as_deref(),
+        persona.as_deref(),
+        task.as_deref(),
+        name.as_deref(),
+        &skills.unwrap_or_default(),
     )?;
-    state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
-        id: agent_id.clone(), engine: engine.clone(),
-        name: name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| agent_id.clone()),
-        router_id: router_id.clone(), cwd: agent_cwd.clone(), ws_root: ws_root.clone(), branch: branch.clone(),
-        dead: false,
-    });
-    Ok(AgentLaunch {
-        agent_id,
-        engine,
-        argv: spec.argv,
-        env: spec.env,
-        inject_task: spec.inject_task,
-        capture: spec.capture,
-        session_id: spec.session_id,
-        cwd: agent_cwd,
-        branch,
-    })
-}
-
-// ---- roster de workers (para list_workers: el router ve a quién puede reutilizar) ----
-#[tauri::command]
-fn register_worker(state: State<'_, ControlState>, id: String, engine: String, name: String, router_id: String, cwd: String) {
-    state.workers.lock().unwrap().insert(
-        id.clone(),
-        control::WorkerInfo { id, engine, name, router_id, cwd: cwd.clone(), ws_root: cwd, branch: None, dead: false },
-    );
+    Ok(AgentLaunch::new(w.id, w.engine, w.spec, w.cwd, w.branch))
 }
 
 // El front registra los perfiles del workspace bajo su router_id → el router los ve con list_profiles.
@@ -629,53 +593,22 @@ fn unregister_worker(app: AppHandle, state: State<'_, ControlState>, id: String)
     }
     // Notificar al router que su delegado murió (inyección en su PTY, como un mensaje del túnel).
     // El router_id del worker es workspace-correcto (R3); fallback al único router vivo si viniera vacío.
-    let target = if router.is_empty() {
-        let map = state.routers.lock().unwrap();
-        if map.len() == 1 { Some(map.keys().next().unwrap().clone()) } else { None }
-    } else {
-        Some(router)
-    };
+    let target = Some(router).filter(|r| !r.is_empty()).or_else(|| state.sole_router());
     if let Some(target) = target {
-        let payload = format!(
+        control::inject(&app, &target, &format!(
             "Mensaje de sistema: ⚠️ El worker \"{name}\" ({id}) terminó su proceso. Su trabajo quedó \
              PRESERVADO — revisalo con review_worker y mergealo si corresponde, o re-delegá la tarea a \
              un worker nuevo. No le mandes mensajes: ya no está vivo."
-        );
-        let mgr = app.state::<PtyManager>();
-        if mgr.write(&target, &payload) {
-            let app2 = app.clone();
-            let target2 = target.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(350));
-                let mgr = app2.state::<PtyManager>();
-                mgr.write(&target2, "\r");
-            });
-        }
+        ));
     }
 }
 
-// Mergea la rama del worker (su worktree) a la rama principal del workspace. Lo llama el router
-// (vía MCP) o el usuario (botón). Devuelve {ok} o {ok:false, conflicts:[...]}.
-// (no emitimos "merge-result" acá: el front recibe el resultado por el return; el evento "merge-result"
-//  es solo para los merges disparados por el ROUTER vía el control server.)
+// Mergea la rama del worker (su worktree) a la principal. Botón del usuario; el router lo hace por
+// el túnel (/merge_worker). Misma implementación para los dos (ControlState::merge).
+// (no emitimos "merge-result" acá: el front recibe el resultado por el return.)
 #[tauri::command]
 fn merge_worker(state: State<'_, ControlState>, id: String) -> serde_json::Value {
-    let info = state.workers.lock().unwrap().get(&id).cloned();
-    let (ws_root, wt, branch, dead) = match info {
-        Some(w) if w.branch.is_some() => (w.ws_root, w.cwd, w.branch.unwrap(), w.dead),
-        _ => return serde_json::json!({ "ok": false, "error": "el worker no tiene worktree (workspace no-git o restaurado)" }),
-    };
-    match worktree::merge(&ws_root, &wt, &branch) {
-        Ok(_) => {
-            // Worker muerto ya integrado → recién ACÁ limpiamos su worktree y lo sacamos del roster.
-            if dead {
-                worktree::remove(&ws_root, &wt);
-                state.workers.lock().unwrap().remove(&id);
-            }
-            serde_json::json!({ "ok": true, "branch": branch })
-        }
-        Err(conflicts) => serde_json::json!({ "ok": false, "branch": branch, "conflicts": conflicts }),
-    }
+    state.merge(&id)
 }
 
 // ---- workspaces ----
@@ -750,18 +683,6 @@ fn paste_clipboard() -> Result<(Option<String>, Option<String>), String> {
 fn copy_clipboard(text: String) -> Result<(), String> {
     let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
     cb.set_text(text).map_err(|e| e.to_string())
-}
-
-// Muestra/oculta la barra de menú de la ventana (Windows/Linux): en el home estorba, se muestra al
-// entrar a un proyecto. En macOS el menú es global (barra superior del sistema), así que no-op.
-#[tauri::command]
-fn set_menu_visible(window: tauri::Window, visible: bool) {
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = if visible { window.show_menu() } else { window.hide_menu() };
-    }
-    #[cfg(target_os = "macos")]
-    let _ = (window, visible);
 }
 
 // Barra de menú nativa de macOS. Los items custom emiten el evento "menu"<action> al frontend
@@ -891,15 +812,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pty_spawn, pty_write, pty_resize, pty_kill, system_stats,
-            router_launch, worker_launch, spawn_profile_worker, register_worker, unregister_worker, merge_worker,
+            router_launch, worker_launch, spawn_profile_worker, unregister_worker, merge_worker,
             register_profiles, answer_user,
             list_workspaces, create_workspace, link_workspace, load_workspace, save_workspace,
-            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, set_menu_visible, new_window, list_skills,
+            touch_workspace, rename_workspace, delete_workspace, paste_clipboard, copy_clipboard, new_window, list_skills,
             fsops::read_file, fsops::write_file, fsops::list_dir,
             settings::load_settings, settings::save_settings, settings::run_assistant, settings::list_models, settings::glm_usage,
             agent_usage::codex_usage, agent_usage::claude_usage,
-            usage::usage_today,
-            browser::browser_open, browser::browser_bounds, browser::browser_navigate, browser::browser_close
+            browser::browser_open, browser::browser_bounds, browser::browser_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

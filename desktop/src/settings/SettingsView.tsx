@@ -82,7 +82,6 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       else if (f.key === "uiFont") s.setUiFont(val);
       else if (f.key === "monoFont") s.setMonoFont(val);
       else if (f.key === "termFontSize") s.setTermFontSize(Number(val) || 12.5);
-      else if (f.key === "editorFontSize") s.setEditorFontSize(Number(val) || 12.5);
       return;
     }
     const next = { ...backend, [f.key]: val } as Backend;
