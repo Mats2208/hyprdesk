@@ -18,9 +18,7 @@ struct AgentSession {
     session_id: String,
 }
 
-fn home() -> PathBuf {
-    crate::home_dir()
-}
+use crate::home_dir as home;
 
 // Busca el .jsonl de sesión de codex más nuevo (creado tras `since`) cuyo cwd coincida,
 // y devuelve su payload.id (uuid).
@@ -235,6 +233,12 @@ fn session_exists(engine: &str, cwd: &str, id: &str) -> bool {
         "claude" => {
             // claude escapa el cwd reemplazando separadores por `-`. En Windows además `\` y `:`
             // (C:\a\b → C--a-b); en Unix solo `/` (original — no tocamos paths que puedan tener `:`).
+            //
+            // strip_verbatim es OBLIGATORIO: el cwd puede venir con el prefijo \\?\ (rutas viejas
+            // guardadas por versiones que canonicalizaban). Con él calculábamos --?-E--proj mientras
+            // claude escribía en E--proj → el transcript no se encontraba y el --resume se saltaba
+            // en silencio: el agente revivía SIN memoria.
+            let cwd = crate::paths::strip_verbatim(cwd);
             #[cfg(windows)]
             let escaped = cwd.replace(|c| matches!(c, '/' | '\\' | ':'), "-");
             #[cfg(not(windows))]
@@ -472,13 +476,7 @@ fn codex_trust_keys(cwd: &str) -> Vec<String> {
     }
     let mut keys = vec![norm(cwd.to_string())];
     // raíz del repo principal = parent de `--git-common-dir` (en un linked worktree apunta al repo main).
-    if let Some(out) = crate::hidden_command("git")
-        .args(["-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-    {
-        let common = String::from_utf8_lossy(&out.stdout);
+    if let Some(common) = crate::worktree::git(cwd, &["rev-parse", "--path-format=absolute", "--git-common-dir"]) {
         if let Some(root) = std::path::Path::new(common.trim()).parent() {
             let root = norm(root.to_string_lossy().into_owned());
             if !root.is_empty() && !keys.contains(&root) {

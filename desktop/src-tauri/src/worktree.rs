@@ -1,7 +1,5 @@
 // worktree.rs — aislamiento de workers en git worktrees. Cada worker (en un workspace git) trabaja
 // en su propia rama/worktree para no pisar a los demás; el router luego mergea a la rama principal.
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 pub struct Worktree {
@@ -9,8 +7,9 @@ pub struct Worktree {
     pub branch: String,
 }
 
-// Corre git en `cwd` con el PATH real del usuario. None si falla.
-fn git(cwd: &str, args: &[&str]) -> Option<String> {
+// Corre git en `cwd` con el PATH real del usuario. None si falla. Único wrapper de git de la app
+// (engines.rs tenía su propia copia SIN el PATH → no encontraba git al lanzarse desde el Finder).
+pub fn git(cwd: &str, args: &[&str]) -> Option<String> {
     let out = crate::hidden_command("git")
         .args(args)
         .current_dir(cwd)
@@ -30,9 +29,7 @@ pub fn is_git_repo(cwd: &str) -> bool {
 }
 
 fn worktrees_root(ws: &str) -> PathBuf {
-    let mut h = DefaultHasher::new();
-    ws.hash(&mut h);
-    crate::home_dir().join("HyprDesk/.worktrees").join(format!("{:016x}", h.finish()))
+    crate::home_dir().join("HyprDesk/.worktrees").join(crate::paths::hash_key(ws))
 }
 
 // Crea worktree + rama `hyprdesk/<short>` para el worker si el ws es git. None si no es git o falla.

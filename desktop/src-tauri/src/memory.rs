@@ -1,16 +1,12 @@
 // memory.rs — memoria del router entre sesiones. El router mantiene un doc conciso por-workspace
 // (decisiones, convenciones, plan, qué está hecho/pendiente) que se le RE-INYECTA al rol al reabrir
 // el workspace. Se guarda centralizado (no ensucia repos externos) bajo ~/HyprDesk/.memory/<hash>.md.
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 fn memory_path(ws: &str) -> PathBuf {
-    let mut h = DefaultHasher::new();
-    ws.hash(&mut h);
     crate::home_dir()
         .join("HyprDesk/.memory")
-        .join(format!("{:016x}.md", h.finish()))
+        .join(format!("{}.md", crate::paths::hash_key(ws)))
 }
 
 // Memoria actual del workspace (None si no hay o está vacía).
