@@ -1,10 +1,18 @@
 /* ══════════════════════════════════════════════════════════════
    scene.js — the product studio. Owned by: `scene` worker.
 
-   Not an object floating in a void: there is GROUND, a CONTACT
-   SHADOW and SOFTBOXES. That is what separates a render from
-   product photography — the long clean highlights on the cage are
-   the RectAreaLights, not the environment map.
+   THE RIG IS SUSPENDED IN SPACE. There is no ground, and there is
+   no cast shadow. A hard shadow on an invisible floor answers a
+   question nobody asked — it was lifted from a reference project
+   where the product SITS ON A TABLE, and it read as a smudge
+   because a smudge is what it was.
+
+   So the object is separated from the background the way a floating
+   object actually is: a RIM and a KICKER carve the silhouette, a
+   HEMISPHERE fill gives the forms a top-to-bottom weight, the
+   environment does real work in the reflections, and screen-space
+   AO (GTAO) darkens the places the rig occludes ITSELF — inside the
+   cage lattice, under the engines, in the engraved glyphs.
 
    S is written by main.js's poseFromScroll() and READ here. Never
    written from this file. The links and the packets are procedural
@@ -22,6 +30,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export const ENGINES = [
   { id: 'claude', name: 'Claude', mesh: 'EngineClaude', hex: '#D97757', rough: 0.34,
@@ -50,11 +63,13 @@ export const S = {
 
   dark: 0,
   stageOp: 1,
-  shadowOp: 0.3,
+  shadowOp: 0.3, // DEAD. There is no ground and no cast shadow. Nothing in this file reads
+                 // it; it stays only so the frozen POSE table keeps writing somewhere real
+                 // until the router strips it from POSE and CONTRACT.md §2.
   keyInt: 2.6,
   envInt: 0.9,
   expo: 1.0,
-  glow: 1,
+  glow: 1,       // emissive multiplier of the router core — also ramps the bloom
   idleSpin: 1,
 
   scrollVel: 0,
@@ -68,8 +83,11 @@ export const DARK_BG = new THREE.Color('#0E0F11');
 export const RING = 2.6;
 export const engineAngle = (i) => (i * Math.PI * 2) / 3;
 
-const CORE_HEX = '#9FE3FF';        // the core's own light
+const CORE_HEX = '#9FE3FF';        // the core's own light, if the .glb ships no emissive
 const MAX_PACKETS = 96;            // pool. At the wildest scroll ~55 are live.
+
+/** The rig's world size. Bigger than a widget: the object IS the argument. */
+const RIG_SIZE = 5.4;
 
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const clamp = THREE.MathUtils.clamp;
@@ -98,11 +116,7 @@ export async function initScene({ canvas, onProgress }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.shadowMap.enabled = true;
-  // VSM, not PCFSoft: PCFSoft IGNORES shadow.radius (its kernel is fixed at ~1 texel),
-  // so a soft studio shadow is simply not reachable with it — you get hard slabs no
-  // matter what you set. VSM is the one built-in type that actually blurs.
-  renderer.shadowMap.type = THREE.VSMShadowMap;
+  // No shadow map. Nothing casts, nothing receives — see the header.
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(S.fov, 1, 0.1, 100);
@@ -111,63 +125,52 @@ export async function initScene({ canvas, onProgress }) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  /* ─── The studio ────────────────────────────────────────────── */
+  /* ─── The studio: an object hanging in the air ───────────────── */
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.45);
-  scene.add(ambient);
+  /* HEMISPHERE, not ambient. A flat ambient term lights the underside of a floating
+     object exactly as hard as its top, which is precisely what makes a render look
+     like a sticker. Sky above / deep shade below gives every form a top-to-bottom
+     falloff for free — it is the cheapest "weight" there is, and it costs one light. */
+  const fill = new THREE.HemisphereLight(0xEAF2FF, 0x14171B, 0.85);
+  scene.add(fill);
 
-  /* The key is STEEP (2.2 lateral against 9.4 up ≈ 13° off vertical) and it FOLLOWS
-     the rig — both on purpose, and both are shadow decisions:
-       · this product does not rest on the ground, it hangs in the air. A light at 50°
-         throws a floating object's shadow ~1.2x its height sideways, and the shadow
-         detaches into a slab lying next to the object. Overhead, it lands underneath,
-         which is the only way a floating object reads as being ANYWHERE.
-       · the rig slides across world X (groupX -1.3 … +1.5) and the engines swing out
-         with orbit/split. A fixed frustum has to be huge to cover all that — which
-         costs resolution AND still clips at the edges. Parented to the rig, it can be
-         tight, sharp, and it can never clip. */
-  const KEY_OFF = new THREE.Vector3(2.2, 9.4, 3.4);
-  const key = new THREE.DirectionalLight(0xffffff, S.keyInt);
-  key.position.copy(KEY_OFF);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);        // VSM blurs; a huge map just costs blur time
-  key.shadow.camera.near = 4;
-  key.shadow.camera.far = 20;
-  key.shadow.camera.left = -4;
-  key.shadow.camera.right = 4;
-  key.shadow.camera.top = 4;
-  key.shadow.camera.bottom = -4;
-  key.shadow.bias = 0;                       // VSM does not want a depth bias…
-  key.shadow.normalBias = 0.02;
-  key.shadow.radius = 6;                     // …it wants THIS, and it actually honours it
-  key.shadow.blurSamples = 12;
+  /* Key: a soft 3/4 from the upper front-left. It shapes, it no longer casts, so it is
+     free to sit where it flatters instead of where a shadow would have landed. A
+     DirectionalLight only cares about its DIRECTION, so it does not need to follow the
+     rig across groupX — the whole "the frustum rides the rig" apparatus went out with
+     the shadow map. */
+  const key = new THREE.DirectionalLight(0xFFF6EC, S.keyInt);
+  key.position.set(-3.4, 5.6, 5.2);
   scene.add(key);
-  scene.add(key.target);
 
   // softboxes: the long clean highlights on the cage come from HERE, not from the env map
-  const boxL = new THREE.RectAreaLight(0xffffff, 3.4, 3.0, 5.0);
-  boxL.position.set(-3.6, 2.2, 3.4);
+  const boxL = new THREE.RectAreaLight(0xffffff, 3.0, 4.0, 6.5);
+  boxL.position.set(-4.6, 2.4, 4.2);
   boxL.lookAt(0, 0.2, 0);
   scene.add(boxL);
 
-  const boxR = new THREE.RectAreaLight(0xf2f6ff, 2.2, 1.8, 5.0);
-  boxR.position.set(3.8, 1.8, 2.2);
+  const boxR = new THREE.RectAreaLight(0xF2F6FF, 1.9, 2.4, 6.5);
+  boxR.position.set(4.8, 2.0, 2.8);
   boxR.lookAt(0, 0.2, 0);
   scene.add(boxR);
 
-  // cold rim: only takes over once the studio lights go out
-  const rim = new THREE.DirectionalLight(0x93b4ff, 0);
-  rim.position.set(-4.2, 3.2, -4.6);
+  /* RIM + KICKER — the two lights that do the job the shadow was pretending to do.
+     A floating object is read against its background by its EDGE, and which edge you
+     have to draw depends on the background:
+       · dark page  → a bright rim IS the silhouette. Both lights ramp UP with `dark`.
+       · light page → a bright rim on a near-white background separates nothing; there
+         the separation comes from the hemisphere's ground shade and the AO. Hence the
+         small baseline, not zero: enough to keep a specular edge alive, not enough to
+         glow.
+     Two of them, from opposite backs, so no engine can end up with a dead silhouette
+     wherever the orbit has carried it. */
+  const rim = new THREE.DirectionalLight(0x9DBEFF, 0);      // cold, back-left
+  rim.position.set(-5.0, 2.6, -5.4);
   scene.add(rim);
 
-  /* Ground: takes the shadow, paints nothing. The rig SITS. */
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.ShadowMaterial({ opacity: S.shadowOp, transparent: true })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  const kick = new THREE.DirectionalLight(0xFFD9B0, 0);     // warm, back-right, lower
+  kick.position.set(5.6, -0.8, -4.2);
+  scene.add(kick);
 
   const group = new THREE.Group();
   scene.add(group);
@@ -186,8 +189,6 @@ export async function initScene({ canvas, onProgress }) {
   const meshesOf = {};                 // material name → meshes carrying it
   model.traverse((o) => {
     if (!o.isMesh) return;
-    o.castShadow = true;
-    o.receiveShadow = true;
     parts[o.name] = o;
     const n = o.material?.name;
     if (!n) return;
@@ -233,10 +234,10 @@ export async function initScene({ canvas, onProgress }) {
     swap('Glyph', g);
   }
 
-  // Normalize: the rig is 3 units across, centred on the router.
+  // Normalize: the rig is RIG_SIZE units across, centred on the router.
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
-  const scale = 3 / Math.max(size.x, size.y, size.z, 0.001);
+  const scale = RIG_SIZE / Math.max(size.x, size.y, size.z, 0.001);
   model.scale.setScalar(scale);
   if (parts.Router) {
     const c = new THREE.Box3().setFromObject(parts.Router).getCenter(new THREE.Vector3());
@@ -244,10 +245,6 @@ export async function initScene({ canvas, onProgress }) {
   }
   group.add(model);
   model.updateWorldMatrix(true, true);
-
-  // the contact shadow lands just under the rig
-  const worldBox = new THREE.Box3().setFromObject(model);
-  ground.position.y = worldBox.min.y - 0.12;
 
   /* ─── Engine rigs: a pivot at each engine so it can orbit, split and breathe.
          `attach` preserves the world transform, so this works whether the .glb
@@ -288,7 +285,7 @@ export async function initScene({ canvas, onProgress }) {
      DERIVED from the real geometry — the cage is not a sphere, so which extent you
      take matters:
        · the halo is a SPHERE, so it must clear the LARGEST half-extent, or it ends up
-         buried inside a cage that is taller than it is wide (2.04 vs 1.82).
+         buried inside a cage that is taller than it is wide.
        · the links leave in the XZ PLANE, so they anchor to the XZ radius. Anchor them
          to the largest extent instead and each wire starts floating in mid-air, a
          visible gap short of the cage it is supposed to plug into. */
@@ -300,8 +297,40 @@ export async function initScene({ canvas, onProgress }) {
   const CAGE_R = sphereR(parts.RouterCage, CORE_GEO_R * 1.6);
   // 0.96: the wire tip ends just INSIDE the cage silhouette, so it reads as plugged in
   const CORE_R = planeR(parts.RouterCage, CAGE_R) * 0.96;
-  // the glow lives INSIDE the open cage, hugging the core — see haloMat below
-  const HALO_R = Math.min(CORE_GEO_R * 1.75, CAGE_R * 0.92);
+
+  /* ─── The framing probe. The director solves camZ/fov/groupX against THIS. ───
+
+     Half-extents, WORLD units, measured off the real geometry — and PHASE-SWEPT, not
+     sampled: the engines never stop orbiting (`phase += dt·0.12·orbit`, ~95 s per
+     revolution), so a snapshot proves nothing about the frame. It cost six of seven
+     acts a cropped engine last round. Walking each engine right around its own ring
+     and taking the worst |x| makes `phase` (and therefore `rotY`) drop out entirely:
+     the extreme of cos() is 1 wherever you started. */
+  const shellHalf = RIGS.map((r) => {
+    const s = extents(r.shell);
+    // max of the XZ extents: the shell turns with the ring, so the face pointing at
+    // the camera changes. Take the widest one and the bound holds at every phase.
+    return s ? Math.max(s.x, s.z) * 0.5 : 0.35 * scale;
+  });
+  const cageSize = extents(parts.RouterCage) ?? extents(parts.Router);
+  const CAGE_HALF_W = cageSize ? Math.max(cageSize.x, cageSize.z) * 0.5 : CAGE_R * scale;
+  const MODEL_OFF = Math.abs(model.position.x);   // the router↔model-origin offset, world
+
+  const extentAt = (orbit, split) => {
+    let half = MODEL_OFF + CAGE_HALF_W;           // the router alone, if the engines tuck inside
+    for (let i = 0; i < RIGS.length; i++) {
+      // the SAME formula the render loop uses. If one changes, the frame is wrong again.
+      const rad = RIGS[i].radius * (1 + (1 - orbit) * 0.55) + split * 1.5;
+      const s = (0.8 + 0.2 * orbit) * (1 + RIGS[i].focus * 0.06);
+      half = Math.max(half, MODEL_OFF + rad * scale + shellHalf[i] * s);
+    }
+    return half;
+  };
+
+  window.__extent = () => ({
+    halfExtent: +extentAt(clamp(fin(S.orbit), 0, 1), clamp(fin(S.split), 0, 1)).toFixed(3),
+    coreR: +(MODEL_OFF + CAGE_HALF_W).toFixed(3),
+  });
 
   /* ─── The A2A links. Procedural: they must react to scroll. ──── */
 
@@ -313,11 +342,9 @@ export async function initScene({ canvas, onProgress }) {
 
   const links = RIGS.map((r, i) => {
     const mat = new THREE.MeshBasicMaterial({
-      color: r.hex.clone(), transparent: true, opacity: 0, depthWrite: false, toneMapped: false,
+      color: r.hex.clone(), transparent: true, opacity: 0, depthWrite: false,
     });
     const mesh = new THREE.Mesh(linkGeo, mat);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
     mesh.frustumCulled = false;
     mesh.name = `Link${ENGINES[i].name}`;
     model.add(mesh);
@@ -326,11 +353,10 @@ export async function initScene({ canvas, onProgress }) {
 
   /* ─── The packets. One InstancedMesh, tinted per link. ───────── */
 
-  const pkMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false });
+  const pkMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false });
   const packets = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.065, 0), pkMat, MAX_PACKETS);
   packets.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   packets.frustumCulled = false;
-  packets.castShadow = false;
   model.add(packets);
   for (let i = 0; i < MAX_PACKETS; i++) packets.setColorAt(i, RIGS[0].hex);
   packets.instanceColor.needsUpdate = true;
@@ -342,54 +368,25 @@ export async function initScene({ canvas, onProgress }) {
   const SC = new THREE.Vector3();
   const ZERO = new THREE.Vector3(0, 0, 0);
 
-  /* ─── The core's glow: a soft additive ball, the bloom read without paying for a
-         post pass (see the report — no EffectComposer).
+  /* THE HALO IS GONE. It was an additive fresnel ball around the core whose entire job
+     was, in its own words, "the bloom read without paying for a post pass". We now pay
+     for the post pass. Kept alongside a real threshold bloom it does not add glow, it
+     DOUBLES it: the first render of this act came back with the cage swallowed by a
+     white sun and the whole frame washed cream. Two glows is one glow too many.
 
-         FrontSide + centre-weighted falloff, NOT a backside fresnel rim. The cage is
-         an open LATTICE, so the glow belongs inside it, spilling through the struts.
-         A rim shell would (a) be occluded by the opaque core, since its back hemisphere
-         sits behind it, leaving only a hard ring at the silhouette, and (b) read as a
-         glass bubble wrapped around the whole router. Brightest facing the camera,
-         fading out at the edges = a ball of light. */
-  /* The glow takes its colour FROM THE MODEL's core emissive (the .glb ships a warm
-     amber). Hard-coding a cyan here would wrap an amber core in a blue halo and light
-     it with a blue lamp — the muddy cream that results is nobody's design. CORE_HEX is
-     only the fallback for a core that ships no emissive at all. */
+     The colour still matters, though — it is the core's own emissive (the .glb ships a
+     warm amber), and the wires lerp toward it as they run hot. Hard-coding a cyan here
+     would wrap an amber core in a blue glow and light it with a blue lamp. */
   const GLOW = mats.RouterCore?.emissive?.clone() ?? new THREE.Color(CORE_HEX);
 
-  const haloMat = new THREE.ShaderMaterial({
-    uniforms: { uInt: { value: 0 }, uCol: { value: GLOW.clone() } },
-    vertexShader: `
-      varying vec3 vN; varying vec3 vV;
-      void main() {
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vN = normalize(normalMatrix * normal);
-        vV = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `
-      uniform float uInt; uniform vec3 uCol;
-      varying vec3 vN; varying vec3 vV;
-      void main() {
-        float f = pow(abs(dot(normalize(vN), normalize(vV))), 2.5);
-        gl_FragColor = vec4(uCol * f * uInt, f * uInt);
-      }`,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.FrontSide,
-    toneMapped: false,
-  });
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), haloMat);
-  halo.frustumCulled = false;
-  halo.castShadow = false;
-  model.add(halo);
-
   /* The core is a light source, not a painted sphere: under load it lights the cage
-     from the INSIDE. In the dark act this is what the glow actually reads as.
-     It lives in `group` (world scale), not in `model` — PointLight.distance is world. */
-  const coreLight = new THREE.PointLight(GLOW.clone(), 0, 5, 2);
-  coreLight.castShadow = false;
+     from the INSIDE, and that spill through the open lattice is what the glow actually
+     reads as. It lives in `group` (world scale), not in `model` — PointLight.distance
+     is world. Its intensity is the LOAD, and only mildly the `glow` dial: `glow` is
+     what the core EMITS and what the bloom picks up, not how hard it floods the room.
+     Wired to `glow` directly it hit intensity 18 in the tunnel and every engine came
+     back the same pale peach. */
+  const coreLight = new THREE.PointLight(GLOW.clone(), 0, 8, 2);
   group.add(coreLight);
 
   /* ─── X-ray: the shells go ghost so the packets read from outside.
@@ -409,6 +406,74 @@ export async function initScene({ canvas, onProgress }) {
       g.m.depthWrite = !want;
     }
   }
+
+  /* ═══ POST ══════════════════════════════════════════════════════
+     RenderPass → GTAO → bloom → OutputPass.
+
+     Tone mapping now happens ONCE, in OutputPass, on the HDR buffer — a render
+     target keeps the materials linear and un-tonemapped, which is exactly what the
+     bloom threshold wants to see. That is also why nothing in here sets
+     `toneMapped: false` any more: in the composer that flag does nothing on the way
+     into the buffer, and it would then make the packets and the halo the only things
+     on screen NOT graded by ACES.
+
+     The two passes never both cost:
+       · AO is worth paying for in the LIT acts and is invisible at near-black, so it
+         fades out with `dark`.
+       · bloom is worth paying for in the DARK acts and would only bruise the lit ones,
+         so it fades IN with `dark`.
+     Each is switched OFF, not merely set to zero, outside its band — a Pass with
+     `enabled = false` is skipped entirely by the composer, and both are additive/
+     multiplicative identities at zero, so the switch is invisible.
+
+     MSAA lives on the composer's own target (`samples: 4`). The canvas's `antialias`
+     only ever applied to the default framebuffer, and the default framebuffer now
+     receives one full-screen quad — without this the rig comes back jagged. */
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+
+  /* GTAO at HALF resolution. AO is a low-frequency signal — it is denoised and blurred
+     anyway — so full res buys nothing and costs 4×. */
+  const ao = new GTAOPass(scene, camera, 1, 1);
+  ao.output = GTAOPass.OUTPUT.Default;
+  ao.updateGtaoMaterial({
+    radius: 0.34,             // WORLD units, on a rig ~5.4 across: contact darkening, not a mood
+    distanceExponent: 1.0,
+    thickness: 0.7,
+    scale: 1.15,
+    samples: 16,
+    screenSpaceRadius: false,
+  });
+  ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, samples: 16 });
+
+  /* The AO's G-buffer is a full re-render of the scene with a normal material — and it
+     does NOT know that the links are wires and the packets are sparks rather than solid
+     bodies. Left in, a packet drifting past the cage punches a dark hole in it. GTAOPass
+     only hides points and lines on its own, so hide the rest of the fakes here.
+     `restoreVisibility` reads the cache `overrideVisibility` just filled, so the
+     originals come back untouched. */
+  const AO_HIDE = [packets, ...links];
+  const baseOverride = ao.overrideVisibility.bind(ao);
+  ao.overrideVisibility = () => {
+    baseOverride();
+    for (const o of AO_HIDE) o.visible = false;
+  };
+  composer.addPass(ao);
+
+  /* Threshold bloom. It is selective by CONSTRUCTION, not by a second render: the only
+     things in the frame that clear the threshold are the emissives — the core, the
+     engraved glyphs, the wires and the packets — because they are the only things
+     pushed above 1.0 in linear space (see NIGHT_* below). The shells stay under it,
+     so they carve, they don't smear into glowing blobs.
+
+     RADIUS 0.30, not the usual 0.4–0.8. The hot things here are SMALL — a core, three
+     inlays, a stream of sparks — and a wide radius does not make small things glow, it
+     makes the whole frame a haze with the object dissolved somewhere inside it. Tight
+     radius, high threshold: the light stays attached to the thing emitting it. */
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0, 0.30, 0.95);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
   /* ─── The picker ─────────────────────────────────────────────── */
 
@@ -513,14 +578,20 @@ export async function initScene({ canvas, onProgress }) {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
+    // composer.setSize hands every pass DEVICE pixels — including the AO, which we then
+    // put back to half. It is the one pass whose signal does not need them.
+    const dpr = renderer.getPixelRatio();
+    composer.setSize(innerWidth, innerHeight);
+    ao.setSize(Math.max(1, Math.round((innerWidth * dpr) / 2)),
+      Math.max(1, Math.round((innerHeight * dpr) / 2)));
   }
   resize();
   addEventListener('resize', resize);
 
   const pTop = new THREE.Vector3(), pBot = new THREE.Vector3();
   function projectRouter(gx, gy) {
-    pTop.set(gx, gy + 1.2, 0).project(camera);
-    pBot.set(gx, gy - 1.2, 0).project(camera);
+    pTop.set(gx, gy + CAGE_HALF_W, 0).project(camera);
+    pBot.set(gx, gy - CAGE_HALF_W, 0).project(camera);
     const yTop = (1 - (pTop.y * 0.5 + 0.5)) * innerHeight;
     const yBot = (1 - (pBot.y * 0.5 + 0.5)) * innerHeight;
     SCREEN.x = (pTop.x * 0.5 + 0.5) * innerWidth;
@@ -557,7 +628,8 @@ export async function initScene({ canvas, onProgress }) {
     phase += dt * 0.12 * orbit;      // the orbit drifts only once it is open
     if (!Number.isFinite(phase)) phase = 0;
 
-    /* engines: dormant far out → full orbit → pulled onto their own branches */
+    /* engines: dormant far out → full orbit → pulled onto their own branches.
+       __extent's `extentAt` mirrors the two lines below. Change one, change both. */
     for (let i = 0; i < RIGS.length; i++) {
       const r = RIGS[i];
       const ang = r.angle + phase;
@@ -572,13 +644,34 @@ export async function initScene({ canvas, onProgress }) {
       r.rig.rotation.set(split * 0.12 * (i - 1), phase + split * 0.3 * (i - 1), 0);
       r.rig.scale.setScalar(s);
 
-      // the picked engine lights up; the others go quiet (dimmer in the studio's reflections)
+      /* the picked engine lights up; the others go quiet (dimmer in the studio's
+         reflections). But the highlight FADES OUT as the lights go down — it is a flat
+         self-lit wash, and in a near-black frame it does not read as "selected", it
+         reads as a sticker pasted over the render: the one engine in the shot with no
+         shading on it. The dark acts have no picker on screen anyway; there, the engine
+         that matters is the one the packets are streaming to. */
       const sm = mats[`Shell${ENGINES[i].name}`];
       if (sm) {
-        sm.emissiveIntensity = r.focus * 0.42 * (1 + dark * 0.6);
+        sm.emissiveIntensity = r.focus * 0.34 * (1 - dark * 0.72);
         sm.envMapIntensity = 0.7 + r.focus * 0.5;
       }
     }
+
+    /* ── THE BURN ────────────────────────────────────────────────
+       Emission and bloom do nothing at #f0efec — there is no headroom above a light
+       page. So the burn is spent where the page pays for it: everything that is
+       supposed to be LIGHT is pushed past 1.0 in linear space as `dark` closes, which
+       is what makes it clear the bloom threshold and blow out instead of merely being
+       the brightest shade of beige on screen. At dark = 0 every one of these is 1×,
+       the bloom pass is switched off, and the lit acts are exactly the page that
+       shipped. */
+    const NIGHT_CORE = 1 + dark * 0.35;
+    /* The WIRE stays a coloured filament and the PACKETS are the white-hot things riding
+       it. Boosted equally they clip to the same white and the packet disappears into the
+       wire it is travelling on — which deletes the one thing the tunnel act is about. The
+       gap between these two numbers IS the shot. */
+    const NIGHT_WIRE = 1 + dark * 0.6;
+    const NIGHT_PACKET = 1 + dark * 3.2;
 
     /* links: they reach from the core out to the engine as `wire` opens */
     for (let i = 0; i < RIGS.length; i++) {
@@ -604,8 +697,8 @@ export async function initScene({ canvas, onProgress }) {
         const m = mesh.material;
         m.opacity = clamp(wire * (0.34 + 0.34 * flow + 0.22 * r.focus) * (1 + dark * 0.3), 0, 1);
         // it runs hot under traffic: the wire whitens toward the core's colour
-        linkCol.copy(r.hex).lerp(haloMat.uniforms.uCol.value, clamp(flow * 0.45 + P.load * 0.18, 0, 0.6));
-        m.color.copy(linkCol);
+        linkCol.copy(r.hex).lerp(GLOW, clamp(flow * 0.45 + P.load * 0.18, 0, 0.6));
+        m.color.copy(linkCol).multiplyScalar(NIGHT_WIRE);
       }
     }
 
@@ -613,17 +706,20 @@ export async function initScene({ canvas, onProgress }) {
     applyXray(xray);
 
     pkMat.opacity = clamp(0.35 + flow * 0.65, 0, 1);
+    // material.color multiplies the per-instance tint: one scalar drives all 96
+    pkMat.color.setScalar(NIGHT_PACKET);
 
-    /* glow IS the load — a spring, not a sin() */
+    /* glow IS the load — a spring, not a sin(). Above ~3 linear, ACES has already taken
+       the core to pure white, so every unit past that buys no more brightness — it only
+       buys BLOOM RADIUS, i.e. a bigger blob. Keep it just over the clip point and let
+       the bloom do the work it was added to do. */
     const core = mats.RouterCore;
-    // once the studio is out, the core is the only light left in the room: it has to
-    // carry the shot, so its own output rises as everything around it falls.
-    const night = 1 + dark * 0.6;
-    if (core) core.emissiveIntensity = glow * (0.55 + P.load * 0.9) * night;
-    if (mats.Glyph) mats.Glyph.emissiveIntensity = 0.28 + dark * 0.35 + P.load * 0.12;
-    halo.scale.setScalar(HALO_R * (1 + P.load * 0.06));
-    haloMat.uniforms.uInt.value = clamp((0.18 + P.load * 0.5) * (0.7 + dark * 1.1) * glow * 0.55, 0, 1.6);
-    coreLight.intensity = (0.5 + P.load * 3.2) * glow * night;
+    if (core) core.emissiveIntensity = glow * (0.40 + P.load * 0.55) * NIGHT_CORE;
+    // the engraved marks are inlays, not paint: a matte hint in the lit acts, and in the
+    // dark ones the second-brightest thing in the frame — but still a MARK, still legible
+    // as the glyph it is, which is the whole reason it was cut as geometry.
+    if (mats.Glyph) mats.Glyph.emissiveIntensity = 0.28 + dark * 0.85 + P.load * (0.12 + dark * 0.22);
+    coreLight.intensity = (0.4 + P.load * 1.7) * (0.55 + 0.25 * glow) * NIGHT_CORE;
 
     /* camera. No tween ever touches it. */
     mx += (fin(S.mouseX) - mx) * 0.07;
@@ -635,31 +731,37 @@ export async function initScene({ canvas, onProgress }) {
 
     group.rotation.y = fin(S.rotY) + Math.sin(t * 0.16) * 0.035 * fin(S.idleSpin, 1);
     group.position.set(gx, gy, 0);
+    coreLight.position.copy(group.position);
 
-    // the shadow frustum rides the rig — it can stay tight, and it can never clip
-    key.position.copy(group.position).add(KEY_OFF);
-    key.target.position.copy(group.position);
-    key.target.updateMatrixWorld();
-
-    /* THE STUDIO LIGHTS GO OUT — lights, shadow, env and exposure move together,
-       and main.js turns the page in the same frame. */
-    ambient.intensity = 0.45 - dark * 0.36;
-    key.intensity = fin(S.keyInt, 2.6) * (1 - dark * 0.62);
-    boxL.intensity = 3.4 * (1 - dark * 0.45);
-    boxR.intensity = 2.2 * (1 - dark * 0.55);
-    rim.intensity = dark * 4.0;
-    scene.environmentIntensity = fin(S.envInt, 0.9) * (1 - dark * 0.62);
-    ground.material.opacity = clamp(fin(S.shadowOp, 0.3) * (1 - dark * 0.8), 0, 1);
+    /* THE STUDIO LIGHTS GO OUT. The key, the softboxes and the environment fall away;
+       the rim and the kicker come UP, because on a near-black page the silhouette is
+       the only thing still drawing the object. main.js turns the page in the same frame. */
+    fill.intensity = 0.85 - dark * 0.72;
+    key.intensity = fin(S.keyInt, 2.6) * (1 - dark * 0.86);
+    boxL.intensity = 3.0 * (1 - dark * 0.80);
+    boxR.intensity = 1.9 * (1 - dark * 0.85);
+    rim.intensity = 0.30 + dark * 2.7;
+    kick.intensity = 0.18 + dark * 1.5;
+    scene.environmentIntensity = fin(S.envInt, 0.9) * (1 - dark * 0.78);
     renderer.toneMappingExposure = fin(S.expo, 1);
+
+    /* the two post passes, each paid for only in the acts that use it */
+    const aoAmt = 1 - dark;
+    ao.enabled = aoAmt > 0.02;
+    ao.blendIntensity = aoAmt;
+
+    const bloomAmt = dark * (0.22 + 0.10 * glow);
+    bloom.enabled = bloomAmt > 0.02;
+    bloom.strength = bloomAmt;
 
     bgCol.copy(LIGHT_BG).lerp(DARK_BG, dark);
 
     projectRouter(gx, gy);
-    renderer.render(scene, camera);
+    composer.render(dt);
     return bgCol;
   }
 
   focusEngine(0);
 
-  return { render, focusEngine, scene, camera, renderer, group, parts, mats, links, packets };
+  return { render, focusEngine, scene, camera, renderer, composer, group, parts, mats, links, packets };
 }
