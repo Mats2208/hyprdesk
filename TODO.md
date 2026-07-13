@@ -2,6 +2,15 @@
 
 Things that are next, in rough priority order. The [Roadmap in the README](README.md#roadmap) is the shipped-feature view; this is the working list.
 
+## Waiting on a human, on a Mac
+
+None of these can be verified from CI or from Windows. They need hands on an Apple machine.
+
+- [ ] **Window dragging.** The title bar had no hitbox on macOS: the app dragged the window with `-webkit-app-region: drag`, which despite the `-webkit-` prefix is a **Chromium** feature — Windows runs WebView2 (Chromium) and honours it; macOS runs WKWebView and **ignores it entirely**. Now it calls Tauri's `startDragging()`. Verify: drag from the title bar, **double-click to maximize**, and drag from the home screen (which on macOS had *no* drag region at all — it was rendered behind `{!isMac && …}`).
+- [ ] **Resize.** Reported as broken alongside the drag, but **not touched**: with `titleBarStyle: Overlay` the native decorations are still active, so resizing from the window edges *should* work on its own. If it is still broken it is a **separate bug** and needs its own hunt.
+- [ ] **Energy.** Open Activity Monitor → Energy tab, leave HyprDesk with 2 agents **idle** (not producing output), and read HyprDesk's *Energy Impact*. Low (single digits) is fine. If it sits at 20-30+ **while nothing is happening**, something is still waking the CPU and we keep digging. The known offender is fixed (the PTY flusher woke 40×/second per agent, doing nothing — see `coalesce()` in `lib.rs`), but the *effect* has never been measured on a Mac.
+- [ ] **The `.dmg` itself.** Built and downloadable from the *Build installers* workflow (universal — Intel + Apple Silicon). It is **not signed**, so Gatekeeper blocks the first launch: open it with right-click → Open.
+
 ## Next up
 
 - [ ] **Tests. There are none.** The workspace persistence layer is the place to start: it is pure, trap-laden logic (atomic writes, index recovery, legacy migration, Windows verbatim paths) and it is the layer that **destroyed a real index on disk** — `workspaces.json` was found as `[]` with every workspace folder still sitting there. CI already runs on Windows and macOS; it should be running these.
