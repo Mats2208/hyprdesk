@@ -281,18 +281,41 @@ fn with_persona(base: String, persona: Option<&str>) -> String {
     }
 }
 
-// Nombre de skill saneado a un stem seguro (evita path traversal): solo [a-z0-9-], sin `.md`.
-fn skill_stem(name: &str) -> String {
+// Nombre saneado a un stem seguro (evita path traversal): solo [a-z0-9-], sin `.md`.
+// Único saneador del crate — un segundo es la forma clásica de reintroducir el traversal.
+fn stem(name: &str) -> String {
     name.trim().trim_end_matches(".md").to_lowercase()
         .chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect()
 }
 
-// Lee una skill de `resources/skills/<stem>.md` y la devuelve trim-eada (None si no está/está vacía).
-fn read_skill(stem: &str) -> Option<String> {
-    let p = res_file(&format!("skills/{stem}.md")).ok()?;
+// Lee un .md de `resources/<dir>/<stem>.md`, trim-eado. None si no está o está vacío.
+fn read_md(dir: &str, name: &str) -> Option<String> {
+    let s = stem(name);
+    if s.is_empty() {
+        return None;
+    }
+    let p = res_file(&format!("{dir}/{s}.md")).ok()?;
     let txt = std::fs::read_to_string(p).ok()?;
     let txt = txt.trim();
     if txt.is_empty() { None } else { Some(txt.to_string()) }
+}
+
+fn read_skill(stem: &str) -> Option<String> {
+    read_md("skills", stem)
+}
+
+// Un playbook (orquestación) lo carga el ROUTER bajo demanda, así que paga contexto solo por el que
+// usa. Tope de tamaño con el mismo criterio que la memoria del workspace: el contexto del router es
+// el más caro del sistema. Si un playbook llega a este tope, el problema es el playbook — es una
+// partitura, no un manual (el dominio va en una skill).
+pub fn read_playbook(name: &str) -> Option<String> {
+    const MAX: usize = 12_000;
+    let txt = read_md("playbooks", name)?;
+    if txt.len() <= MAX {
+        return Some(txt);
+    }
+    let cut = txt.char_indices().nth(MAX).map_or(txt.len(), |(i, _)| i);
+    Some(format!("{}\n\n… (playbook recortado: excede {MAX} chars)", &txt[..cut]))
 }
 
 // Compone el rol con las skills. Ponytail va SIEMPRE (todo agente, todo motor). Las de DOMINIO son
@@ -314,7 +337,7 @@ fn with_skills(role_txt: String, extra: &[String], role: &str) -> String {
     let mut domain: Vec<String> = crate::settings::load_settings().default_skills; // default-on del usuario
     domain.extend(extra.iter().cloned()); // + las que pidió el router para ESTE worker
     for name in &domain {
-        let stem = skill_stem(name);
+        let stem = stem(name);
         if stem.is_empty() || seen.contains(&stem) {
             continue; // vacío/basura o ya inyectada
         }
@@ -333,22 +356,19 @@ pub struct SkillInfo {
     pub summary: String, // primera línea con texto del .md
 }
 
-// Skills de DOMINIO disponibles (para el hub y para que el router elija al delegar). Enumera
-// `resources/skills/*.md` menos Ponytail (siempre activa). Ordenadas por nombre.
-pub fn list_skills() -> Vec<SkillInfo> {
-    let dir = match res_file("skills") {
-        Ok(d) => d,
-        Err(_) => return Vec::new(),
-    };
+// Enumera `resources/<dir>/*.md` (nombre + primera línea con texto como resumen), ordenado.
+// Directorio ausente → lista vacía: una instalación sin skills/playbooks degrada, no rompe.
+fn list_md(dir: &str, skip: &[&str]) -> Vec<SkillInfo> {
+    let Ok(root) = res_file(dir) else { return Vec::new() };
     let mut out = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(dir) {
+    if let Ok(entries) = std::fs::read_dir(root) {
         for e in entries.flatten() {
             let path = e.path();
             if path.extension().and_then(|x| x.to_str()) != Some("md") {
                 continue;
             }
             let name = match path.file_stem().and_then(|x| x.to_str()) {
-                Some(s) if s != "ponytail" => s.to_string(),
+                Some(s) if !skip.contains(&s) => s.to_string(),
                 _ => continue,
             };
             let summary = std::fs::read_to_string(&path).ok()
@@ -361,6 +381,17 @@ pub fn list_skills() -> Vec<SkillInfo> {
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+// Skills de DOMINIO (para el hub y para que el router las inyecte al delegar). Ponytail no aparece:
+// va siempre en todos.
+pub fn list_skills() -> Vec<SkillInfo> {
+    list_md("skills", &["ponytail"])
+}
+
+// Playbooks de ORQUESTACIÓN (solo para el router: cómo se reparte un tipo de proyecto).
+pub fn list_playbooks() -> Vec<SkillInfo> {
+    list_md("playbooks", &[])
 }
 
 // Rol base + memoria del workspace (solo router): lo que el router guardó en sesiones anteriores se

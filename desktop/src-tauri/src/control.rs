@@ -318,6 +318,29 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
             // skills de dominio disponibles para que el router las elija al delegar (Ponytail no va acá)
             let _ = req.respond(json_response(json!({ "skills": crate::engines::list_skills() }).to_string()));
         }
+        "/list_playbooks" => {
+            // playbooks de orquestación (solo el router los ve; el worker no tiene la tool)
+            let _ = req.respond(json_response(json!({ "playbooks": crate::engines::list_playbooks() }).to_string()));
+        }
+        "/load_playbook" => {
+            let body = read_body(&mut req);
+            let name = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(String::from))
+                .unwrap_or_default();
+            // Un playbook que no existe DEBE ser un error explícito, no un texto vacío: la ausencia
+            // silenciosa se lee como aprobación, y el router planifica creyendo que un playbook lo
+            // respaldó. Devolvemos también los válidos para que corrija en el acto.
+            let result = match crate::engines::read_playbook(&name) {
+                Some(text) => json!({ "ok": true, "name": name, "text": text }),
+                None => json!({
+                    "ok": false,
+                    "error": format!("no existe el playbook \"{name}\""),
+                    "available": crate::engines::list_playbooks().iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+                }),
+            };
+            let _ = req.respond(json_response(result.to_string()));
+        }
         "/spawn_worker" => {
             let body = read_body(&mut req);
             let parsed = match serde_json::from_str::<SpawnBody>(&body) {

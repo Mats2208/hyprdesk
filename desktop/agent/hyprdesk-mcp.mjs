@@ -39,7 +39,15 @@ if (ROLE === "router") {
         "el worker_id. El worker trabaja de forma autónoma y te va a avisar cuando termine " +
         "(recibirás un mensaje suyo). No bloquea.",
       inputSchema: {
-        task: z.string().describe("Instrucción autocontenida y completa para el worker (rutas, requisitos, contexto)."),
+        task: z
+          .string()
+          .describe(
+            "El BRIEF del worker — vale lo que valdría el que VOS querrías recibir. Mínimo: (1) QUÉ, concreto; " +
+              "(2) DÓNDE: los archivos que este worker POSEE (nadie más los toca) y el contrato/interfaces contra " +
+              "los que compila; (3) la RESTRICCIÓN que te haría rechazar el resultado, con su CONSECUENCIA " +
+              "('no tweenees la cámara: dos scrubs escribiendo el mismo estado corren carrera'); (4) qué significa " +
+              "LISTO, verificable sin vos. Una tarea de dos líneas produce trabajo de dos líneas."
+          ),
         profile: z
           .string()
           .optional()
@@ -61,7 +69,16 @@ if (ROLE === "router") {
     async ({ task, profile, engine, name, skills }) => {
       try {
         const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD, skills });
-        return ok(`Worker "${profile || name || engine || "claude"}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.`);
+        const label = profile || name || engine || "claude";
+        // El empujón va acá, no en el system prompt: aterriza en el contexto del router en el
+        // instante EXACTO del error, es determinístico (array vacío, no una heurística), y no le
+        // cuesta una sola línea al prompt. Le gana a cualquier cantidad de prosa preventiva.
+        const nudge = skills?.length
+          ? ""
+          : "\n\n⚠️ Lo creaste SIN skills de dominio. Un worker sin su skill entrega el resultado mediocre que " +
+            "podrías haber evitado con una llamada: mirá list_skills y, si alguna calza con su tarea, mandásela " +
+            "ahora con send_to_worker o relanzalo.";
+        return ok(`Worker "${label}" creado con id ${j.workerId}. Está trabajando; te va a avisar cuando termine.${nudge}`);
       } catch (e) {
         return err(`Error creando worker: ${e.message}`);
       }
@@ -110,6 +127,58 @@ if (ROLE === "router") {
         return ok(`Skills de dominio disponibles (${list.length}):\n${lines}\n\nInyectalas al delegar: spawn_worker({ task, skills: ["<name>"] }).`);
       } catch (e) {
         return err(`Error listando skills: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_playbooks",
+    {
+      title: "Listar los playbooks de orquestación disponibles",
+      description:
+        "Un PLAYBOOK dice cómo se ORQUESTA un tipo de proyecto: cómo se parte el trabajo entre workers (un dueño " +
+        "por archivo), qué contrato tenés que congelar antes de abrir el abanico, qué worker arranca primero, y " +
+        "cuál es la compuerta verificable de 'listo'. NO es conocimiento de dominio (eso son las skills). " +
+        "Mirá esto ANTES de planificar un proyecto grande: si hay uno que calza, te ahorra el diseño entero. " +
+        "Si NINGUNO calza con lo que te pidieron, NO fuerces uno: planificá sin playbook. Un índice corto no " +
+        "significa que tu proyecto tenga que entrar en él.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const r = await post("/list_playbooks", {});
+        const list = r.playbooks || [];
+        if (!Array.isArray(list) || list.length === 0) return ok("No hay playbooks instalados. Planificá vos el reparto.");
+        const lines = list.map((p) => `- ${p.name}${p.summary ? ` — ${p.summary}` : ""}`).join("\n");
+        return ok(`Playbooks disponibles (${list.length}):\n${lines}\n\nSi alguno calza con el proyecto: load_playbook("<name>"). Si ninguno calza, planificá sin playbook.`);
+      } catch (e) {
+        return err(`Error listando playbooks: ${e.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    "load_playbook",
+    {
+      title: "Cargar un playbook de orquestación",
+      description:
+        "Trae el playbook completo (el reparto entre workers, el contrato a congelar, el camino crítico, la " +
+        "compuerta de 'listo' y las trampas ya pagadas de ese tipo de proyecto). Cargalo UNA sola vez: ya te " +
+        "queda en contexto. Usá solo nombres que devuelva list_playbooks.",
+      inputSchema: {
+        name: z.string().describe("Nombre del playbook, tal cual lo devuelve list_playbooks."),
+      },
+    },
+    async ({ name }) => {
+      try {
+        const r = await post("/load_playbook", { name });
+        if (!r.ok) {
+          const av = (r.available || []).join(", ") || "ninguno";
+          return err(`${r.error}. Disponibles: ${av}.`);
+        }
+        return ok(`PLAYBOOK "${r.name}":\n\n${r.text}`);
+      } catch (e) {
+        return err(`Error cargando el playbook: ${e.message}`);
       }
     }
   );
