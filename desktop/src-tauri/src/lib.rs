@@ -299,6 +299,11 @@ fn pty_spawn(
             c
         }
     };
+    // strip_verbatim también acá: un cwd con el prefijo \\?\ se le pasa TAL CUAL al proceso hijo, y
+    // el usuario abría una terminal en `\\?\E:\proj` en vez de `E:\proj` (PowerShell ni siquiera lo
+    // sabe mostrar: escupe `Microsoft.PowerShell.Core\FileSystem::\\?\E:\proj`). El origen ya está
+    // arreglado (workspace.rs), pero esto es el borde: nada que salga de acá debe llevar el prefijo.
+    let cwd = cwd.map(|c| paths::strip_verbatim(&c));
     let cwd_str = cwd
         .clone()
         .unwrap_or_else(|| home_dir().to_string_lossy().into_owned());

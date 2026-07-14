@@ -64,6 +64,7 @@ pub fn ensure_root() {
     let _ = fs::create_dir_all(root());
     let _ = fs::create_dir_all(state_dir());
     migrate_legacy();
+    migrate_verbatim_states(); // ANTES de recover_index: si no, este re-inserta la ruta sucia
     recover_index();
 }
 
@@ -203,6 +204,45 @@ fn migrate_legacy() {
     }
 }
 
+// Migra los estados guardados con una ruta VERBATIM (\\?\E:\proj) a la ruta limpia.
+//
+// No alcanza con limpiar el índice, y por eso esto existe: el archivo de estado se LLAMA
+// hash(carpeta). Cambiarle la carpeta al workspace sin mover su archivo le borra los tiles, los
+// perfiles y los session-ids de un plumazo.
+//
+// Y hay algo peor, que es lo que de verdad se paga: los WORKTREES de los workers se crean con la
+// ruta limpia (el camino del spawn la normaliza), pero el índice guardaba la sucia. Dos hashes para
+// la misma carpeta. Entonces `worktree::gc_orphans()` —que al arrancar borra los worktrees que no
+// pertenecen a ningún workspace vivo— no reconocía los suyos y los BORRABA, en el proyecto real del
+// usuario. Un rm -rf a ciegas por una barra invertida de más.
+//
+// En Unix es un no-op: strip_verbatim no toca nada y el bucle no encuentra qué migrar.
+fn migrate_verbatim_states() {
+    let Ok(rd) = fs::read_dir(state_dir()) else { return };
+    let archivos: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
+    for p in archivos {
+        let Ok(raw) = fs::read_to_string(&p) else { continue };
+        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&raw) else { continue };
+        let Some(sucia) = v["folder"].as_str() else { continue };
+        let limpia = crate::paths::strip_verbatim(sucia);
+        if limpia == sucia {
+            continue;
+        }
+        let destino = state_path(&limpia);
+        if destino.exists() {
+            continue; // ya hay estado con la ruta limpia: es el bueno, no lo pisamos
+        }
+        v["folder"] = serde_json::Value::String(limpia);
+        if crate::paths::write_atomic(&destino, &v.to_string()).is_ok() {
+            let _ = fs::remove_file(&p); // recién ahora: si el destino no se escribió, no perdemos el original
+        }
+    }
+}
+
 // Reconstruye el índice a partir de los state/*.json (cada uno sabe su carpeta). Recupera
 // workspaces que el índice perdió y, de paso, normaliza rutas viejas con prefijo \\?\.
 fn recover_index() {
@@ -229,16 +269,20 @@ fn recover_index() {
         let Ok(raw) = fs::read_to_string(&p) else { continue };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else { continue };
         let Some(folder) = v["folder"].as_str() else { continue };
-        if !PathBuf::from(folder).is_dir() || list.iter().any(|w| w.folder == folder) {
+        // strip_verbatim ACÁ es el que faltaba, y era el bug: arriba limpiábamos el índice, y dos
+        // líneas después volvíamos a meter la ruta SUCIA leída del estado. El saneador se peleaba
+        // consigo mismo y el \\?\ sobrevivía a todos los reinicios.
+        let folder = crate::paths::strip_verbatim(folder);
+        if !PathBuf::from(&folder).is_dir() || list.iter().any(|w| w.folder == folder) {
             continue;
         }
         let name = v["name"]
             .as_str()
             .map(|s| s.to_string())
-            .unwrap_or_else(|| PathBuf::from(folder).file_name().map_or("workspace".into(), |n| n.to_string_lossy().into()));
+            .unwrap_or_else(|| PathBuf::from(&folder).file_name().map_or("workspace".into(), |n| n.to_string_lossy().into()));
         let id = v["id"].as_str().map(|s| s.to_string()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let managed = PathBuf::from(folder).starts_with(root());
-        list.push(WorkspaceMeta { id, name, folder: folder.to_string(), last_opened: mtime_millis(&p), managed });
+        let managed = PathBuf::from(&folder).starts_with(root());
+        list.push(WorkspaceMeta { id, name, folder, last_opened: mtime_millis(&p), managed });
     }
 
     if changed || list.len() != before {
@@ -497,5 +541,42 @@ pub mod tests {
         assert!(s.contains("legacy"), "y conserva el contenido");
         assert_eq!(list_workspaces().len(), 1, "y el workspace aparece en el índice");
         drop(h);
+    }
+
+    // El bug que borraba worktrees del proyecto REAL del usuario. Un workspace enlazado quedaba
+    // guardado con la ruta verbatim de Windows (\?\E:\proj), pero sus worktrees se creaban con la
+    // ruta LIMPIA. Dos hashes para la misma carpeta → gc_orphans no reconocía los worktrees vivos y
+    // los recolectaba. Y recover_index no lo arreglaba: limpiaba el índice y en la misma pasada
+    // volvía a leer la ruta sucia del estado y la re-insertaba.
+    #[cfg(windows)]
+    #[test]
+    fn una_ruta_verbatim_se_migra_y_no_resucita() {
+        let h = TempHome::new();
+        ensure_root();
+        let proyecto = h.dir.join("PROYECTO-REAL");
+        fs::create_dir_all(&proyecto).unwrap();
+        let limpia = proyecto.to_string_lossy().to_string();
+        let sucia = format!(r"\\?\{limpia}"); // la forma que devuelve canonicalize() en Windows
+
+        // Estado como lo dejaba una versión vieja: archivo nombrado con el hash de la ruta SUCIA.
+        let viejo = state_path(&sucia);
+        fs::write(&viejo, format!(r#"{{"id":"x","name":"PROYECTO-REAL","folder":{sucia:?},"tiles":[]}}"#)).unwrap();
+        write_index(&[WorkspaceMeta {
+            id: "x".into(), name: "PROYECTO-REAL".into(), folder: sucia.clone(),
+            last_opened: 1, managed: false,
+        }]).unwrap();
+
+        ensure_root(); // migra + sanea
+
+        let list = list_workspaces();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].folder, limpia, "el índice quedó con la ruta limpia");
+        assert!(!viejo.exists(), "el estado viejo se movió, no quedó duplicado");
+        assert!(state_path(&limpia).exists(), "el estado vive bajo el hash de la ruta LIMPIA");
+        assert!(load_state(&limpia).is_some(), "y se puede leer: no se perdieron tiles ni perfiles");
+
+        // La prueba de fuego: reabrir la app NO puede resucitar la ruta sucia desde el estado.
+        ensure_root();
+        assert_eq!(list_workspaces()[0].folder, limpia, "la ruta verbatim no resucita al reiniciar");
     }
 }
