@@ -6,6 +6,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const PORT = process.env.HYPRDESK_PORT;
 const AGENT_ID = process.env.HYPRDESK_AGENT_ID || "unknown";
@@ -14,14 +17,45 @@ const CWD = process.env.HYPRDESK_CWD || null; // carpeta del workspace (routers)
 const ROUTER_ID = process.env.HYPRDESK_ROUTER_ID || "router"; // router al que reporta (workers)
 const BASE = `http://127.0.0.1:${PORT}`;
 
-async function post(path, body) {
-  const res = await fetch(BASE + path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`control server respondió ${res.status}`);
-  return res.json();
+// ── Diario de a bordo ───────────────────────────────────────────────────────
+// Cuando este proceso moría, el agente veía "Transport closed" y nosotros NO veíamos NADA: ni un
+// log, ni un exit code, ni una razón. Había que hacer arqueología con tasklist para saber siquiera
+// que había muerto. Ahora deja rastro de todo, y sobre todo de POR QUÉ se fue.
+// stderr NO sirve: se lo come el CLI del agente. Va a un archivo.
+const LOG = join(homedir(), "HyprDesk", "logs", `mcp-${AGENT_ID}.log`);
+try { mkdirSync(join(homedir(), "HyprDesk", "logs"), { recursive: true }); } catch { /* no es fatal */ }
+function log(...msg) {
+  try { appendFileSync(LOG, `${new Date().toISOString()} [${ROLE}] ${msg.join(" ")}\n`); } catch { /* nunca romper por el log */ }
+}
+
+// Un throw suelto en cualquier callback mataba el proceso EN SILENCIO y con él el túnel del agente.
+// Preferimos un túnel degradado (que loguea y sigue) a uno muerto sin explicación.
+process.on("uncaughtException", (e) => log("!! uncaughtException:", e?.stack || String(e)));
+process.on("unhandledRejection", (e) => log("!! unhandledRejection:", e?.stack || String(e)));
+process.on("exit", (code) => log(`<< proceso terminado (exit=${code})`));
+// El CLI cierra stdin cuando apaga el MCP: así distinguimos "me cerraron" de "me morí".
+process.stdin.on("end", () => log("<< el agente cerró stdin (cierre normal del MCP)"));
+
+// Timeout explícito: sin esto, si el control server se cuelga la tool queda colgada PARA SIEMPRE y
+// el agente se queda esperando un turno que nunca vuelve. ask_user es la excepción: BLOQUEA a
+// propósito hasta 5 min esperando al humano.
+async function post(path, body, timeoutMs = 30_000) {
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BASE + path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw new Error(`control server respondió ${res.status}`);
+    const j = await res.json();
+    log(`   ${path} → ok (${Date.now() - t0}ms)`);
+    return j;
+  } catch (e) {
+    log(`   ${path} → FALLÓ (${Date.now() - t0}ms): ${e?.message || e}`);
+    throw e;
+  }
 }
 
 const ok = (text) => ({ content: [{ type: "text", text }] });
@@ -214,7 +248,8 @@ if (ROLE === "router") {
     },
     async ({ question }) => {
       try {
-        const r = await post("/ask_user", { question, from: AGENT_ID });
+        // Bloquea a propósito: el control server espera hasta 5 min a que el humano conteste.
+        const r = await post("/ask_user", { question, from: AGENT_ID }, 330_000);
         return ok(`El usuario respondió: ${r.answer}`);
       } catch (e) {
         return err(`Error preguntando al usuario: ${e.message}`);
@@ -419,5 +454,17 @@ if (ROLE === "router") {
   );
 }
 
+// El agente terminó el handshake MCP → EL TÚNEL EXISTE. Es el único momento en que sabemos que sus
+// tools ya están en la mesa. La app espera esta señal para inyectarle la tarea a un worker: antes
+// dormía 6 segundos a ojo y le hablaba, ganara o perdiera la carrera contra el arranque del MCP.
+// Un worker que arranca antes de tener el túnel no puede reportar NUNCA — se queda mudo toda la sesión.
+server.server.oninitialized = () => {
+  log(">> túnel listo (el agente completó el handshake MCP)");
+  post("/mcp_ready", { agent: AGENT_ID, role: ROLE, pid: process.pid }).catch(() => {
+    // Si el control server no está, el agente igual funciona: solo pierde el aviso.
+  });
+};
+
+log(`>> arrancando · pid=${process.pid} · port=${PORT} · router=${ROUTER_ID} · cwd=${CWD ?? "-"}`);
 const transport = new StdioServerTransport();
 await server.connect(transport);

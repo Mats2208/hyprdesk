@@ -93,6 +93,11 @@ pub struct ControlState {
     pub workers: Arc<Mutex<HashMap<String, WorkerInfo>>>, // workers vivos (para list_workers)
     pub profiles: Arc<Mutex<HashMap<String, Vec<ProfileInfo>>>>, // perfiles por router_id (para list_profiles)
     pub questions: Arc<Mutex<HashMap<String, std::sync::mpsc::SyncSender<String>>>>, // ask_user pendientes
+    // Agentes cuyo MCP ya completó el handshake = su túnel EXISTE y sus tools están en la mesa.
+    // El servidor MCP nos lo avisa (POST /mcp_ready). Hasta que no llega esa señal, un worker no
+    // puede reportar ni consultar: hablarle antes es hablarle a un agente sordo.
+    pub tunnels: Arc<Mutex<std::collections::HashSet<String>>>,
+    pub tunnel_waiters: Arc<Mutex<HashMap<String, std::sync::mpsc::SyncSender<()>>>>,
 }
 
 // Un worker recién creado (worktree + comando armado + ya inscripto en el roster).
@@ -116,6 +121,22 @@ pub fn title_for(name: &Option<String>, engine: &str) -> String {
 }
 
 impl ControlState {
+    // Espera a que EL TÚNEL DE ESE AGENTE exista (su MCP completó el handshake), hasta `timeout`.
+    // Devuelve true si el túnel está vivo; false si se agotó la espera (el llamador decide seguir
+    // igual — un agente sin túnel sirve para trabajar, solo que no puede reportar).
+    //
+    // Antes de esto había un `sleep(6s)` a ojo: una carrera contra el arranque del MCP que opencode
+    // perdía, y sus workers arrancaban SIN las tools del túnel — mudos para toda la sesión.
+    pub fn wait_for_tunnel(&self, agent: &str, timeout: std::time::Duration) -> bool {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
+        self.tunnel_waiters.lock().unwrap().insert(agent.to_string(), tx);
+        // Registrar el waiter ANTES de mirar el set: si el aviso llegó en el medio, /mcp_ready ya
+        // metió al agente en `tunnels` y lo vemos acá. Sin este orden, el aviso se puede perder.
+        let listo = self.tunnels.lock().unwrap().contains(agent) || rx.recv_timeout(timeout).is_ok();
+        self.tunnel_waiters.lock().unwrap().remove(agent);
+        listo
+    }
+
     // Si hay UN solo router vivo, es ese. Con varios es ambiguo → None (el llamador decide).
     pub fn sole_router(&self) -> Option<String> {
         let map = self.routers.lock().unwrap();
@@ -254,6 +275,8 @@ pub fn start(app: AppHandle) -> ControlState {
         workers: Arc::new(Mutex::new(HashMap::new())),
         profiles: Arc::new(Mutex::new(HashMap::new())),
         questions: Arc::new(Mutex::new(HashMap::new())),
+        tunnels: Arc::new(Mutex::new(std::collections::HashSet::new())),
+        tunnel_waiters: Arc::new(Mutex::new(HashMap::new())),
     };
     let state_srv = state.clone();
     thread::spawn(move || {
@@ -290,6 +313,23 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
     }
 
     match url.as_str() {
+        // El MCP de un agente completó el handshake → su túnel EXISTE. Es la señal que espera
+        // pty_spawn para recién ahí inyectarle la tarea a un worker (ver ControlState::wait_for_tunnel).
+        "/mcp_ready" => {
+            let body = read_body(&mut req);
+            let v = serde_json::from_str::<serde_json::Value>(&body).unwrap_or(json!({}));
+            let agent = v.get("agent").and_then(|a| a.as_str()).unwrap_or("").to_string();
+            if !agent.is_empty() {
+                state.tunnels.lock().unwrap().insert(agent.clone());
+                // Insertar en `tunnels` ANTES de avisar: si el que espera se despierta primero, igual
+                // encuentra la marca. El send falla si nadie espera (agente sin tarea) — es normal.
+                if let Some(tx) = state.tunnel_waiters.lock().unwrap().get(&agent) {
+                    let _ = tx.try_send(());
+                }
+                let _ = app.emit("mcp-ready", agent);
+            }
+            let _ = req.respond(json_response(json!({ "ok": true }).to_string()));
+        }
         "/list_workers" => {
             let body = read_body(&mut req);
             let router = serde_json::from_str::<serde_json::Value>(&body)
@@ -568,6 +608,50 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    fn estado() -> ControlState {
+        ControlState {
+            port: 0,
+            routers: Arc::new(Mutex::new(HashMap::new())),
+            workers: Arc::new(Mutex::new(HashMap::new())),
+            profiles: Arc::new(Mutex::new(HashMap::new())),
+            questions: Arc::new(Mutex::new(HashMap::new())),
+            tunnels: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            tunnel_waiters: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    // El aviso llega MIENTRAS esperamos: el caso normal.
+    #[test]
+    fn esperar_el_tunel_se_destraba_cuando_el_mcp_avisa() {
+        let s = estado();
+        let s2 = s.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(120));
+            s2.tunnels.lock().unwrap().insert("w1".into());
+            if let Some(tx) = s2.tunnel_waiters.lock().unwrap().get("w1") { let _ = tx.try_send(()); }
+        });
+        assert!(s.wait_for_tunnel("w1", Duration::from_secs(3)));
+    }
+
+    // LA CARRERA: el MCP avisó ANTES de que nadie esperara. El aviso no se puede perder — si se
+    // pierde, el worker se queda esperando 30s y arranca mudo, que es el bug que estamos matando.
+    #[test]
+    fn un_aviso_que_llego_antes_no_se_pierde() {
+        let s = estado();
+        s.tunnels.lock().unwrap().insert("w1".into()); // avisó antes de que llamáramos a esperar
+        assert!(s.wait_for_tunnel("w1", Duration::from_millis(50)), "el aviso previo tiene que valer");
+    }
+
+    // Nadie avisa nunca (agente sin MCP): no colgamos para siempre, devolvemos false y el llamador
+    // le da la tarea igual — un worker sin túnel trabaja, solo que no puede reportar.
+    #[test]
+    fn si_el_tunel_no_levanta_no_esperamos_para_siempre() {
+        let s = estado();
+        assert!(!s.wait_for_tunnel("fantasma", Duration::from_millis(80)));
+        assert!(s.tunnel_waiters.lock().unwrap().is_empty(), "el waiter se limpia al salir");
+    }
 
     // El frontend persiste la identidad y se la devuelve al backend al revivir al agente. Si alguien
     // renombra un campo de un lado, el agente revive SIN persona y NADIE se entera: no hay error, el

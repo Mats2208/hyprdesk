@@ -392,12 +392,27 @@ fn pty_spawn(
         // en Windows/ConPTY (no llega al morir el proceso, solo al cerrar el PTY).
     });
 
-    // Inyectar la tarea inicial tras el arranque del TUI (motores sin prompt posicional, ej. opencode).
+    // Inyectar la tarea inicial (motores sin prompt posicional: hoy solo opencode; claude y codex la
+    // reciben como argv y arrancan con el MCP ya cargado).
+    //
+    // Esperamos a que EL TÚNEL DE ESTE AGENTE exista — su MCP avisa con /mcp_ready — y recién ahí le
+    // hablamos. Antes había un sleep(6s) a ojo: una carrera. Si el MCP tardaba más, el worker
+    // empezaba su primer turno SIN las tools del túnel y se quedaba MUDO toda la sesión (no podía
+    // report_to_router aunque quisiera: no la tenía). Los workers de opencode perdían esa carrera.
+    //
+    // Si el aviso no llega (agente sin MCP, o algo raro), a los 30s inyectamos igual: un worker sin
+    // túnel puede trabajar, solo que no puede reportar. Peor sería no darle nunca la tarea.
     if let Some(task) = inject_task {
         let app3 = app.clone();
         let id3 = id.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(6)); // esperar a que el TUI esté listo
+            let state = app3.state::<ControlState>();
+            let listo = state.wait_for_tunnel(&id3, std::time::Duration::from_secs(30));
+            if !listo {
+                let _ = app3.emit("tunnel-error", format!("El túnel de {id3} no levantó en 30s: el agente va a trabajar, pero no va a poder reportar."));
+            }
+            // El túnel está listo, pero el TUI puede seguir dibujando: un respiro antes de tipearle.
+            std::thread::sleep(std::time::Duration::from_millis(800));
             control::inject(&app3, &id3, &task);
         });
     }
