@@ -475,10 +475,14 @@ fn build_claude(
         argv.push("--resume".to_string());
         argv.push(sid.clone());
     }
+    // --mcp-config SUMA el túnel de HyprDesk a los MCP que el usuario ya tiene (~/.claude.json).
+    // SIN --strict-mcp-config: ese flag significa "usá SOLO este config, ignorá todo lo demás", y le
+    // borraba al agente todos los MCP del usuario (packet-tracer, supabase, Drive…). Un agente dentro
+    // de HyprDesk tiene que poder lo mismo que uno fuera, más el túnel. Codex ya se comportaba así
+    // (sus -c se fusionan); claude era el único que quedaba castrado.
     argv.extend([
         "--mcp-config".into(),
         cfg,
-        "--strict-mcp-config".into(),
         "--append-system-prompt".into(),
         role_txt.to_string(),
     ]);
