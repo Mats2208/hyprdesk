@@ -11,6 +11,41 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 use tiny_http::{Header, Method, Response, Server};
 
+// CON QUÉ se lanzó un agente. Antes esto se quemaba en el system prompt y se descartaba: nadie
+// podía ver la persona de un worker que había diseñado el router, y —peor— al reabrir el workspace
+// el worker revivía con las opciones VACÍAS, o sea sin su rol. Ahora es un dato que viaja y se
+// persiste, y por eso se puede inspeccionar y guardar como perfil.
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct AgentIdentity {
+    #[serde(default)]
+    pub name: Option<String>, // nombre pelado del agente (el title le agrega " · motor")
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    #[serde(default)]
+    pub persona: Option<String>,
+    #[serde(default)]
+    pub task: Option<String>, // la consigna con la que lo lanzaron
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default, rename = "profileId")]
+    pub profile_id: Option<String>, // de qué perfil es instancia, si vino de uno
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
+impl AgentIdentity {
+    pub fn opts(&self) -> crate::engines::AgentOpts<'_> {
+        crate::engines::AgentOpts {
+            model: self.model.as_deref(),
+            effort: self.effort.as_deref(),
+            persona: self.persona.as_deref(),
+            skills: &self.skills,
+        }
+    }
+}
+
 // Info de un worker vivo (roster que el router consulta con list_workers para reutilizar en vez de crear).
 #[derive(Clone, Serialize)]
 pub struct WorkerInfo {
@@ -25,6 +60,9 @@ pub struct WorkerInfo {
     pub branch: Option<String>, // rama del worktree, si el ws es git
     #[serde(default)]
     pub dead: bool, // el PTY murió: preservamos su worktree para review/merge/recuperación
+    // La identidad (persona/skills/task) NO se guarda acá: viaja en el evento spawn-agent, el
+    // frontend la persiste en el tile, y vuelve en worker_launch al revivirlo. Una copia en el
+    // roster sería un dato muerto que se desincroniza.
 }
 
 // Perfil de agente (del workspace) que el router puede consultar (list_profiles) y usar al delegar.
@@ -65,6 +103,16 @@ pub struct SpawnedWorker {
     pub cwd: String,
     pub branch: Option<String>,
     pub spec: crate::engines::LaunchSpec,
+    pub identity: AgentIdentity,
+}
+
+// Título del tile. ÚNICA fuente: antes el router producía "nombre · motor" y el lanzado-desde-perfil
+// el nombre pelado — el mismo perfil se veía distinto según quién lo había lanzado.
+pub fn title_for(name: &Option<String>, engine: &str) -> String {
+    match name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        Some(n) => format!("{n} · {engine}"),
+        None => format!("worker · {engine}"),
+    }
 }
 
 impl ControlState {
@@ -77,36 +125,23 @@ impl ControlState {
     // Crea un worker: worktree aislado si el ws es git, arma su comando y lo inscribe en el roster.
     // ÚNICA implementación — la usan tanto el comando Tauri (perfil lanzado por el usuario) como el
     // handler HTTP (worker spawneado por el router). Antes eran dos copias que podían divergir.
-    #[allow(clippy::too_many_arguments)]
-    pub fn spawn_worker(
-        &self,
-        engine: &str,
-        ws_root: &str,
-        router: &str,
-        model: Option<&str>,
-        effort: Option<&str>,
-        persona: Option<&str>,
-        task: Option<&str>,
-        name: Option<&str>,
-        skills: &[String],
-    ) -> Result<SpawnedWorker, String> {
+    pub fn spawn_worker(&self, engine: &str, ws_root: &str, router: &str, ident: AgentIdentity) -> Result<SpawnedWorker, String> {
         let id = uuid::Uuid::new_v4().to_string();
         // ws git → worktree/rama propia (aislamiento); si no → comparte la carpeta del workspace.
         let (cwd, branch) = match crate::worktree::create(ws_root, &id) {
             Some(wt) => (wt.path, Some(wt.branch)),
             None => (ws_root.to_string(), None),
         };
-        let opts = crate::engines::AgentOpts { model, effort, persona, skills };
-        let spec = crate::engines::build_agent(engine, self.port, &id, "worker", &cwd, Some(router), None, task, &opts)?;
-        let title = match name.map(str::trim).filter(|n| !n.is_empty()) {
-            Some(n) => format!("{n} · {engine}"),
-            None => format!("worker · {engine}"),
-        };
+        let spec = crate::engines::build_agent(
+            engine, self.port, &id, "worker", &cwd, Some(router), None,
+            ident.task.as_deref(), &ident.opts(),
+        )?;
+        let title = title_for(&ident.name, engine);
         self.workers.lock().unwrap().insert(id.clone(), WorkerInfo {
             id: id.clone(), engine: engine.to_string(), name: title.clone(), router_id: router.to_string(),
             cwd: cwd.clone(), ws_root: ws_root.to_string(), branch: branch.clone(), dead: false,
         });
-        Ok(SpawnedWorker { id, engine: engine.to_string(), title, cwd, branch, spec })
+        Ok(SpawnedWorker { id, engine: engine.to_string(), title, cwd, branch, spec, identity: ident })
     }
 
     // Mergea la rama del worker a la principal. ÚNICA implementación (comando Tauri = botón del
@@ -167,7 +202,10 @@ struct SpawnAgentEvent {
     #[serde(rename = "sessionId")]
     session_id: Option<String>,
     branch: Option<String>, // rama del worktree (para el badge)
-    color: Option<String>,  // color del perfil (si el worker vino de un perfil)
+    // Con qué se lanzó (persona/skills/modelo/task): el frontend lo persiste, lo muestra en el
+    // detalle del agente, y lo devuelve al revivirlo. Antes nada de esto cruzaba al frontend.
+    #[serde(flatten)]
+    identity: AgentIdentity,
 }
 
 #[derive(Deserialize)]
@@ -185,6 +223,15 @@ struct SpawnBody {
     cwd: Option<String>,
     #[serde(default)]
     skills: Option<Vec<String>>, // skills de dominio a inyectar en el worker (opt-in)
+    // El router puede DISEÑAR el agente, no solo darle una tarea: si no usa un perfil existente,
+    // puede definirle persona/modelo/effort. Antes solo podía elegir motor y nombre → los agentes
+    // que creaba el router no tenían personalidad propia.
+    #[serde(default)]
+    persona: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -380,20 +427,19 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
             // router pidió en el spawn. Ponytail y las default-on se agregan solas en engines.
             let mut skills = profile.as_ref().map(|p| p.skills.clone()).unwrap_or_default();
             skills.extend(parsed.skills.clone().unwrap_or_default());
-            let name = profile.as_ref().map(|p| p.name.clone()).or_else(|| parsed.name.clone());
-            let color = profile.as_ref().and_then(|p| p.color.clone());
-            let spawned = state.spawn_worker(
-                &engine,
-                &ws_root,
-                &router,
-                profile.as_ref().and_then(|p| p.model.as_deref()),
-                profile.as_ref().and_then(|p| p.effort.as_deref()),
-                profile.as_ref().map(|p| p.persona.as_str()),
-                Some(&parsed.prompt),
-                name.as_deref(),
-                &skills,
-            );
-            match spawned {
+            // El perfil manda cuando lo hay (es la plantilla que definió el usuario); si no, vale lo
+            // que el router haya diseñado en el spawn.
+            let ident = AgentIdentity {
+                name: profile.as_ref().map(|p| p.name.clone()).or_else(|| parsed.name.clone()),
+                model: profile.as_ref().and_then(|p| p.model.clone()).or_else(|| parsed.model.clone()),
+                effort: profile.as_ref().and_then(|p| p.effort.clone()).or_else(|| parsed.effort.clone()),
+                persona: profile.as_ref().map(|p| p.persona.clone()).or_else(|| parsed.persona.clone()),
+                task: Some(parsed.prompt.clone()),
+                skills,
+                profile_id: profile.as_ref().map(|p| p.id.clone()),
+                color: profile.as_ref().and_then(|p| p.color.clone()),
+            };
+            match state.spawn_worker(&engine, &ws_root, &router, ident) {
                 Ok(w) => {
                     let _ = app.emit(
                         "spawn-agent",
@@ -409,7 +455,7 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
                             capture: w.spec.capture,
                             session_id: w.spec.session_id,
                             branch: w.branch,
-                            color,
+                            identity: w.identity,
                         },
                     );
                     let _ = req.respond(json_response(json!({ "workerId": w.id }).to_string()));
@@ -518,3 +564,49 @@ fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlSta
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // El frontend persiste la identidad y se la devuelve al backend al revivir al agente. Si alguien
+    // renombra un campo de un lado, el agente revive SIN persona y NADIE se entera: no hay error, el
+    // worker simplemente vuelve genérico. Es la peor forma de fallar, y es la que ya pasó una vez.
+    #[test]
+    fn la_identidad_sobrevive_la_ida_y_vuelta_con_el_frontend() {
+        let del_frontend = r#"{"name":"backend","persona":"Sos el backend","skills":["backend"],"profileId":"p1","task":"hacé la API"}"#;
+        let id: AgentIdentity = serde_json::from_str(del_frontend).unwrap();
+        assert_eq!(id.name.as_deref(), Some("backend"));
+        assert_eq!(id.persona.as_deref(), Some("Sos el backend"));
+        assert_eq!(id.profile_id.as_deref(), Some("p1"), "profileId ↔ profile_id: el rename de serde");
+        assert_eq!(id.skills, ["backend"]);
+
+        // …y las opciones que se le inyectan al motor salen de ahí (antes acá iba un default vacío).
+        let opts = id.opts();
+        assert_eq!(opts.persona, Some("Sos el backend"));
+        assert_eq!(opts.skills, ["backend"]);
+
+        // De vuelta al frontend, con las MISMAS claves.
+        let al_frontend = serde_json::to_value(&id).unwrap();
+        assert_eq!(al_frontend["profileId"], "p1");
+        assert_eq!(al_frontend["persona"], "Sos el backend");
+    }
+
+    // Un agente sin identidad (worker viejo, guardado antes de este cambio) tiene que seguir
+    // levantando: campos ausentes → default, no un error de deserialización.
+    #[test]
+    fn un_agente_sin_identidad_no_rompe() {
+        let id: AgentIdentity = serde_json::from_str("{}").unwrap();
+        assert!(id.persona.is_none() && id.skills.is_empty());
+    }
+
+    // Los dos caminos de spawn (el router y el perfil que lanza el usuario) tienen que dar el MISMO
+    // título. Antes divergían: el mismo perfil se veía "backend · claude" o "backend" según quién lo
+    // había lanzado.
+    #[test]
+    fn el_titulo_no_depende_de_quien_lanzo_al_agente() {
+        assert_eq!(title_for(&Some("backend".into()), "claude"), "backend · claude");
+        assert_eq!(title_for(&None, "codex"), "worker · codex");
+        assert_eq!(title_for(&Some("   ".into()), "claude"), "worker · claude", "un nombre en blanco no es un nombre");
+    }
+}

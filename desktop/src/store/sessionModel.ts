@@ -1,5 +1,5 @@
 // Helpers puros del modelo de sesiones (sin estado): layout de la grilla y (de)serialización de tiles.
-import type { AgentLaunch, Rect, Role, SavedState, Term, WsSession } from "../types";
+import type { AgentIdentity, AgentLaunch, Profile, Rect, Role, SavedState, Term, WsSession } from "../types";
 
 export const MAX_TILES = 9;
 export const HOSTS = ["dev@worker", "build@worker", "test@worker"];
@@ -14,6 +14,22 @@ export function tileFromLaunch(l: AgentLaunch, role: Role, title: string): Term 
   };
 }
 
+// La identidad de un agente, tal como la espera el backend (spawn_profile_worker / worker_launch).
+// Es lo que hace que un worker revivido vuelva CON su rol, y lo que muestra el panel de detalle.
+export function identityOf(t: Term | Profile): AgentIdentity {
+  const task = "task" in t ? t.task : undefined;
+  return {
+    name: t.name, model: t.model, effort: t.effort, persona: t.persona,
+    task, skills: t.skills ?? [], color: t.color,
+    profileId: "profileId" in t ? t.profileId : t.id,
+  };
+}
+
+// Un agente con identidad se puede inspeccionar y guardar como perfil (lo haya creado el router o vos).
+export function hasIdentity(t: Term): boolean {
+  return !!(t.persona || t.task || t.model || t.effort || (t.skills && t.skills.length));
+}
+
 export function savedStateOf(s: WsSession): SavedState {
   return {
     id: s.meta.id, name: s.meta.name, routerWidth: s.routerWidth,
@@ -24,6 +40,8 @@ export function savedStateOf(s: WsSession): SavedState {
         id: x.id, role: x.role, engine: x.engine ?? "claude", sessionId: x.sessionId ?? "", title: x.title,
         kind: x.kind, filePath: x.filePath, url: x.url, name: x.name, color: x.color,
         cwd: x.cwd, branch: x.branch, // R4: worktree/rama para restaurar al worker en su aislamiento
+        // identidad: sin esto el agente revive sin persona ni skills (era AgentOpts::default()).
+        persona: x.persona, model: x.model, effort: x.effort, task: x.task, skills: x.skills, profileId: x.profileId,
       })),
     profiles: s.profiles,
   };

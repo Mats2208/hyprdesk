@@ -4,6 +4,11 @@ import { EngineIcon } from "./EngineIcon";
 // Panel lateral de agentes: roster (router + workers vivos) + perfiles del workspace.
 type AgentRow = { id: string; title: string; role: "router" | "worker"; engine?: string; color?: string; status?: TileStatus; branch?: string };
 
+// Un agente que diseñó el ROUTER y que todavía no es un perfil tuyo. Vive abajo, con los perfiles —
+// que es donde se inspecciona el DISEÑO de un agente— y no arriba en el roster, que muestra QUIÉN
+// está vivo y ya va bastante cargado.
+type RouterAgentRow = { id: string; name: string; engine?: string; color?: string; model?: string; effort?: string };
+
 const ENGINE_COLOR: Record<string, string> = {
   claude: "#d9a06b",
   codex: "#8b9cff",
@@ -11,18 +16,21 @@ const ENGINE_COLOR: Record<string, string> = {
 };
 
 export function Sidebar({
-  agents, activeId, activity, profiles, onFocus, onNewTerminal, onLaunchProfile, onCreateAgent, onLaunchTeam, onDeleteProfile,
+  agents, activeId, activity, profiles, routerAgents, onFocus, onNewTerminal, onLaunchProfile, onCreateAgent, onLaunchTeam, onDeleteProfile, onShowAgent, onShowProfile,
 }: {
   agents: AgentRow[];
   activeId: string;
   activity: string[];
   profiles: Profile[];
+  routerAgents: RouterAgentRow[];
   onFocus: (id: string) => void;
   onNewTerminal: () => void;
   onLaunchProfile: (p: Profile) => void;
   onCreateAgent: () => void;
   onLaunchTeam: () => void;
   onDeleteProfile: (id: string) => void;
+  onShowAgent: (id: string) => void;
+  onShowProfile: (id: string) => void;
 }) {
   return (
     <div className="sidebar">
@@ -63,10 +71,10 @@ export function Sidebar({
         )}
       </div>
       <div className="sidebar__profiles">
-        {profiles.length === 0 && <div className="fslist__empty">sin perfiles · creá uno ↓</div>}
+        {profiles.length === 0 && routerAgents.length === 0 && <div className="fslist__empty">sin perfiles · creá uno ↓</div>}
         {profiles.map((p) => (
           <div key={p.id} className="profrow">
-            <button className="profrow__open" onClick={() => onLaunchProfile(p)} title={`Lanzar ${p.name}`}>
+            <button className="profrow__open" onClick={() => onShowProfile(p.id)} title={`Ver la personalidad y las skills de ${p.name}`}>
               <span className="profrow__dot" style={{ background: p.color }} />
               <span className="profrow__name">{p.name}</span>
               <span className="profrow__meta">
@@ -74,11 +82,34 @@ export function Sidebar({
                 {[p.model, p.effort].filter(Boolean).join(" · ")}
               </span>
             </button>
+            <button className="profrow__go" title={`Lanzar ${p.name}`} onClick={() => onLaunchProfile(p)}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4z" fill="currentColor" /></svg>
+            </button>
             <button className="profrow__del" title="Eliminar perfil" onClick={() => onDeleteProfile(p.id)}>
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
             </button>
           </div>
         ))}
+
+        {/* Los que diseñó el ROUTER. Separados a propósito: todavía no son perfiles tuyos — son
+            instancias vivas. Abrilos, leelos, y si te gustan, guardalos como perfil. */}
+        {routerAgents.length > 0 && (
+          <>
+            <div className="profgroup">del router · {routerAgents.length}</div>
+            {routerAgents.map((a) => (
+              <div key={a.id} className="profrow profrow--router">
+                <button className="profrow__open" onClick={() => onShowAgent(a.id)} title="Lo diseñó el router · ver su personalidad y guardarlo como perfil">
+                  <span className="profrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "#8a8a92" }} />
+                  <span className="profrow__name">{a.name}</span>
+                  <span className="profrow__meta">
+                    <EngineIcon engine={a.engine} size={13} />
+                    {[a.model, a.effort].filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       <button className="sidebar__new sidebar__new--agent" onClick={onCreateAgent}>

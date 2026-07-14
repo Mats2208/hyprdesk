@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type { WorkspaceMeta } from "./workspaces";
 import type { AgentLaunch, Profile, SavedState, Stage, Term, WsSession } from "../types";
-import { HOSTS, MAX_TILES, savedStateOf, tileFromLaunch } from "./sessionModel";
+import { HOSTS, MAX_TILES, identityOf, savedStateOf, tileFromLaunch } from "./sessionModel";
 import { useUiStore } from "./uiStore";
 
 // Revive una sesión guardada: relanza router + workers con --resume, recrea tiles de archivo/navegador.
@@ -29,9 +29,17 @@ async function buildRestoredSession(meta: WorkspaceMeta, saved: SavedState): Pro
         engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId,
         // R4: restaurar al worker en SU worktree (si tenía) con su rama; ws_root = carpeta del ws.
         cwd: t.cwd || meta.folder, routerId: rId || "router", wsRoot: meta.folder, branch: t.branch || null,
+        // Su ROL: sin esto el backend lo revivía con opciones vacías → el worker volvía sin persona
+        // ni skills (el --resume le devolvía el historial, no quién era).
+        identity: {
+          name: t.name, model: t.model, effort: t.effort, persona: t.persona,
+          task: t.task, skills: t.skills ?? [], profileId: t.profileId, color: t.color,
+        },
       });
       const wt = tileFromLaunch(w, "worker", t.title || `worker · ${t.engine}`);
       wt.name = t.name; wt.color = t.color;
+      wt.persona = t.persona; wt.model = t.model; wt.effort = t.effort;
+      wt.task = t.task; wt.skills = t.skills; wt.profileId = t.profileId;
       next.push(wt);
     } catch { restoreFailed++; }
   }
@@ -75,6 +83,7 @@ type SessionState = {
   removeTile: (id: string) => void;
 
   saveProfile: (p: Profile) => void;
+  saveAgentAsProfile: (tileId: string) => void;
   deleteProfile: (id: string) => void;
   mergeWorker: (id: string) => Promise<void>;
   launchProfile: (profile: Profile, task?: string) => Promise<void>;
@@ -216,6 +225,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   deleteProfile: (id) => get().updateCurrent((s) => ({ ...s, profiles: s.profiles.filter((p) => p.id !== id) })),
 
+  // Un agente que diseñó el router se vuelve un perfil TUYO, reusable. El tile queda VINCULADO al
+  // perfil nuevo (profileId): si no, seguiría apareciendo como "del router" y lo verías dos veces.
+  saveAgentAsProfile: (tileId) => get().updateCurrent((s) => {
+    const t = s.terms.find((x) => x.id === tileId);
+    if (!t) return s;
+    const profile: Profile = {
+      id: crypto.randomUUID(),
+      name: t.name || t.title,
+      engine: t.engine || "claude",
+      model: t.model, effort: t.effort,
+      persona: t.persona ?? "",
+      color: t.color || "#5f819b",
+      skills: t.skills,
+    };
+    return {
+      ...s,
+      profiles: [...s.profiles, profile],
+      terms: s.terms.map((x) => (x.id === tileId ? { ...x, profileId: profile.id } : x)),
+    };
+  }),
+
   mergeWorker: async (id) => {
     const setToast = useUiStore.getState().setToast;
     try {
@@ -229,14 +259,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   launchProfile: async (profile, task) => {
     const cur = get().current();
     if (!cur || !cur.routerId) return;
+    // La identidad viaja ENTERA al backend y se queda en el tile: así el agente se puede inspeccionar
+    // y —sobre todo— revive con su rol cuando se reabre el workspace.
+    const identity = { ...identityOf(profile), task: task || undefined };
     try {
       const l = await invoke<AgentLaunch>("spawn_profile_worker", {
-        engine: profile.engine, cwd: cur.meta.folder, routerId: cur.routerId,
-        model: profile.model || null, effort: profile.effort || null, persona: profile.persona || null,
-        task: task || null, name: profile.name || null, skills: profile.skills || null,
+        engine: profile.engine, cwd: cur.meta.folder, routerId: cur.routerId, identity,
       });
-      const t = tileFromLaunch(l, "worker", profile.name);
+      // El título lo compone el backend igual para los dos caminos de spawn ("nombre · motor").
+      const t = tileFromLaunch(l, "worker", `${profile.name} · ${profile.engine}`);
       t.name = profile.name; t.color = profile.color;
+      t.persona = profile.persona; t.model = profile.model; t.effort = profile.effort;
+      t.task = task; t.skills = profile.skills; t.profileId = profile.id;
       get().updateCurrent((s) => (s.terms.length >= MAX_TILES ? s : { ...s, terms: [...s.terms, t], activeId: t.id, maxId: null }));
     } catch (e) { useUiStore.getState().setToast(`No pude lanzar "${profile.name}": ${String(e)}`); }
   },
@@ -272,9 +306,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           engine: t.engine || "claude", agentId: t.id, sessionId: t.sessionId,
           cwd: t.cwd || cur.meta.folder, routerId: cur.routerId || "router",
           wsRoot: cur.meta.folder, branch: t.branch || null,
+          identity: identityOf(t), // revive CON su rol, no como un agente genérico
         });
         const nt = tileFromLaunch(w, "worker", t.title);
         nt.name = t.name; nt.color = t.color; nt.gen = (t.gen ?? 0) + 1;
+        nt.persona = t.persona; nt.model = t.model; nt.effort = t.effort;
+        nt.task = t.task; nt.skills = t.skills; nt.profileId = t.profileId;
         get().updateSession(cur.meta.id, (s) => ({ ...s, terms: s.terms.map((x) => (x.id === id ? nt : x)), activeId: nt.id }));
       }
     } catch (e) {

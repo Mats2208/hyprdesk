@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { AgentLaunch } from "../types";
+import type { AgentIdentity, AgentLaunch } from "../types";
 import { tileFromLaunch } from "../store/sessionModel";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
@@ -15,10 +15,16 @@ export function useBackendEvents() {
       const us = useUiStore.getState;
 
       // el router pidió spawnear un worker → lo asignamos a la sesión de ESE router (payload.router).
-      unsubs.push(await listen<AgentLaunch & { title: string; router: string; color?: string | null }>("spawn-agent", (e) => {
-        const t = tileFromLaunch(e.payload, "worker", e.payload.title);
-        if (e.payload.color) t.color = e.payload.color; // color del perfil
-        ss().addWorkerTile(e.payload.router, t);
+      // El payload trae la IDENTIDAD con la que el router lo diseñó (persona/skills/modelo/task): la
+      // guardamos en el tile para poder inspeccionarlo, guardarlo como perfil, y revivirlo con su rol.
+      // Antes se descartaba todo, incluso el `name` (el tile quedaba con name: undefined en disco).
+      unsubs.push(await listen<AgentLaunch & { title: string; router: string } & AgentIdentity>("spawn-agent", (e) => {
+        const p = e.payload;
+        const t = tileFromLaunch(p, "worker", p.title);
+        t.name = p.name; t.color = p.color;
+        t.persona = p.persona; t.model = p.model; t.effort = p.effort;
+        t.task = p.task; t.skills = p.skills; t.profileId = p.profileId;
+        ss().addWorkerTile(p.router, t);
       }));
       // session-id capturado de codex/opencode → completar el tile (para persistir).
       unsubs.push(await listen<{ agentId: string; sessionId: string }>("agent-session", (e) => {

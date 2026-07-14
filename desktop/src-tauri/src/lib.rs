@@ -533,6 +533,7 @@ fn worker_launch(
     router_id: String,
     ws_root: Option<String>,     // R4: raíz del workspace (para review/merge git); default = cwd
     branch: Option<String>,      // R4: rama del worktree a restaurar (None si no-git)
+    identity: Option<control::AgentIdentity>, // con qué se lanzó (persona/skills/modelo/task)
 ) -> Result<AgentLaunch, String> {
     // R4: si el worker tenía worktree pero ya no existe en disco (fue mergeado/limpiado), no
     // podemos resumir ahí → caemos a la carpeta del ws sin rama. Si existe, resumimos en él.
@@ -543,10 +544,16 @@ fn worker_launch(
         Some(_) => (ws_root.clone(), None), // worktree perdido → carpeta del ws
         None => (cwd, None),
     };
-    let spec = engines::build_agent(&engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None, &engines::AgentOpts::default())?;
+    // La identidad se REINYECTA. Antes acá iba un AgentOpts::default() —o sea, sin persona ni
+    // skills—: al reabrir un workspace, un worker "backend" revivía como un agente genérico. El
+    // --resume le devolvía su historial, pero no su rol.
+    let ident = identity.unwrap_or_default();
+    let spec = engines::build_agent(
+        &engine, state.port, &agent_id, "worker", &cwd, Some(&router_id), Some(session_id), None, &ident.opts(),
+    )?;
     // registrar en el roster con su worktree/rama restaurados (así review/merge funcionan tras reabrir)
     state.workers.lock().unwrap().insert(agent_id.clone(), control::WorkerInfo {
-        id: agent_id.clone(), engine: engine.clone(), name: agent_id.clone(),
+        id: agent_id.clone(), engine: engine.clone(), name: control::title_for(&ident.name, &engine),
         router_id: router_id.clone(), cwd: cwd.clone(), ws_root, branch: branch.clone(),
         dead: false,
     });
@@ -556,30 +563,14 @@ fn worker_launch(
 // Lanza un worker NUEVO desde un perfil (motor + modelo + effort + persona). Se conecta al hub
 // con router_id = el router actual del workspace, así reporta a ese router.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)] // la firma ES el contrato IPC con el frontend
 fn spawn_profile_worker(
     state: State<'_, ControlState>,
     engine: String,
     cwd: String,
     router_id: String,
-    model: Option<String>,
-    effort: Option<String>,
-    persona: Option<String>,
-    task: Option<String>,
-    name: Option<String>,
-    skills: Option<Vec<String>>,
+    identity: control::AgentIdentity,
 ) -> Result<AgentLaunch, String> {
-    let w = state.spawn_worker(
-        &engine,
-        &paths::strip_verbatim(&cwd),
-        &router_id,
-        model.as_deref(),
-        effort.as_deref(),
-        persona.as_deref(),
-        task.as_deref(),
-        name.as_deref(),
-        &skills.unwrap_or_default(),
-    )?;
+    let w = state.spawn_worker(&engine, &paths::strip_verbatim(&cwd), &router_id, identity)?;
     Ok(AgentLaunch::new(w.id, w.engine, w.spec, w.cwd, w.branch))
 }
 

@@ -17,6 +17,8 @@ type UiState = {
   teamOpen: boolean;
   toast: string | null;
   askUser: { id: string; question: string } | null;
+  // detalle de un agente vivo (tile) o de un perfil → ver su persona/skills/tarea
+  agentDetail: { kind: "agent" | "profile"; id: string } | null;
   activity: string[]; // tiles con mensaje del túnel sin leer (parpadeo)
   statusByTile: Record<string, TileStatus>;
   dragging: boolean;
@@ -32,6 +34,7 @@ type UiState = {
   setTeamOpen: (v: boolean) => void;
   setToast: (t: string | null) => void;
   setAskUser: (q: { id: string; question: string } | null) => void;
+  setAgentDetail: (d: { kind: "agent" | "profile"; id: string } | null) => void;
   addActivity: (id: string) => void;
   clearActivity: (id: string) => void;
   setStatus: (id: string, st: TileStatus) => void;
@@ -50,6 +53,7 @@ export const useUiStore = create<UiState>((set) => ({
   teamOpen: false,
   toast: null,
   askUser: null,
+  agentDetail: null,
   activity: [],
   statusByTile: {},
   dragging: false,
@@ -69,6 +73,7 @@ export const useUiStore = create<UiState>((set) => ({
   setTeamOpen: (v) => set({ teamOpen: v }),
   setToast: (t) => set({ toast: t }),
   setAskUser: (q) => set({ askUser: q }),
+  setAgentDetail: (d) => set({ agentDetail: d }),
   addActivity: (id) => set((s) => (s.activity.includes(id) ? s : { activity: [...s.activity, id] })),
   clearActivity: (id) => set((s) => (s.activity.includes(id) ? { activity: s.activity.filter((x) => x !== id) } : s)),
   setStatus: (id, st) => set((s) => (s.statusByTile[id] === st ? s : { statusByTile: { ...s.statusByTile, [id]: st } })),

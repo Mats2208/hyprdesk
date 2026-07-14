@@ -1070,3 +1070,37 @@ button.sb-chip:hover { background: var(--hover); color: var(--text); }
 .wel__back:hover { color: var(--text); }
 .wel__next { padding: 9px 20px; border-radius: 5px; border: 1px solid var(--router); background: var(--router-soft); color: var(--router); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .wel__next:hover { background: rgba(59, 158, 255, 0.2); }
+
+/* ── Detalle del agente ─────────────────────────────────────────────────────
+   Un agente creado por el ROUTER era una caja negra: existía, pero su persona y sus skills se
+   quemaban en el system prompt y no se podían ver. Ahora la identidad es un dato — y esto la
+   muestra, tanto la del agente que diseñaste vos como la del que diseñó el router. */
+.profgroup {
+  margin: 8px 10px 3px; font: 10px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint);
+}
+.profrow__go {
+  flex: 0 0 auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
+  border: none; background: transparent; color: var(--faint); cursor: pointer; opacity: 0; transition: all 0.15s;
+}
+.profrow:hover .profrow__go { opacity: 1; }
+.profrow__go:hover { color: var(--router); background: var(--router-soft); }
+/* Diseñado por el router, todavía no es un perfil tuyo → borde punteado: existe, pero no está guardado. */
+.profrow--router .profrow__open { border: 1px dashed var(--hairline); }
+.profrow--router .profrow__open:hover { border-color: var(--hairline-2); }
+
+.agdet__dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.agdet__body { max-height: 62vh; overflow-y: auto; gap: 16px; }
+.agdet__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.agdet__chip { font: 10.5px var(--font-mono); color: var(--muted); padding: 3px 7px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--hairline); }
+.agdet__chip--dead { color: var(--faint); }
+.agdet__field { display: flex; flex-direction: column; gap: 6px; }
+.agdet__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); }
+.agdet__text {
+  margin: 0; padding: 10px 12px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--hairline);
+  font: 12.5px/1.55 var(--font-mono); color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.agdet__empty { margin: 0; font-size: 12.5px; color: var(--faint); line-height: 1.45; }
+.agdet__skills { display: flex; flex-wrap: wrap; gap: 5px; }
+.agdet__skill { font: 11px var(--font-mono); color: var(--router); padding: 3px 8px; border-radius: 4px; background: var(--router-soft); border: 1px solid var(--hairline); }
+.agdet__foot { justify-content: space-between; align-items: center; gap: 12px; }
+.agdet__hint { font-size: 11.5px; color: var(--faint); }
