@@ -39,8 +39,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 export const ENGINES = [
   { id: 'claude', name: 'Claude', mesh: 'EngineClaude', hex: '#D97757', rough: 0.34,
     accent: '#C2410C', stage: '#F6E7DE', note: 'Deep reasoning, architecture, cross-cutting code.' },
-  { id: 'codex', name: 'Codex', mesh: 'EngineCodex', hex: '#10A37F', rough: 0.30,
-    accent: '#0F766E', stage: '#DCEFE9', note: 'Precise implementation — and real raster image generation.' },
+  { id: 'codex', name: 'Codex', mesh: 'EngineCodex', hex: '#6366F1', rough: 0.30,
+    accent: '#4338CA', stage: '#E4E5FB', note: 'Precise implementation — and real raster image generation.' },
   { id: 'opencode', name: 'OpenCode', mesh: 'EngineOpenCode', hex: '#7C5CFF', rough: 0.38,
     accent: '#6D28D9', stage: '#E7E2FB', note: 'Third-party models: whatever provider you are authed against.' },
 ];

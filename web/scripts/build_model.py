@@ -12,9 +12,9 @@ WHAT IT BUILDS (see CONTRACT.md §6 — mesh + material names are frozen)
 
     Router         RouterCore     faceted crystal, emissive — the core
     RouterCage     Cage           gimbal rings + geodesic lattice — metal
-    EngineClaude   ShellClaude    TALL:  a standing faceted blade, leaning
-    EngineCodex    ShellCodex     LOW:   a wide machined module, stepped
-    EngineOpenCode ShellOpenCode  OPEN:  a two-rim strut frame with a bore through it
+    EngineClaude   ShellClaude    Claude — a 6-petal blossom (flower)
+    EngineCodex    ShellCodex     Codex — a plump cushion + the >_ prompt
+    EngineOpenCode ShellOpenCode  OpenCode — the pixel 'glass' icon as voxels
     Glyph*         Glyph          the engine marks — real geometry, shared emissive mat
 
 THE ONE RULE OF THIS FILE: the three engines must be tellable apart IN A BLUR.
@@ -77,7 +77,7 @@ COL = {                    # sRGB, as designers hand them over
     "coreEm": 0xFFD8AC,
     "cage":   0x9AA1AC,
     "claude": 0xD97757,    # ─┐
-    "codex":  0x10A37F,    #  ├─ CONTRACT §3 ENGINES[].hex
+    "codex":  0x6366F1,    #  ├─ CONTRACT §3 ENGINES[].hex  (blue-violet — Codex is the cushion)
     "open":   0x7C5CFF,    # ─┘
     "glyph":  0x0B0D10,
     "glyphEm": 0xFFFFFF,
@@ -355,182 +355,157 @@ def build_cage():
     return ob
 
 
-# ─── the three engines ───────────────────────────────────────────────────────
-CL_HX = 0.31          # blade half-thickness — CONSTANT across the whole mark band, because
-CL_LEAN = 0.105       # the lean is a shear in **Y** (tangential). A shear in X would tilt
-#                       the outward face off vertical and the inlay pad would come out a
-#                       wedge; a shear in Y leaves it a true plane at x = CL_HX. It is also
-#                       the only lean you can SEE face-on — an X-lean just leans at the
-#                       camera, and TILT[0] already does that.
+# ─── the three engines: 3D product logos ─────────────────────────────────────
+# Each engine IS its product's logo, given real MASS so it still reads while the rig
+# orbits about the vertical: Claude = a 6-petal blossom · Codex = a plump cushion + the >_
+# prompt · OpenCode = the pixel 'glass' icon as a voxel block. Authored in the same local
+# frame the old forms used — mark on local +X (points away from the router), width +Y,
+# height +Z — so place() and the frozen Engine*/Glyph* names still hold.
 
 
 def build_claude():
-    """
-    TALL. A standing blade: a plinth it stands on, a heavy low belly, a long taper, and a
-    chisel for a top — the ridge shoved 0.14 off-axis so the roof is one long slope and one
-    short one, the way a blade is actually ground. 2.92 × 1.28 × 0.72, and it leans.
-
-    Faceted means faceted: a ONE-segment bevel (a flat chamfer, a highlight line, not a
-    round) and shading hard at 8°. The first cut of this used a 3-segment bevel smoothed at
-    30° — but a 3-segment bevel on the 45° corner steps by only 11°, so 30° smoothed the
-    corner clean away and the blade came out of the render as a suppository. Nothing here
-    is allowed to melt.
-    """
+    """Claude: a 6-petal BLOSSOM — a flatter, wider medallion. Deep lobes (amplitude 0.32)
+    read as distinct petals rather than a puffy blob; the knot rides its centre."""
+    N = 96
+    pts = [((0.98 * (0.68 + 0.32 * math.cos(6 * a))) * math.cos(a),
+            (0.98 * (0.68 + 0.32 * math.cos(6 * a))) * math.sin(a))
+           for a in (2 * math.pi * i / N for i in range(N))]
+    d = 0.30
     bm = bmesh.new()
-    sec = [                       # z, half-width(Y), half-thickness(X), ridge offset(X)
-        (-1.46, 0.64, 0.36, 0.0),   # the plinth — WIDER than the blade. It stands on it.
-        (-1.30, 0.64, 0.36, 0.0),
-        (-1.30, 0.55, CL_HX, 0.0),  # hard step in: the blade rises out of the base
-        (-1.12, 0.55, CL_HX, 0.0),
-        (-0.20, 0.55, CL_HX, 0.0),  # the belly — the widest line, and it is LOW
-        (0.95, 0.46, CL_HX, 0.0),   # long taper, in Y only: the mark face stays planar
-        (1.18, 0.42, CL_HX, 0.0),
-        (1.46, 0.36, 0.05, 0.14),   # the chisel: a wide flat ridge, ground off-centre
-    ]
-    loft(bm, [(z, chamfered_rect(hx, hy, 0.075, dx=dx, dy=CL_LEAN * z))
-              for z, hy, hx, dx in sec])
+    fr = [bm.verts.new((d / 2, y, z)) for (y, z) in pts]
+    bk = [bm.verts.new((-d / 2, y, z)) for (y, z) in pts]
+    bm.faces.new(fr)
+    bm.faces.new(bk[::-1])
+    for i in range(N):
+        j = (i + 1) % N
+        bm.faces.new((fr[i], fr[j], bk[j], bk[i]))
     ob = finish(bm, "EngineClaude")
-
-    cut = bmesh.new()             # the inlay pad, milled 0.04 into the outward face
-    box(cut, (0.14, 0.68, 0.68), loc=(CL_HX + 0.03, CL_LEAN * 0.24, 0.24))
-    boolean(ob, finish(cut, "cut"), 'DIFFERENCE')
-
-    bevel(ob, 0.030, 1)           # a flat chamfer: catches a line of key, rounds nothing
-    shade(ob, 8.0)                # hard everywhere. It is a carved thing, not a cast one.
+    bevel(ob, 0.09, 3, angle_deg=35)
+    shade(ob, 50.0)
     return ob
-
-
-CX_HX = 0.48          # module half-depth (radial). The +X face is the mark face.
 
 
 def build_codex():
-    """
-    LOW. A machined module lying on its side: a mounting flange, a stepped body, a lid.
-    1.90 wide × 0.80 tall — 2.4:1 the other way from the blade. Single-segment bevels: a
-    FLAT chamfer, the mark of a milled part, not the soft round of an app icon.
-    """
+    """Codex: a plump CUSHION (rounded blob) carrying the >_ prompt. A 6-lobe silhouette with
+    a fat RIM bevel (angle-limited so only the 90° rim rounds, not the gentle lobe seams), so
+    the cross-section reads as a pillow, not a coin. The >_ rides its broad flat +X face."""
+    N = 72
+    pts = [((0.95 * (1 + 0.11 * math.cos(6 * a))) * math.cos(a),
+            (0.95 * (1 + 0.11 * math.cos(6 * a))) * math.sin(a))
+           for a in (2 * math.pi * i / N for i in range(N))]
+    d = 0.44
     bm = bmesh.new()
-    sec = [
-        (-0.40, 0.95, 0.53),      # flange
-        (-0.25, 0.95, 0.53),
-        (-0.25, 0.82, CX_HX),     # step in
-        (0.25, 0.82, CX_HX),      # the body — the mark lives on its +X face
-        (0.25, 0.62, 0.36),       # step in
-        (0.40, 0.57, 0.33),       # the lid, very slightly drafted
-    ]
-    loft(bm, [(z, chamfered_rect(hx, hy, 0.055)) for z, hy, hx in sec])
+    fr = [bm.verts.new((d / 2, y, z)) for (y, z) in pts]
+    bk = [bm.verts.new((-d / 2, y, z)) for (y, z) in pts]
+    bm.faces.new(fr)
+    bm.faces.new(bk[::-1])
+    for i in range(N):
+        j = (i + 1) % N
+        bm.faces.new((fr[i], fr[j], bk[j], bk[i]))
     ob = finish(bm, "EngineCodex")
-
-    cut = bmesh.new()
-    box(cut, (0.14, 0.98, 0.46), loc=(CX_HX + 0.03, 0.0, 0.0))
-    boolean(ob, finish(cut, "cut"), 'DIFFERENCE')
-
-    bevel(ob, 0.028, 1)           # ONE segment = a flat 45° chamfer = machined
-    shade(ob, 8.0)                # everything hard. No melt anywhere on this one.
+    bevel(ob, 0.17, 5, angle_deg=35)   # rim only: the pillow. Lobe seams (<35°) stay
+    shade(ob, 60.0)
     return ob
 
 
-OC_R = 0.90           # outer radius of the front rim
+# OpenCode: the pixel 'glass' icon rebuilt as chunky voxels. '#' is the frame (the shell),
+# 'o'/'x' are the window fill that becomes the glowing glyph. The blocky mass is what makes
+# it survive the orbit edge-on — where the old two-rim frame used a bore, this uses bulk.
+OC_GRID = [
+    ".#######.",
+    "#########",
+    "##ooooo##",
+    "##ooooo##",
+    "##xxxxx##",
+    "##xxxxx##",
+    "##xxxxx##",
+    "##xxxxx##",
+    "##xxxxx##",
+    "#########",
+    ".#######.",
+]
+OC_PITCH = 0.245
+
+
+def _oc_cells(kinds):
+    """One cube per grid cell whose glyph is in *kinds*. Cells are gapped (0.94 of the
+    pitch) so the pixels read AS pixels instead of fusing into a slab."""
+    H = len(OC_GRID)
+    W = len(OC_GRID[0])
+    s = OC_PITCH * 0.94
+    D = 0.55
+    bm = bmesh.new()
+    for r, row in enumerate(OC_GRID):
+        for c, ch in enumerate(row):
+            if ch in kinds:
+                box(bm, (D, s, s),
+                    loc=(0.0, (c - (W - 1) / 2) * OC_PITCH, ((H - 1) / 2 - r) * OC_PITCH))
+    return bm
 
 
 def build_opencode():
-    """
-    OPEN. Two rims of different radius, held apart by six struts, with a 1.24-wide bore
-    straight through. It is ~50% air and the air is REAL geometry, not a dark material.
-
-    The rims are what make it survive the orbit. A single ring goes edge-on at some phase
-    and reads as a solid bar — the exact failure this whole round is about. Two rims with
-    a gap between them do not: edge-on you look straight THROUGH the gap, and the taper
-    (0.90 front → 0.74 back) makes the profile a splayed aperture instead of a rectangle.
-    """
-    bm = bmesh.new()
-    annulus_x(bm, 10, OC_R, 0.62, 0.17, 0.31)        # front rim: the big O
-    annulus_x(bm, 10, 0.74, 0.50, -0.31, -0.17)      # back rim: smaller — a splay
-    frame = finish(bm, "EngineOpenCode")
-
-    st = bmesh.new()
-    for i in range(6):
-        a = 2 * math.pi * i / 6 + math.pi / 6
-        st_r = 0.70
-        box(st, (0.64, 0.15, 0.11),                  # local: X axial, Y radial, Z tangential
-            loc=(0.0, st_r * math.cos(a), st_r * math.sin(a)), rot=(a, 0, 0))
-    boolean(frame, finish(st, "struts"), 'UNION')
-
-    bevel(frame, 0.022, 1)        # flat chamfer, same reason as the other two: no melt
-    shade(frame, 8.0)
-    return frame
+    """The voxel frame — the dark border of the icon (its shell)."""
+    ob = finish(_oc_cells({'#'}), "EngineOpenCode")
+    bevel(ob, 0.02, 1, angle_deg=35)
+    shade(ob, 20.0)
+    return ob
 
 
 # ─── the marks ───────────────────────────────────────────────────────────────
-# Every mark is authored on its engine's local +X face, which is the face that points away
-# from the router — and, on Claude and Codex, inside a pad milled 0.04 into it. The mark
-# rises out of the pad but stops just BELOW the original face: it is INLAID, not stuck on.
-# No two surfaces anywhere are coplanar, so there is nothing to z-fight.
-# Looking straight at that face (camera on +X, world up), SCREEN-RIGHT IS +Y and screen-up
-# is +Z. Get that backwards and the Codex prompt renders as `<_`.
-
-def star_pts(rays, r_out, r_in, sharp=0.42, cy=0.0, cz=0.0):
-    """A tapered burst — sharp rays, not a fat cog. `sharp` narrows the ray root."""
-    pts = []
-    for i in range(rays):
-        a = 2 * math.pi * i / rays
-        h = math.pi / rays
-        pts.append((cy + r_out * math.cos(a), cz + r_out * math.sin(a)))
-        pts.append((cy + r_in * math.cos(a + h * sharp), cz + r_in * math.sin(a + h * sharp)))
-        pts.append((cy + r_in * math.cos(a + h * (2 - sharp)), cz + r_in * math.sin(a + h * (2 - sharp))))
-    return pts
+# Each mark is authored on its engine's local +X face (the face pointing away from the
+# router) and rises PROUD of it as its own geometry — still the "engraved glyph" the
+# contract asks for (real geometry, the shared emissive Glyph material), just raised rather
+# than sunk. Looking at that face (camera on +X, world up), SCREEN-RIGHT IS +Y, screen-up
+# is +Z — get it backwards and Claude's prompt renders as `<_`.
 
 
 def build_glyph_claude():
-    """The burst, inlaid in the blade's pad. Face x = 0.31, pad floor 0.27, mark tops out
-    at 0.302 — proud of the floor, shy of the face. Nothing coplanar with anything."""
+    """The knot at the blossom's core: a hex ring proud of its +X face (face at x ≈ 0.15)."""
     bm = bmesh.new()
-    prism_x(bm, star_pts(8, 0.250, 0.084, sharp=0.38, cy=CL_LEAN * 0.24, cz=0.24),
-            CL_HX - 0.13, CL_HX - 0.008)
+
+    def hexpts(rr):
+        return [(rr * math.cos(math.pi / 6 + math.pi / 3 * k),
+                 rr * math.sin(math.pi / 6 + math.pi / 3 * k)) for k in range(6)]
+
+    ro, ri, x0, x1 = 0.36, 0.21, 0.12, 0.21
+    O0 = [bm.verts.new((x0, y, z)) for y, z in hexpts(ro)]
+    O1 = [bm.verts.new((x1, y, z)) for y, z in hexpts(ro)]
+    I0 = [bm.verts.new((x0, y, z)) for y, z in hexpts(ri)]
+    I1 = [bm.verts.new((x1, y, z)) for y, z in hexpts(ri)]
+    for k in range(6):
+        m = (k + 1) % 6
+        bm.faces.new((O0[k], O0[m], O1[m], O1[k]))
+        bm.faces.new((I1[k], I1[m], I0[m], I0[k]))
+        bm.faces.new((I0[k], I0[m], O0[m], O0[k]))
+        bm.faces.new((O1[k], O1[m], I1[m], I1[k]))
     ob = finish(bm, "GlyphClaude")
-    bevel(ob, 0.007, 1, angle_deg=30.0)
-    shade(ob, 20.0)
+    bevel(ob, 0.008, 1, angle_deg=30.0)
+    shade(ob, 25.0)
     return ob
 
 
 def build_glyph_codex():
-    """`>_` — the prompt. Wide and short, because the face it sits on is wide and short."""
+    """`>_` — the terminal prompt, proud of the cushion's +X face (face at x ≈ 0.22)."""
     bm = bmesh.new()
-    x0, x1 = CX_HX - 0.12, CX_HX - 0.008
-    dep, arm, th = x1 - x0, 0.28, 0.075
-    for s in (+1, -1):                       # apex at +Y == screen-right: this reads `>`
-        box(bm, (dep, arm, th), loc=((x0 + x1) / 2, -0.06, s * 0.100),
-            rot=(-s * math.radians(40), 0, 0))
-    box(bm, (dep, 0.36, 0.068), loc=((x0 + x1) / 2, 0.26, -0.130))
+    x0, x1 = 0.205, 0.30
+    dep, midx = x1 - x0, (x0 + x1) / 2
+    s = 1.15
+    arm, th = 0.30 * s, 0.085 * s
+    for sgn in (+1, -1):                      # two bars → a chevron, apex at +Y (screen-right)
+        box(bm, (dep, arm, th), loc=(midx, -0.16, sgn * 0.115),
+            rot=(-sgn * math.radians(42), 0, 0))
+    box(bm, (dep, 0.40, 0.085), loc=(midx, 0.30, -0.16))   # the underscore cursor
     ob = finish(bm, "GlyphCodex")
-    bevel(ob, 0.010, 1)
-    shade(ob, 20.0)
+    bevel(ob, 0.012, 1, angle_deg=30.0)
+    shade(ob, 25.0)
     return ob
 
 
 def build_glyph_opencode():
-    """
-    A triangle of struts with a node at each corner, spanning the bore — a three-node
-    graph: the A2A mesh, and the three providers. The mark lives INSIDE the hole, because
-    on this engine the hole IS the face. Its corners reach r = 0.55 and bite into the back
-    rim (bore 0.50), so it is suspended by the frame rather than floating in it.
-
-    An earlier version was a hub with three radiating spokes. Rendered, it read as a
-    download arrow. A closed triangle cannot be mistaken for one.
-    """
-    bm = bmesh.new()
-    R, th, dep, x = 0.55, 0.060, 0.12, -0.24
-    corner = [(R * math.cos(2 * math.pi * i / 3 + math.pi / 2),
-               R * math.sin(2 * math.pi * i / 3 + math.pi / 2)) for i in range(3)]
-    for i in range(3):
-        (y0, z0), (y1, z1) = corner[i], corner[(i + 1) % 3]
-        box(bm, (dep, math.hypot(y1 - y0, z1 - z0), th),
-            loc=(x, (y0 + y1) / 2, (z0 + z1) / 2),
-            rot=(math.atan2(z1 - z0, y1 - y0), 0, 0))
-        box(bm, (dep + 0.02, 0.12, 0.12), loc=(x, y0, z0),
-            rot=(math.radians(45), 0, 0))          # the nodes
-    ob = finish(bm, "GlyphOpenCode")
-    bevel(ob, 0.010, 1)
+    """The window 'glass' filling the frame — one emissive fill (the shared Glyph mat).
+    'o' and 'x' rows both light up; on the dark acts this is what glows inside OpenCode."""
+    ob = finish(_oc_cells({'o', 'x'}), "GlyphOpenCode")
+    bevel(ob, 0.02, 1, angle_deg=35)
     shade(ob, 20.0)
     return ob
 
@@ -592,7 +567,9 @@ def report_frame():
 
 
 def main():
-    bpy.ops.wm.read_factory_settings(use_empty=True)   # no default cube / lamp / camera
+    # empty scene, factory startup, but WITHOUT resetting user prefs (read_factory_settings
+    # would) — works both headless (-b --factory-startup) and inside the live Blender.
+    bpy.ops.wm.read_homefile(use_empty=True, use_factory_startup=True)
 
     mats = {
         # emit_strength is 1.2, not 3.0, and that is a PREVIEW decision, not a page one:
