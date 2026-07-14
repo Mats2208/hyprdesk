@@ -178,13 +178,17 @@ export function TerminalTile({
     ro.observe(host);
 
     // Pegar: leemos el portapapeles del SO vía Rust. Si hay IMAGEN, inyectamos su RUTA (los agentes
-    // leen rutas de imágenes); si hay texto, lo inyectamos. (El webview no entrega imágenes por el
-    // evento paste del DOM, por eso lo hacemos por Rust/arboard.)
+    // leen rutas de imágenes); si hay texto, lo pegamos con term.paste(). (El webview no entrega
+    // imágenes por el evento paste del DOM, por eso lo hacemos por Rust/arboard.)
+    //
+    // term.paste() y NO pty_write directo: xterm envuelve el texto en bracketed paste (ESC[200~ …
+    // ESC[201~) cuando el agente lo pide, y así los \n de un texto multilínea llegan como TEXTO. Un
+    // pty_write crudo los manda como Enter → el agente enviaba el mensaje a medio escribir.
     const doPaste = async () => {
       try {
         const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
         if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
-        else if (text) await invoke("pty_write", { id, data: text });
+        else if (text) term.paste(text);
       } catch { /* ignore */ }
     };
     // Copiar: xterm no copia solo. Copiamos la selección vía Rust/arboard.
@@ -216,7 +220,10 @@ export function TerminalTile({
 
       if (!(e.metaKey || e.ctrlKey)) return true;
       const k = e.key.toLowerCase();
-      if (k === "v") { doPaste(); return false; }
+      // preventDefault() otra vez IMPRESCINDIBLE: devolver false solo le dice a xterm que no encodee
+      // la tecla, pero NO cancela el evento del DOM. Sin esto, el webview pegaba ADEMÁS por su cuenta
+      // en el textarea oculto → dos escrituras al PTY (el texto salía duplicado).
+      if (k === "v") { e.preventDefault(); doPaste(); return false; }
       if (k === "c") {
         const wantsCopy = e.shiftKey || (isMac ? e.metaKey : e.ctrlKey);
         if (wantsCopy && term.hasSelection()) { doCopy(); return false; }
