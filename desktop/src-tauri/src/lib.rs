@@ -818,6 +818,10 @@ pub fn run() {
         .manage(PtyManager::default())
         .manage(Mutex::new(System::new_all()))
         .setup(|app| {
+            // ORDEN OBLIGATORIO, y no es cosmético: gc_orphans() BORRA worktrees, y decide qué es
+            // huérfano comparando hash(carpeta) contra los workspaces del índice. ensure_root()
+            // normaliza esas carpetas (migra las rutas \\?\ de Windows). Al revés, un workspace con
+            // la ruta vieja tiene otro hash → sus worktrees VIVOS se ven huérfanos y se borran.
             workspace::ensure_root();
             worktree::gc_orphans(); // worktrees de workspaces que ya no existen (se acumulaban para siempre)
             // Recursos (MCP bundleado + roles). En la app empaquetada viven bajo el resource dir;
