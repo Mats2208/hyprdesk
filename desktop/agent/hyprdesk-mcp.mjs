@@ -64,11 +64,28 @@ if (ROLE === "router") {
           .array(z.string())
           .optional()
           .describe("Skills de DOMINIO a inyectar en el worker (mirá list_skills). Ponytail va siempre, no la incluyas. Ej: para una tarea de UI, ['frontend']. Solo nombres que devuelva list_skills."),
+        persona: z
+          .string()
+          .optional()
+          .describe(
+            "ÚLTIMO RECURSO — solo si NINGÚN perfil del usuario (list_profiles) calza con el dominio. Diseñá al agente: " +
+              "sus instrucciones permanentes, en 2da persona ('Sos un… trabajás así…'). Es QUIÉN ES, no qué hace hoy " +
+              "(eso es la task). El usuario la VE en la app y la puede guardar como perfil suyo, así que escribila como " +
+              "si fuera a quedarse. Ignorado si usás profile (manda la persona del perfil)."
+          ),
+        model: z
+          .string()
+          .optional()
+          .describe("Modelo del motor elegido, si querés uno puntual. Ignorado si usás profile."),
+        effort: z
+          .enum(["low", "medium", "high"])
+          .optional()
+          .describe("Esfuerzo de razonamiento, si el motor lo soporta. Ignorado si usás profile."),
       },
     },
-    async ({ task, profile, engine, name, skills }) => {
+    async ({ task, profile, engine, name, skills, persona, model, effort }) => {
       try {
-        const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD, skills });
+        const j = await post("/spawn_worker", { prompt: task, profile, engine, name, router: AGENT_ID, cwd: CWD, skills, persona, model, effort });
         const label = profile || name || engine || "claude";
         // El empujón va acá, no en el system prompt: aterriza en el contexto del router en el
         // instante EXACTO del error, es determinístico (array vacío, no una heurística), y no le

@@ -49,3 +49,9 @@ Conciso, sin relleno.
 3. Si `report_to_router` te devuelve un error de entrega, el router pudo haber terminado su proceso:
    reintentá una vez en un momento. Si sigue fallando, dejá tu trabajo guardado (commiteá si es repo
    git) y esperá — no lo pierdas.
+4. **No delegues.** Tu motor quizás traiga subagentes propios (codex: `spawn_agent`/`wait_agent`;
+   claude: `Task`). **No los uses.** La tarea es TUYA y el usuario te está mirando trabajar en TU
+   terminal: un subagente fantasma escribe sobre tus mismos archivos, no aparece en ningún lado, y
+   convierte tu worktree aislado en una carrera entre procesos que nadie ve. Si la tarea te queda
+   grande o es de otro dominio, **decíselo al router** (`report_to_router` / `ask_router`) — él tiene
+   las herramientas para abrir otro worker de verdad. Vos no.
