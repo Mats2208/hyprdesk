@@ -269,6 +269,14 @@ pub fn start(app: AppHandle) -> ControlState {
         .to_ip()
         .map(|a| a.port())
         .expect("el control server no expuso puerto IP");
+    // Publicamos el túnel a disco para que una terminal ABIERTA A MANO (fuera de la app) pueda
+    // conectarse como router si el usuario quiere: el MCP lo lee como fallback cuando no tiene las
+    // env del agente. El token ya vive en disco en los configs por-agente de temp (ver
+    // engines::claude_mcp_config), así que esto NO amplía la exposición. Se reescribe en cada
+    // arranque porque el puerto es nuevo.
+    let tunnel = crate::home_dir().join("HyprDesk").join("tunnel.json");
+    if let Some(dir) = tunnel.parent() { let _ = std::fs::create_dir_all(dir); }
+    let _ = std::fs::write(&tunnel, serde_json::json!({ "port": port, "token": token() }).to_string());
     let state = ControlState {
         port,
         routers: Arc::new(Mutex::new(HashMap::new())),
@@ -301,7 +309,34 @@ fn json_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
     Response::from_string(body).with_header(header)
 }
 
+// Secreto compartido entre la app y los MCP de sus agentes. Se genera una vez por proceso y viaja
+// a cada agente por env (HYPRDESK_TOKEN, ver engines::mcp_env) — nunca sale de la máquina.
+//
+// Sin esto, el control server no tenía NINGUNA autenticación: escuchaba en 127.0.0.1 con un puerto
+// efímero y su única defensa era que nadie supiera el puerto. Cualquier página web —incluida una
+// abierta en el propio tile navegador de HyprDesk— podía barrer el localhost y disparar un
+// POST /spawn_worker: el navegador no la deja LEER la respuesta, pero el POST se EJECUTA igual. Y un
+// worker arranca con los permisos bypasseados a propósito. O sea: ejecución de código, servida por
+// una pestaña. Ahora toda ruta exige el token en un header propio, que además fuerza el preflight
+// CORS que el navegador no puede pasar (no contestamos OPTIONS) — dos cerraduras, no una.
+static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+pub fn token() -> &'static str {
+    TOKEN.get_or_init(|| uuid::Uuid::new_v4().to_string())
+}
+
+const TOKEN_HEADER: &str = "x-hyprdesk-token";
+
+fn autorizado(req: &tiny_http::Request) -> bool {
+    req.headers().iter().any(|h| {
+        h.field.equiv(TOKEN_HEADER) && h.value.as_str() == token()
+    })
+}
+
 fn handle_request(mut req: tiny_http::Request, app: AppHandle, state: ControlState) {
+    if !autorizado(&req) {
+        let _ = req.respond(Response::from_string("forbidden").with_status_code(403));
+        return;
+    }
     let routers = &state.routers;
     let workers = &state.workers;
     let profiles = &state.profiles;

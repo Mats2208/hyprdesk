@@ -174,6 +174,9 @@ fn mcp_env(port: u16, agent_id: &str, role: &str, cwd: &str, router_id: Option<&
         ("HYPRDESK_PORT".to_string(), port.to_string()),
         ("HYPRDESK_AGENT_ID".to_string(), agent_id.to_string()),
         ("HYPRDESK_ROLE".to_string(), role.to_string()),
+        // Sin el token, el control server contesta 403. Es lo único que separa "el MCP de mi agente"
+        // de "cualquier página que adivine el puerto" (ver control::token).
+        ("HYPRDESK_TOKEN".to_string(), crate::control::token().to_string()),
     ];
     if role == "router" {
         e.push(("HYPRDESK_CWD".to_string(), cwd.to_string())); // para pasar cwd al spawnear workers

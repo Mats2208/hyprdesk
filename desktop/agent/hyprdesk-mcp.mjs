@@ -6,14 +6,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const PORT = process.env.HYPRDESK_PORT;
+// Fallback para terminales ABIERTAS A MANO (fuera de la app): no tienen las env que la app inyecta
+// por-agente, así que el puerto y el token los leen del túnel que la app publica al arrancar. Si no
+// hay app corriendo el archivo no existe → PORT queda undefined y todo da error (correcto).
+let tun = {};
+try { tun = JSON.parse(readFileSync(join(homedir(), "HyprDesk", "tunnel.json"), "utf8")); } catch { /* sin app: sin túnel */ }
+
+const PORT = process.env.HYPRDESK_PORT || tun.port;
+const TOKEN = process.env.HYPRDESK_TOKEN || tun.token || ""; // sin esto el control server nos da 403
 const AGENT_ID = process.env.HYPRDESK_AGENT_ID || "unknown";
-const ROLE = process.env.HYPRDESK_ROLE || "worker";
-const CWD = process.env.HYPRDESK_CWD || null; // carpeta del workspace (routers)
+const ROLE = process.env.HYPRDESK_ROLE || "router"; // a mano = router (spawnea workers + ask_user)
+const CWD = process.env.HYPRDESK_CWD || (ROLE === "router" ? process.cwd() : null); // cwd donde nacen los workers
 const ROUTER_ID = process.env.HYPRDESK_ROUTER_ID || "router"; // router al que reporta (workers)
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -44,7 +51,7 @@ async function post(path, body, timeoutMs = 30_000) {
   try {
     const res = await fetch(BASE + path, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-hyprdesk-token": TOKEN },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
