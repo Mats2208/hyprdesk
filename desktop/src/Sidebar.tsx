@@ -48,7 +48,7 @@ export function Sidebar({
               className={`agentrow__status agentrow__status--${a.status || "idle"}`}
               title={a.status === "working" ? "trabajando" : a.status === "exited" ? "terminó / cerrado" : "en espera"}
             />
-            <span className="agentrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "#8a8a92" }} />
+            <span className="agentrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "var(--dot-fallback)" }} />
             <span className="agentrow__name">{a.title}</span>
             {a.branch && <span className="agentrow__branch" title={a.branch}>⑂</span>}
             {a.engine && <EngineIcon engine={a.engine} size={16} className="agentrow__eng" />}
@@ -99,7 +99,7 @@ export function Sidebar({
             {routerAgents.map((a) => (
               <div key={a.id} className="profrow profrow--router">
                 <button className="profrow__open" onClick={() => onShowAgent(a.id)} title="Lo diseñó el router · ver su personalidad y guardarlo como perfil">
-                  <span className="profrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "#8a8a92" }} />
+                  <span className="profrow__dot" style={{ background: a.color || ENGINE_COLOR[a.engine || "claude"] || "var(--dot-fallback)" }} />
                   <span className="profrow__name">{a.name}</span>
                   <span className="profrow__meta">
                     <EngineIcon engine={a.engine} size={13} />

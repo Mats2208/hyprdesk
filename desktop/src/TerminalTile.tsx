@@ -72,10 +72,18 @@ export function TerminalTile({
     const term = new Terminal({
       fontFamily: monoFont(),
       fontSize: useThemeStore.getState().termFontSize,
-      lineHeight: 1.2,
+      lineHeight: 1.35,
       cursorBlink: true,
       allowProposedApi: true,
       theme: xtermTheme(isRouter),
+      // Hyperlinks OSC 8: los CLIs (Claude Code, etc.) emiten URLs "clickeables por diseño" como
+      // secuencia de escape, con el texto y el destino separados. A diferencia del WebLinksAddon
+      // (regex sobre lo pintado), esto sobrevive a que el TUI parta el URL en dos renglones cuando
+      // el tile es angosto: el destino viaja aparte, no se lee del buffer. Abre en el navegador embebido.
+      linkHandler: {
+        activate: (_e, uri) => onOpenLinkRef.current?.(uri),
+        allowNonHttpProtocols: false,
+      },
     });
     termRef.current = term;
     const fit = new FitAddon();
@@ -187,7 +195,12 @@ export function TerminalTile({
     const doPaste = async () => {
       try {
         const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
-        if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
+        // Entrecomillar SOLO si la ruta trae espacios (ej. %TEMP% bajo "C:\Users\John Doe\..."): sin
+        // comillas el agente leería solo el primer trozo. El caso común (sin espacios) queda idéntico.
+        if (imgPath) {
+          const arg = imgPath.includes(" ") ? `"${imgPath}"` : imgPath;
+          await invoke("pty_write", { id, data: arg + " " });
+        }
         else if (text) term.paste(text);
       } catch { /* ignore */ }
     };
@@ -267,7 +280,7 @@ export function TerminalTile({
 
   const accent = color && !isRouter
     ? (active
-        ? { borderColor: color, boxShadow: `0 0 0 1px ${color}55, 0 12px 36px rgba(0,0,0,0.55)` }
+        ? { borderColor: color, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px ${color}55, 0 12px 36px rgba(0,0,0,0.55)` }
         : { borderColor: `${color}55` })
     : undefined;
 
