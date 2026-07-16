@@ -648,6 +648,11 @@ fn unregister_worker(app: AppHandle, state: State<'_, ControlState>, id: String)
     // El PTY del worker murió. NO borramos su worktree: preservamos su trabajo para que el router
     // pueda revisarlo/mergearlo o recuperarlo (antes lo descartábamos con --force → pérdida silenciosa).
     // Lo marcamos muerto (sigue en el roster para review/merge) y avisamos al router.
+    // Su túnel se fue con él. Dejar la marca puesta es una trampa: el id se REUSA al revivir al
+    // worker (worker_launch resume con el mismo agent_id), y wait_for_tunnel le diría "listo" a un
+    // MCP que todavía no hizo el handshake — el mismo worker mudo que ya arreglamos una vez.
+    state.tunnels.lock().unwrap().remove(&id);
+
     let (router, name, was_alive) = {
         let mut workers = state.workers.lock().unwrap();
         match workers.get_mut(&id) {
