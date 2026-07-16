@@ -787,6 +787,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tiny_http",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

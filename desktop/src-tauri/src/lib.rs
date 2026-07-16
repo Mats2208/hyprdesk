@@ -363,14 +363,17 @@ fn pty_spawn(
     // cerrar el tile. Con child.wait() detectamos la muerte real en cualquier plataforma.
     let app_wait = app.clone();
     let id_wait = id.clone();
-    let pid = child.process_id();
+    // El reaper se arma ACÁ y no al morir el hijo: en Windows es un Job Object cuya membresía se
+    // hereda al spawnear, así que hay que engancharlo antes de que el hijo tenga tiempo de parir
+    // nietos. En unix armar es solo anotar el pid; la simetría es gratis.
+    let reaper = child.process_id().and_then(Reaper::arm);
     std::thread::spawn(move || {
         let _ = child.wait();
         // El hijo murió, pero sus NIETOS no. Los barremos acá y no en pty_kill a propósito: este
         // punto cubre las dos muertes —cerrar el tile y un /exit del agente—, que dejan el mismo
         // tendal.
-        if let Some(pid) = pid {
-            reap_tree(pid);
+        if let Some(r) = reaper {
+            r.reap();
         }
         let _ = app_wait.emit("pty-exit", id_wait);
     });
@@ -475,20 +478,94 @@ fn pty_resize(manager: State<'_, PtyManager>, id: String, cols: u16, rows: u16) 
 // Ryzen 9, por una página que nadie miraba) NO los mata esto. Para ésos hace falta caminar el árbol
 // de procesos por PPID y matarlos por descendencia. Está en TODO.md; no lo vendo como resuelto.
 #[cfg(unix)]
-fn reap_tree(pid: u32) {
-    unsafe {
-        libc::killpg(pid as i32, libc::SIGKILL);
+struct Reaper {
+    pid: u32,
+}
+
+#[cfg(unix)]
+impl Reaper {
+    fn arm(pid: u32) -> Option<Self> {
+        Some(Self { pid })
+    }
+    fn reap(self) {
+        unsafe {
+            libc::killpg(self.pid as i32, libc::SIGKILL);
+        }
     }
 }
 
-// ponytail: en Windows el equivalente es un Job Object con JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, que
-// hay que crear ANTES del spawn y asignarle el hijo — y que, a diferencia de killpg, SÍ se lleva a
-// los que se fugan. Es unsafe Win32 y no lo puedo probar desde una Mac; escribirlo a ciegas es peor
-// que no tenerlo. Queda en TODO.md con el approach: en Windows hoy no se muere ningún nieto.
+// En Windows el barrido es un Job Object con KILL_ON_JOB_CLOSE enganchado al hijo apenas nace: todo
+// lo que el hijo spawnee hereda la membresía, y TerminateJobObject se lleva el árbol ENTERO. A
+// diferencia de killpg, acá NO hay escape: DETACHED_PROCESS no saca a nadie del job, y el breakaway
+// hay que permitirlo explícitamente (no lo permitimos) — así que el caso que en unix sigue abierto
+// (Chromium detached, los chrome-headless-shell fantasma) en Windows queda cerrado. Bonus del
+// KILL_ON_JOB_CLOSE: si la app entera muere, el kernel cierra sus handles y los árboles de TODOS
+// los agentes caen solos.
+//
+// La ventana que queda: entre el spawn y el AssignProcessToJobObject el hijo podría parir algo que
+// nace fuera del job. Milisegundos contra un shell que tarda cientos en arrancar; cerrarla del todo
+// pide CREATE_SUSPENDED, que portable-pty no expone. Medido en esta máquina (Windows 11), no
+// supuesto: el test de abajo es el mismo escenario que el de unix — un nieto que sobrevive a la
+// muerte de su padre (en Windows eso es CUALQUIER nieto: no existe el SIGHUP del kernel).
 #[cfg(windows)]
-fn reap_tree(_pid: u32) {}
+struct Reaper {
+    job: isize, // HANDLE crudo como isize: tiene que viajar al hilo waiter (Send)
+}
 
-// Mata la terminal (cerrar tile). Los nietos los barre el hilo waiter al ver morir al hijo (reap_tree).
+#[cfg(windows)]
+impl Reaper {
+    fn arm(pid: u32) -> Option<Self> {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+            SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        };
+        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return None;
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let seteado = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const _,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            // SET_QUOTA + TERMINATE: exactamente lo que AssignProcessToJobObject exige, ni más.
+            let proceso = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+            if seteado == 0 || proceso.is_null() {
+                if !proceso.is_null() {
+                    CloseHandle(proceso);
+                }
+                CloseHandle(job);
+                return None;
+            }
+            let asignado = AssignProcessToJobObject(job, proceso);
+            CloseHandle(proceso);
+            if asignado == 0 {
+                CloseHandle(job);
+                return None;
+            }
+            Some(Self { job: job as isize })
+        }
+    }
+    fn reap(self) {
+        use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+        use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+        unsafe {
+            // El CloseHandle solo ya mataría todo (KILL_ON_JOB_CLOSE), pero el terminate explícito
+            // lo hace AHORA, sin depender de que el nuestro sea el último handle del job.
+            TerminateJobObject(self.job as HANDLE, 1);
+            CloseHandle(self.job as HANDLE);
+        }
+    }
+}
+
+// Mata la terminal (cerrar tile). Los nietos los barre el hilo waiter al ver morir al hijo (Reaper).
 #[tauri::command]
 fn pty_kill(manager: State<'_, PtyManager>, id: String) -> Result<(), String> {
     if let Some(mut s) = manager.sessions.lock().unwrap().remove(&id) {
@@ -914,9 +991,9 @@ mod tests {
 
     // El nieto que NO se muere solo. Ojo con el caso que se elige acá: un nieto cualquiera ya lo mata
     // el kernel (SIGHUP al morir el líder de sesión), así que un test con `sleep` de nieto PASA
-    // aunque reap_tree no haga nada — es un test decorativo. El que de verdad distingue es un nieto
+    // aunque el Reaper no haga nada — es un test decorativo. El que de verdad distingue es un nieto
     // que IGNORA SIGHUP: hoy sobrevive, y solo muere si le matamos el grupo. Es el MCP de node que
-    // quedaba huérfano. (El que hace setsid se escapa igual — ver reap_tree.)
+    // quedaba huérfano. (El que hace setsid se escapa igual — ver Reaper.)
     #[cfg(unix)]
     #[test]
     fn cerrar_una_terminal_se_lleva_al_nieto_que_ignora_sighup() {
@@ -953,9 +1030,10 @@ mod tests {
         assert!(vivo(nieto), "el nieto tiene que arrancar vivo, si no el test no prueba nada");
 
         // Lo que hace la app al cerrar el tile: matar al hijo… y después barrer su grupo.
+        let reaper = Reaper::arm(pid).expect("en unix armar no falla");
         child.kill().unwrap();
         let _ = child.wait();
-        reap_tree(pid);
+        reaper.reap();
 
         // Huérfano → lo adopta launchd/init, que lo reapea. Le damos hasta 2s para desaparecer.
         let murio = (0..40).any(|_| {
@@ -970,6 +1048,109 @@ mod tests {
             unsafe { libc::kill(nieto, libc::SIGKILL) }; // no dejamos el proceso colgado
         }
         assert!(murio, "el nieto ignoró el SIGHUP y sobrevivió: matarle el grupo no funcionó");
+    }
+
+    // El espejo Windows del test de arriba, con dos diferencias que importan. Una: acá NO hace falta
+    // un nieto especial — no existe el SIGHUP del kernel, así que CUALQUIER nieto sobrevive a la
+    // muerte de su padre (por eso "en Windows no se moría ningún nieto"). Dos: el ORDEN. El Reaper
+    // se arma ANTES de que el nieto nazca, como en pty_spawn — la membresía del job se hereda al
+    // spawnear, así que un job enganchado tarde es un job que no vio nacer a nadie.
+    #[cfg(windows)]
+    #[test]
+    fn cerrar_una_terminal_se_lleva_al_nieto_huerfano() {
+        use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+
+        let pty = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        // Un agente que larga un daemon en background y se queda vivo.
+        let mut cmd = CommandBuilder::new("powershell.exe");
+        cmd.arg("-NoProfile");
+        cmd.arg("-Command");
+        cmd.arg("$p = Start-Process powershell -ArgumentList '-NoProfile','-WindowStyle','Hidden','-Command','Start-Sleep 30' -WindowStyle Hidden -PassThru; Write-Output ('NIETO=' + $p.Id); Start-Sleep 30");
+        let mut child = pty.slave.spawn_command(cmd).unwrap();
+        let pid = child.process_id().expect("el hijo del PTY tiene pid");
+
+        // Como en pty_spawn: el job se engancha apenas nace el hijo. El nieto todavía no existe
+        // (powershell tarda cientos de ms en arrancar) → nace ADENTRO del job.
+        let reaper = Reaper::arm(pid).expect("armar el Job Object");
+
+        // Leer el pid del nieto de la salida del shell — desde un HILO, con deadline. Un read
+        // directo acá se puede colgar PARA SIEMPRE: en ConPTY el read no devuelve EOF si el hijo
+        // muere (mismo motivo por el que pty_spawn tiene el hilo waiter), así que un powershell que
+        // falle sin imprimir NIETO= dejaría el test binario clavado en vez de rojo.
+        let (tx, rx) = channel();
+        let mut reader = pty.master.try_clone_reader().unwrap();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 256];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut writer = pty.master.take_writer().unwrap();
+        let inicio = Instant::now();
+        let mut salida = String::new();
+        let mut dsr_respondidos = 0;
+        let nieto: u32 = loop {
+            assert!(
+                inicio.elapsed() < Duration::from_secs(20),
+                "powershell nunca imprimió NIETO=. Salida cruda:\n{salida}"
+            );
+            let Ok(chunk) = rx.recv_timeout(Duration::from_secs(20)) else { continue };
+            salida.push_str(&String::from_utf8_lossy(&chunk));
+            // PowerShell al arrancar consulta dónde está el cursor (DSR, ESC[6n) y BLOQUEA hasta
+            // que el terminal conteste. En la app contesta xterm.js; acá el terminal somos nosotros.
+            // Se cuenta sobre `salida` (no sobre el chunk) por si la secuencia llega partida en dos.
+            while dsr_respondidos < salida.matches("\x1b[6n").count() {
+                writer.write_all(b"\x1b[1;1R").unwrap();
+                writer.flush().unwrap();
+                dsr_respondidos += 1;
+            }
+            if let Some(resto) = salida.split("NIETO=").nth(1) {
+                let digitos: String = resto.chars().take_while(|c| c.is_ascii_digit()).collect();
+                // esperamos al \n para saber que el número está completo
+                if !digitos.is_empty() && resto.contains('\n') {
+                    break digitos.parse().unwrap();
+                }
+            }
+        };
+
+        // Vivo = el proceso abre y su exit code es STILL_ACTIVE (259). El handle se abre y cierra
+        // en cada consulta a propósito: un handle abierto retiene el pid y "vivo" mentiría.
+        let vivo = |p: u32| unsafe {
+            use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+            use windows_sys::Win32::System::Threading::{
+                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            };
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, p);
+            if h.is_null() {
+                return false;
+            }
+            let mut code: u32 = 0;
+            let ok = GetExitCodeProcess(h, &mut code);
+            CloseHandle(h);
+            ok != 0 && code == STILL_ACTIVE as u32
+        };
+        assert!(vivo(nieto), "el nieto tiene que arrancar vivo, si no el test no prueba nada");
+
+        // Lo que hace la app al cerrar el tile: matar al hijo… y después barrer su job.
+        child.kill().unwrap();
+        let _ = child.wait();
+        assert!(vivo(nieto), "sin el Reaper el nieto sobrevive a su padre — si ya murió, este test no distingue nada");
+        reaper.reap();
+
+        // TerminateJobObject es síncrono contra el árbol, pero le damos el mismo margen que en unix.
+        let murio = (0..40).any(|_| {
+            if vivo(nieto) {
+                std::thread::sleep(Duration::from_millis(50));
+                false
+            } else {
+                true
+            }
+        });
+        assert!(murio, "el nieto sobrevivió al TerminateJobObject: el job no lo tenía adentro");
     }
 
     // La razón de existir del coalescing: N chunks que llegan juntos salen en UNA emisión, no en N.
