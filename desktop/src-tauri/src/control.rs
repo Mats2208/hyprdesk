@@ -188,23 +188,41 @@ impl ControlState {
     }
 }
 
+// El Enter va como keystroke SEPARADO tras una pausa: pegado al texto, claude lo trata como un
+// "paste" y no lo envía. Es una constante de TIEMPO contra un TUI que dibuja — o sea, una perilla:
+// si algún motor tarda más en estar listo para recibir, se sube acá.
+const ENTER_DELAY: std::time::Duration = std::time::Duration::from_millis(350);
+
+// Serializa TODA inyección. El mensaje son DOS escrituras (texto, y 350ms después el Enter) y en
+// ese hueco entraba otra: dos workers que terminaban a la vez le escribían al MISMO PTY del router,
+// sus textos quedaban pegados en un solo renglón, y el PRIMER Enter los enviaba como un mensaje
+// único — el segundo reporte se perdía adentro del primero. El segundo Enter mandaba un renglón
+// vacío. Nadie veía un error: el /message de los dos respondía ok. Aparecía justo cuando el
+// paralelismo funcionaba (varios workers en worktrees terminando juntos), que es el caso que importa.
+//
+// ponytail: un solo lock global — serializa los mensajes a TODOS los agentes, no solo a un mismo
+// destino. A 350ms cada uno, cinco reportes simultáneos son ~1.75s en el peor caso: barato al lado
+// de perder uno. Si alguna vez molesta, un lock por destino.
+static INJECT: Mutex<()> = Mutex::new(());
+
 // Inyecta un mensaje en el PTY de un agente, como si lo tipeara el usuario. false si el PTY no
 // existe (agente muerto) → el llamador NO finge éxito.
-//
-// El Enter va como keystroke SEPARADO tras un delay: pegado al texto, claude lo trata como un
-// "paste" y no lo envía. Separado = submit real.
 pub fn inject(app: &AppHandle, target: &str, text: &str) -> bool {
+    let pty = app.state::<crate::PtyManager>();
+    inject_serial(target, text, ENTER_DELAY, |id, data| pty.write(id, data))
+}
+
+// El ORDEN de las escrituras, separado del PTY para poder probarlo: texto → pausa → Enter, todo
+// bajo el lock. Un panic en otro hilo no debe dejar el túnel trabado para siempre → into_inner().
+fn inject_serial(target: &str, text: &str, delay: std::time::Duration, write: impl Fn(&str, &str) -> bool) -> bool {
     let clean = text.replace(['\n', '\r'], " ");
-    let wrote = app.state::<crate::PtyManager>().write(target, &clean);
-    if wrote {
-        let app = app.clone();
-        let target = target.to_string();
-        thread::spawn(move || {
-            thread::sleep(std::time::Duration::from_millis(350));
-            app.state::<crate::PtyManager>().write(&target, "\r");
-        });
+    let _guard = INJECT.lock().unwrap_or_else(|e| e.into_inner());
+    if !write(target, &clean) {
+        return false; // PTY muerto: ni siquiera mandamos el Enter suelto
     }
-    wrote
+    thread::sleep(delay);
+    write(target, "\r");
+    true
 }
 
 #[derive(Serialize, Clone)]
@@ -709,6 +727,68 @@ mod tests {
         let al_frontend = serde_json::to_value(&id).unwrap();
         assert_eq!(al_frontend["profileId"], "p1");
         assert_eq!(al_frontend["persona"], "Sos el backend");
+    }
+
+    // DOS WORKERS REPORTANDO A LA VEZ al mismo router. Un mensaje son dos escrituras (el texto, y
+    // 350ms después el Enter). Sin serializar, los textos de los dos se pegaban en el MISMO renglón
+    // del PTY del router y el primer Enter los mandaba GLUED como un mensaje solo: el segundo reporte
+    // se perdía adentro del primero, y el /message de ambos respondía ok. Silencioso, y aparecía
+    // justo cuando el paralelismo funcionaba.
+    #[test]
+    fn dos_mensajes_a_la_vez_no_se_pisan_en_el_mismo_pty() {
+        let escrito: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let hilos: Vec<_> = ["worker-1", "worker-2"]
+            .iter()
+            .map(|msg| {
+                let escrito = escrito.clone();
+                let msg = msg.to_string();
+                std::thread::spawn(move || {
+                    inject_serial("router", &msg, Duration::from_millis(30), |_, data| {
+                        escrito.lock().unwrap().push(data.to_string());
+                        true
+                    })
+                })
+            })
+            .collect();
+        for h in hilos {
+            assert!(h.join().unwrap());
+        }
+
+        let log = escrito.lock().unwrap();
+        assert_eq!(log.len(), 4, "dos textos y dos Enters");
+        // La única forma correcta es texto,Enter,texto,Enter. La del bug era texto,texto,Enter,Enter.
+        assert_eq!(log[1], "\r", "el Enter del primero va ANTES del texto del segundo");
+        assert_eq!(log[3], "\r");
+        assert_ne!(log[0], log[2], "los dos mensajes llegaron enteros, no fundidos en uno");
+    }
+
+    // Un PTY muerto no se lleva un Enter suelto: sin el guard, el agente destino (o peor, el que
+    // reusara ese id) comía un submit vacío.
+    #[test]
+    fn a_un_pty_muerto_no_le_mandamos_el_enter() {
+        let escrituras = Arc::new(Mutex::new(0));
+        let e = escrituras.clone();
+        let ok = inject_serial("fantasma", "hola", Duration::ZERO, move |_, _| {
+            *e.lock().unwrap() += 1;
+            false // el PTY no existe
+        });
+        assert!(!ok, "no fingimos éxito con un agente muerto");
+        assert_eq!(*escrituras.lock().unwrap(), 1, "un intento, y nada más — ni el Enter");
+    }
+
+    // El salto de línea de un reporte multilínea NO puede viajar crudo: cada \n es un Enter, y el
+    // agente manda el mensaje por la mitad.
+    #[test]
+    fn un_reporte_multilinea_no_se_envia_solo_a_la_mitad() {
+        let escrito = Arc::new(Mutex::new(Vec::new()));
+        let e = escrito.clone();
+        inject_serial("router", "linea 1\nlinea 2\r\nlinea 3", Duration::ZERO, move |_, d| {
+            e.lock().unwrap().push(d.to_string());
+            true
+        });
+        let log = escrito.lock().unwrap();
+        assert!(!log[0].contains('\n') && !log[0].contains('\r'), "el texto va aplanado");
+        assert_eq!(log[1], "\r", "el ÚNICO Enter es el que mandamos nosotros, al final");
     }
 
     // Un agente sin identidad (worker viejo, guardado antes de este cambio) tiene que seguir
