@@ -69,11 +69,15 @@ export function TerminalTile({
     const host = bodyRef.current;
     if (!host) return;
 
+    const ts = useThemeStore.getState();
     const term = new Terminal({
       fontFamily: monoFont(),
-      fontSize: useThemeStore.getState().termFontSize,
-      lineHeight: 1.35,
-      cursorBlink: true,
+      fontSize: ts.termFontSize,
+      lineHeight: ts.termLineHeight,
+      fontWeight: ts.termFontWeight,
+      cursorStyle: ts.termCursorStyle,
+      cursorBlink: ts.termCursorBlink,
+      scrollback: ts.termScrollback,
       allowProposedApi: true,
       theme: xtermTheme(isRouter),
       // Hyperlinks OSC 8: los CLIs (Claude Code, etc.) emiten URLs "clickeables por diseño" como
@@ -125,9 +129,15 @@ export function TerminalTile({
 
     // Reaccionar a cambios de tema/fuente: re-aplicar tema, tamaño y familia, y re-ajustar.
     const themeUnsub = useThemeStore.subscribe(() => {
+      const t = useThemeStore.getState();
       term.options.theme = xtermTheme(isRouter);
       term.options.fontFamily = monoFont();
-      term.options.fontSize = useThemeStore.getState().termFontSize;
+      term.options.fontSize = t.termFontSize;
+      term.options.lineHeight = t.termLineHeight;
+      term.options.fontWeight = t.termFontWeight;
+      term.options.cursorStyle = t.termCursorStyle;
+      term.options.cursorBlink = t.termCursorBlink;
+      term.options.scrollback = t.termScrollback;
       try { fit.fit(); } catch { /* host aún no medible */ }
     });
 

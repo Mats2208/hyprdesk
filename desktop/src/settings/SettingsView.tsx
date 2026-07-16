@@ -82,6 +82,11 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       else if (f.key === "uiFont") s.setUiFont(val);
       else if (f.key === "monoFont") s.setMonoFont(val);
       else if (f.key === "termFontSize") s.setTermFontSize(Number(val) || 12.5);
+      else if (f.key === "termLineHeight") s.setTermLineHeight(Number(val) || 1.35);
+      else if (f.key === "termCursorStyle") s.setTermCursorStyle(val as "block" | "bar" | "underline");
+      else if (f.key === "termCursorBlink") s.setTermCursorBlink(val === "true");
+      else if (f.key === "termScrollback") s.setTermScrollback(Number(val) || 1000);
+      else if (f.key === "termFontWeight") s.setTermFontWeight(val as "normal" | "bold");
       return;
     }
     const next = { ...backend, [f.key]: val } as Backend;
