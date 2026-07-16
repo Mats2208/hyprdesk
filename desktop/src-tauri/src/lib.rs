@@ -363,8 +363,15 @@ fn pty_spawn(
     // cerrar el tile. Con child.wait() detectamos la muerte real en cualquier plataforma.
     let app_wait = app.clone();
     let id_wait = id.clone();
+    let pid = child.process_id();
     std::thread::spawn(move || {
         let _ = child.wait();
+        // El hijo murió, pero sus NIETOS no. Los barremos acá y no en pty_kill a propósito: este
+        // punto cubre las dos muertes —cerrar el tile y un /exit del agente—, que dejan el mismo
+        // tendal.
+        if let Some(pid) = pid {
+            reap_tree(pid);
+        }
         let _ = app_wait.emit("pty-exit", id_wait);
     });
 
@@ -453,7 +460,35 @@ fn pty_resize(manager: State<'_, PtyManager>, id: String, cols: u16, rows: u16) 
     Ok(())
 }
 
-// Mata la terminal (cerrar tile).
+// Barre a los NIETOS del PTY al morir el hijo. portable-pty le hace setsid() al hijo (tiene que ser
+// líder de sesión para tomar el tty), así que su pgid == su pid: matar el GRUPO alcanza a todo el
+// que siga en él. SIGKILL sin escalar desde TERM: para cuando corremos esto el padre ya murió, y lo
+// que queda son huérfanos que no van a atender un apagado ordenado.
+//
+// LO QUE ESTO ARREGLA, y lo que NO — medido en una Mac, no supuesto:
+//   nieto normal          → ya se moría solo (el kernel manda SIGHUP al morir el líder de sesión)
+//   nieto que ignora HUP  → SOBREVIVÍA. Esto lo mata. Es el MCP de node que quedaba huérfano.
+//   nieto que hace setsid → SOBREVIVE IGUAL: se fue a su propia sesión, killpg no lo alcanza.
+//
+// Ese último caso es el que importa y sigue abierto: Chromium se lanza detached, así que los cuatro
+// `chrome-headless-shell` que un worker dejó pidiendo frames WebGL a 60fps durante horas (80% de un
+// Ryzen 9, por una página que nadie miraba) NO los mata esto. Para ésos hace falta caminar el árbol
+// de procesos por PPID y matarlos por descendencia. Está en TODO.md; no lo vendo como resuelto.
+#[cfg(unix)]
+fn reap_tree(pid: u32) {
+    unsafe {
+        libc::killpg(pid as i32, libc::SIGKILL);
+    }
+}
+
+// ponytail: en Windows el equivalente es un Job Object con JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, que
+// hay que crear ANTES del spawn y asignarle el hijo — y que, a diferencia de killpg, SÍ se lleva a
+// los que se fugan. Es unsafe Win32 y no lo puedo probar desde una Mac; escribirlo a ciegas es peor
+// que no tenerlo. Queda en TODO.md con el approach: en Windows hoy no se muere ningún nieto.
+#[cfg(windows)]
+fn reap_tree(_pid: u32) {}
+
+// Mata la terminal (cerrar tile). Los nietos los barre el hilo waiter al ver morir al hijo (reap_tree).
 #[tauri::command]
 fn pty_kill(manager: State<'_, PtyManager>, id: String) -> Result<(), String> {
     if let Some(mut s) = manager.sessions.lock().unwrap().remove(&id) {
@@ -871,6 +906,66 @@ mod tests {
     use super::*;
     use std::sync::mpsc::channel;
     use std::time::{Duration, Instant};
+
+    // El nieto que NO se muere solo. Ojo con el caso que se elige acá: un nieto cualquiera ya lo mata
+    // el kernel (SIGHUP al morir el líder de sesión), así que un test con `sleep` de nieto PASA
+    // aunque reap_tree no haga nada — es un test decorativo. El que de verdad distingue es un nieto
+    // que IGNORA SIGHUP: hoy sobrevive, y solo muere si le matamos el grupo. Es el MCP de node que
+    // quedaba huérfano. (El que hace setsid se escapa igual — ver reap_tree.)
+    #[cfg(unix)]
+    #[test]
+    fn cerrar_una_terminal_se_lleva_al_nieto_que_ignora_sighup() {
+        use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+
+        let pty = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        // Un agente que larga un daemon en background y se queda vivo.
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.arg("-c");
+        cmd.arg("perl -e '$SIG{HUP}=\"IGNORE\"; sleep 30' & echo NIETO=$!; sleep 30");
+        let mut child = pty.slave.spawn_command(cmd).unwrap();
+        let pid = child.process_id().expect("el hijo del PTY tiene pid");
+
+        // Leer el pid del nieto de la salida del shell.
+        let mut reader = pty.master.try_clone_reader().unwrap();
+        let mut salida = String::new();
+        let mut buf = [0u8; 256];
+        let nieto: i32 = loop {
+            let n = reader.read(&mut buf).unwrap();
+            salida.push_str(&String::from_utf8_lossy(&buf[..n]));
+            if let Some(resto) = salida.split("NIETO=").nth(1) {
+                let digitos: String = resto.chars().take_while(|c| c.is_ascii_digit()).collect();
+                // esperamos al \n para saber que el número está completo
+                if !digitos.is_empty() && resto.contains('\n') {
+                    break digitos.parse().unwrap();
+                }
+            }
+        };
+
+        let vivo = |p: i32| unsafe { libc::kill(p, 0) == 0 };
+        std::thread::sleep(Duration::from_millis(300)); // que alcance a instalar su handler de HUP
+        assert!(vivo(nieto), "el nieto tiene que arrancar vivo, si no el test no prueba nada");
+
+        // Lo que hace la app al cerrar el tile: matar al hijo… y después barrer su grupo.
+        child.kill().unwrap();
+        let _ = child.wait();
+        reap_tree(pid);
+
+        // Huérfano → lo adopta launchd/init, que lo reapea. Le damos hasta 2s para desaparecer.
+        let murio = (0..40).any(|_| {
+            if vivo(nieto) {
+                std::thread::sleep(Duration::from_millis(50));
+                false
+            } else {
+                true
+            }
+        });
+        if !murio {
+            unsafe { libc::kill(nieto, libc::SIGKILL) }; // no dejamos el proceso colgado
+        }
+        assert!(murio, "el nieto ignoró el SIGHUP y sobrevivió: matarle el grupo no funcionó");
+    }
 
     // La razón de existir del coalescing: N chunks que llegan juntos salen en UNA emisión, no en N.
     // Sin esto, varios agentes escupiendo a la vez saturan el IPC y cuelgan el webview.

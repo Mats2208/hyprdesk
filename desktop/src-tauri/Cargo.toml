@@ -31,6 +31,11 @@ uuid = { version = "1", features = ["v4"] }
 arboard = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Solo para killpg(): al cerrar un agente hay que matarle el GRUPO de procesos, no nada más el hijo
+# directo — si no, sus nietos (MCP de node, chrome headless) quedan vivos. Ver reap_tree en lib.rs.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 
 # El binario que shippeás. Sin esto van los defaults de cargo, que priorizan tiempo de compilación
 # por sobre el resultado — razonable en dev, gratis de corregir para el release.
