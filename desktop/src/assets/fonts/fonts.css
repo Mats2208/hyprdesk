@@ -1,0 +1,27 @@
+/* Fuentes auto-hospedadas (vendorizadas, OFL) — render idéntico en toda máquina.
+   Geist Sans (UI) + Cascadia Code (mono). Subset latin, variable. Ver plan Steel Noir.
+   Importado en main.tsx ANTES de App.css. Los stacks caen a estas caras vía --font-ui/--font-mono. */
+
+@font-face {
+  font-family: "Geist Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;                 /* variable: eje wght */
+  src: url("./geist-sans-wght.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Cascadia Code";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 700;                 /* variable: eje wght (ExtraLight → Bold) */
+  src: url("./cascadia-code-wght.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Cascadia Code";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 200 700;
+  src: url("./cascadia-code-wght-italic.woff2") format("woff2-variations");
+}

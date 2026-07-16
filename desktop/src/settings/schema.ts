@@ -32,6 +32,19 @@ export const SCHEMA: Field[] = [
   // — Terminal / Editor (scope theme) —
   { key: "termFontSize", label: "Tamaño de fuente (terminal)", category: "Terminal", type: "number", scope: "theme",
     description: "Tamaño en px del texto de las terminales.", min: 8, max: 24, step: 0.5 },
+  { key: "termLineHeight", label: "Interlineado (terminal)", category: "Terminal", type: "number", scope: "theme",
+    description: "Alto de línea del texto. 1.0 = compacto, 1.35 = cómodo (default).", min: 1, max: 2, step: 0.05 },
+  { key: "termFontWeight", label: "Peso de fuente (terminal)", category: "Terminal", type: "segmented", scope: "theme",
+    description: "Grosor del texto. Cascadia Code es variable y lo soporta.",
+    options: [{ value: "normal", label: "Normal" }, { value: "bold", label: "Negrita" }] },
+  { key: "termCursorStyle", label: "Estilo de cursor", category: "Terminal", type: "segmented", scope: "theme",
+    description: "Forma del cursor en las terminales.",
+    options: [{ value: "block", label: "Bloque" }, { value: "bar", label: "Barra" }, { value: "underline", label: "Subrayado" }] },
+  { key: "termCursorBlink", label: "Parpadeo del cursor", category: "Terminal", type: "segmented", scope: "theme",
+    description: "Si el cursor parpadea o queda fijo.",
+    options: [{ value: "true", label: "Parpadea" }, { value: "false", label: "Fijo" }] },
+  { key: "termScrollback", label: "Historial (líneas)", category: "Terminal", type: "number", scope: "theme",
+    description: "Cuántas líneas guarda la terminal para hacer scroll hacia arriba.", min: 100, max: 100000, step: 100 },
 
   // — Agentes y permisos (scope backend: ~/HyprDesk/settings.json) —
   { key: "assistantEngine", label: "Asistente de IA", category: "Agentes y permisos", type: "segmented", scope: "backend",

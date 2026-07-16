@@ -22,6 +22,7 @@ registerCommands([
   // — Vista / paneles —
   { id: "panel-agents", title: "Panel de agentes", category: "Vista", run: () => us().openPanel("agents") },
   { id: "panel-files", title: "Panel de archivos", category: "Vista", run: () => us().openPanel("files") },
+  { id: "panel-web", title: "Panel web", category: "Vista", run: () => us().openPanel("web") },
   { id: "panel-workspaces", title: "Panel de workspaces", category: "Vista", run: () => us().openPanel("workspaces") },
   { id: "toggle-sidebar", title: "Mostrar / ocultar panel", category: "Vista", keybinding: "⌘B", run: () => us().setSidebarOpen((o) => !o) },
   { id: "toggle-palette", title: "Paleta de comandos", category: "Vista", keybinding: "⌘K", run: () => us().togglePalette() },

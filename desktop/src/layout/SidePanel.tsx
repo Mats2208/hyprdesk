@@ -2,6 +2,7 @@
 import { Sidebar } from "../Sidebar";
 import { WorkspacesPanel } from "../WorkspacesPanel";
 import { FilesPanel } from "./FilesPanel";
+import { WebPanel } from "./WebPanel";
 import { hasIdentity } from "../store/sessionModel";
 import { useSessionStore } from "../store/sessionStore";
 import { useUiStore } from "../store/uiStore";
@@ -23,6 +24,10 @@ export function SidePanel() {
 
   if (panel === "files") {
     return <FilesPanel folder={current?.meta.folder ?? null} onOpenFile={useSessionStore.getState().openFile} />;
+  }
+
+  if (panel === "web") {
+    return <WebPanel />;
   }
 
   const tiles = current?.terms.filter((t) => !t.kind || t.kind === "terminal") ?? [];

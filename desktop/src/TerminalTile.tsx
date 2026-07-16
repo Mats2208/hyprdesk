@@ -69,13 +69,25 @@ export function TerminalTile({
     const host = bodyRef.current;
     if (!host) return;
 
+    const ts = useThemeStore.getState();
     const term = new Terminal({
       fontFamily: monoFont(),
-      fontSize: useThemeStore.getState().termFontSize,
-      lineHeight: 1.2,
-      cursorBlink: true,
+      fontSize: ts.termFontSize,
+      lineHeight: ts.termLineHeight,
+      fontWeight: ts.termFontWeight,
+      cursorStyle: ts.termCursorStyle,
+      cursorBlink: ts.termCursorBlink,
+      scrollback: ts.termScrollback,
       allowProposedApi: true,
       theme: xtermTheme(isRouter),
+      // Hyperlinks OSC 8: los CLIs (Claude Code, etc.) emiten URLs "clickeables por diseño" como
+      // secuencia de escape, con el texto y el destino separados. A diferencia del WebLinksAddon
+      // (regex sobre lo pintado), esto sobrevive a que el TUI parta el URL en dos renglones cuando
+      // el tile es angosto: el destino viaja aparte, no se lee del buffer. Abre en el navegador embebido.
+      linkHandler: {
+        activate: (_e, uri) => onOpenLinkRef.current?.(uri),
+        allowNonHttpProtocols: false,
+      },
     });
     termRef.current = term;
     const fit = new FitAddon();
@@ -117,9 +129,15 @@ export function TerminalTile({
 
     // Reaccionar a cambios de tema/fuente: re-aplicar tema, tamaño y familia, y re-ajustar.
     const themeUnsub = useThemeStore.subscribe(() => {
+      const t = useThemeStore.getState();
       term.options.theme = xtermTheme(isRouter);
       term.options.fontFamily = monoFont();
-      term.options.fontSize = useThemeStore.getState().termFontSize;
+      term.options.fontSize = t.termFontSize;
+      term.options.lineHeight = t.termLineHeight;
+      term.options.fontWeight = t.termFontWeight;
+      term.options.cursorStyle = t.termCursorStyle;
+      term.options.cursorBlink = t.termCursorBlink;
+      term.options.scrollback = t.termScrollback;
       try { fit.fit(); } catch { /* host aún no medible */ }
     });
 
@@ -187,7 +205,12 @@ export function TerminalTile({
     const doPaste = async () => {
       try {
         const [imgPath, text] = await invoke<[string | null, string | null]>("paste_clipboard");
-        if (imgPath) await invoke("pty_write", { id, data: imgPath + " " });
+        // Entrecomillar SOLO si la ruta trae espacios (ej. %TEMP% bajo "C:\Users\John Doe\..."): sin
+        // comillas el agente leería solo el primer trozo. El caso común (sin espacios) queda idéntico.
+        if (imgPath) {
+          const arg = imgPath.includes(" ") ? `"${imgPath}"` : imgPath;
+          await invoke("pty_write", { id, data: arg + " " });
+        }
         else if (text) term.paste(text);
       } catch { /* ignore */ }
     };
@@ -267,7 +290,7 @@ export function TerminalTile({
 
   const accent = color && !isRouter
     ? (active
-        ? { borderColor: color, boxShadow: `0 0 0 1px ${color}55, 0 12px 36px rgba(0,0,0,0.55)` }
+        ? { borderColor: color, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px ${color}55, 0 12px 36px rgba(0,0,0,0.55)` }
         : { borderColor: `${color}55` })
     : undefined;
 

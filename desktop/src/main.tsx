@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "./assets/fonts/fonts.css"; // @font-face ANTES de App.css (los stacks caen a estas caras)
 import "./App.css";
 import { initTheme } from "./theme/theme";
 

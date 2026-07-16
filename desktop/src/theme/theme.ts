@@ -6,9 +6,16 @@ export type ThemeName = "dark" | "light" | "hc";
 export const THEMES: ThemeName[] = ["dark", "light", "hc"];
 export const THEME_LABEL: Record<ThemeName, string> = { dark: "Oscuro", light: "Claro", hc: "Alto contraste" };
 
-const K = { theme: "hd-theme", ui: "hd-font-ui", mono: "hd-font-mono", term: "hd-fs-term" };
+export type CursorStyle = "block" | "bar" | "underline";
+export type FontWeight = "normal" | "bold";
+
+const K = {
+  theme: "hd-theme", ui: "hd-font-ui", mono: "hd-font-mono", term: "hd-fs-term",
+  lh: "hd-term-lh", cursor: "hd-term-cursor", blink: "hd-term-blink", scroll: "hd-term-scroll", weight: "hd-term-weight",
+};
 const num = (v: string | null, d: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
 const isTheme = (v: string | null): v is ThemeName => v === "light" || v === "hc" || v === "dark";
+const isCursor = (v: string | null): v is CursorStyle => v === "block" || v === "bar" || v === "underline";
 
 // Aplica al DOM. Fuente vacía → se quita el override y manda el default del CSS.
 function applyToDom(s: { theme: ThemeName; uiFont: string; monoFont: string }) {
@@ -23,11 +30,21 @@ type ThemeState = {
   uiFont: string;   // "" = default del CSS
   monoFont: string; // "" = default del CSS
   termFontSize: number;
+  termLineHeight: number;
+  termCursorStyle: CursorStyle;
+  termCursorBlink: boolean;
+  termScrollback: number;
+  termFontWeight: FontWeight;
   setTheme: (t: ThemeName) => void;
   cycleTheme: () => void;
   setUiFont: (f: string) => void;
   setMonoFont: (f: string) => void;
   setTermFontSize: (n: number) => void;
+  setTermLineHeight: (n: number) => void;
+  setTermCursorStyle: (s: CursorStyle) => void;
+  setTermCursorBlink: (b: boolean) => void;
+  setTermScrollback: (n: number) => void;
+  setTermFontWeight: (w: FontWeight) => void;
 };
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -35,6 +52,11 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   uiFont: localStorage.getItem(K.ui) ?? "",
   monoFont: localStorage.getItem(K.mono) ?? "",
   termFontSize: num(localStorage.getItem(K.term), 12.5),
+  termLineHeight: num(localStorage.getItem(K.lh), 1.35),
+  termCursorStyle: (isCursor(localStorage.getItem(K.cursor)) ? (localStorage.getItem(K.cursor) as CursorStyle) : "block"),
+  termCursorBlink: localStorage.getItem(K.blink) !== "false", // default: parpadea
+  termScrollback: num(localStorage.getItem(K.scroll), 1000),
+  termFontWeight: (localStorage.getItem(K.weight) === "bold" ? "bold" : "normal"),
 
   // OJO: applyToDom ANTES de set(): set() dispara los subscribers (xterm/CodeMirror) que leen los
   // CSS vars con getComputedStyle; si data-theme aún no cambió, leerían los colores viejos (bug de
@@ -44,6 +66,11 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   setUiFont: (uiFont) => { localStorage.setItem(K.ui, uiFont); applyToDom({ ...get(), uiFont }); set({ uiFont }); },
   setMonoFont: (monoFont) => { localStorage.setItem(K.mono, monoFont); applyToDom({ ...get(), monoFont }); set({ monoFont }); },
   setTermFontSize: (termFontSize) => { localStorage.setItem(K.term, String(termFontSize)); set({ termFontSize }); },
+  setTermLineHeight: (termLineHeight) => { localStorage.setItem(K.lh, String(termLineHeight)); set({ termLineHeight }); },
+  setTermCursorStyle: (termCursorStyle) => { localStorage.setItem(K.cursor, termCursorStyle); set({ termCursorStyle }); },
+  setTermCursorBlink: (termCursorBlink) => { localStorage.setItem(K.blink, String(termCursorBlink)); set({ termCursorBlink }); },
+  setTermScrollback: (termScrollback) => { localStorage.setItem(K.scroll, String(termScrollback)); set({ termScrollback }); },
+  setTermFontWeight: (termFontWeight) => { localStorage.setItem(K.weight, termFontWeight); set({ termFontWeight }); },
 }));
 
 // Aplicar antes del primer render (main.tsx) para evitar el flash de tema/fuente.
