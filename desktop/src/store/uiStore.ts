@@ -5,8 +5,10 @@ import type { Panel, TileStatus } from "../types";
 
 // Layout persistido entre sesiones (sidebar abierto + panel activo).
 const savedPanel = localStorage.getItem("hd-panel");
-// panel izquierdo: "agents" | "workspaces" | "files".
-const initPanel: Panel = savedPanel === "workspaces" ? "workspaces" : savedPanel === "files" ? "files" : "agents";
+// panel izquierdo: "agents" | "workspaces" | "files" | "web".
+const initPanel: Panel = (["agents", "workspaces", "files", "web"] as const).includes(savedPanel as Panel)
+  ? (savedPanel as Panel)
+  : "agents";
 
 type UiState = {
   sidebarOpen: boolean;

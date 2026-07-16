@@ -27,6 +27,9 @@ export function ActivityBar() {
       <button className={`act ${on("files")}`} title="Archivos" onClick={() => clickPanel("files")}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5.5 3h5l4 4v10a0 0 0 01 0 0H5.5A1.5 1.5 0 014 15.5v-11A1.5 1.5 0 015.5 3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M10.5 3v4h4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
       </button>
+      <button className={`act ${on("web")}`} title="Web" onClick={() => clickPanel("web")}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" /><path d="M3 10h14M10 3c2.2 2 3.3 4.5 3.3 7S12.2 15 10 17c-2.2-2-3.3-4.5-3.3-7S7.8 5 10 3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+      </button>
       <button className="act" title={`Comandos (${hk("K")})`} onClick={togglePalette}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" /><path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
       </button>

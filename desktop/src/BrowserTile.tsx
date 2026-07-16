@@ -19,7 +19,7 @@ type Props = {
 };
 
 // Normaliza lo tipeado a una URL cargable (agrega http:// si falta esquema).
-function normalize(u: string): string {
+export function normalize(u: string): string {
   const s = u.trim();
   if (!s) return "";
   if (/^[a-z]+:\/\//i.test(s) || s.startsWith("file:") || s.startsWith("about:")) return s;

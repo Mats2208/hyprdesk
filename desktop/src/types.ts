@@ -57,7 +57,7 @@ export type SavedTile = {
 export type SavedState = { id: string; name: string; routerWidth: number; tiles: SavedTile[]; profiles?: Profile[] };
 export type Stage = "workspaces" | "ide";
 export type TileStatus = "working" | "idle" | "exited";
-export type Panel = "agents" | "workspaces" | "files";
+export type Panel = "agents" | "workspaces" | "files" | "web";
 
 // Una sesión = un workspace ABIERTO. Con keep-alive tenemos varias vivas a la vez; todas sus
 // tiles quedan montadas (PTYs vivos) y solo se muestra la actual (las demás con display:none).
