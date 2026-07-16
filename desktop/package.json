@@ -3,13 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["agent"],
+  "workspaces": [
+    "agent"
+  ],
   "scripts": {
     "build:agent": "node scripts/build-agent.mjs",
     "dev": "node scripts/build-agent.mjs && vite",
     "build": "node scripts/build-agent.mjs && tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -43,6 +46,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "esbuild": "^0.28.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
   }
 }

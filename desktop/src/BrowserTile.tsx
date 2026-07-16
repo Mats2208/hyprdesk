@@ -18,19 +18,42 @@ type Props = {
   onToggleMax: (id: string) => void;
 };
 
-// Normaliza lo tipeado a una URL cargable (agrega http:// si falta esquema).
+// Normaliza lo tipeado a una URL cargable. Sale en HTTPS salvo que sea local.
+//
+// Un dominio pelado se completaba a `http://`, y en macOS eso es una página EN BLANCO: WKWebView
+// hereda App Transport Security, que bloquea toda carga en texto plano — y la corta ANTES de que el
+// 301 del sitio a https llegue a ejecutarse, así que ni siquiera se arregla sola por el redirect.
+// Sin error, sin nada: blanco. Por eso también upgradeamos un `http://` EXPLÍCITO a un host externo:
+// tal cual, no carga nunca; en https tiene una chance real (y es lo que hace cualquier navegador hoy).
+// Loopback se queda en http: es el dev-server de siempre, y ATS exceptúa localhost.
+const LOCAL = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"];
+const isLocalHost = (h: string) => LOCAL.includes(h) || h.endsWith(".local");
+
 export function normalize(u: string): string {
   const s = u.trim();
   if (!s) return "";
-  if (/^[a-z]+:\/\//i.test(s) || s.startsWith("file:") || s.startsWith("about:")) return s;
-  return "http://" + s;
+  if (s.startsWith("file:") || s.startsWith("about:")) return s;
+  if (!/^[a-z]+:\/\//i.test(s)) {
+    // sin esquema: local → http (dev server), cualquier otra cosa → https
+    const host = s.split("/")[0].split(":")[0];
+    return (isLocalHost(host) ? "http://" : "https://") + s;
+  }
+  try {
+    const url = new URL(s);
+    if (url.protocol === "http:" && !isLocalHost(url.hostname)) {
+      url.protocol = "https:"; // en texto plano ATS lo mata en silencio
+      return url.toString();
+    }
+  } catch { /* si no parsea, que lo resuelva la webview */ }
+  return s;
 }
 
-// ¿URL externa? (http/https y host que NO es localhost) → necesita webview nativa.
+// ¿URL externa? (http/https y host que NO es local) → necesita webview nativa: un <iframe> no puede
+// cargar un sitio con X-Frame-Options, que es casi cualquier web en producción.
 function isExternalUrl(u: string): boolean {
   try {
     const url = new URL(u);
-    return (url.protocol === "http:" || url.protocol === "https:") && !["localhost", "127.0.0.1"].includes(url.hostname);
+    return (url.protocol === "http:" || url.protocol === "https:") && !isLocalHost(url.hostname);
   } catch {
     return false;
   }
